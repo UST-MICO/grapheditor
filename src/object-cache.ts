@@ -1,64 +1,64 @@
-import { map as Map } from "d3";
-import { Node } from "./node";
-import { Edge, edgeId } from "./edge";
-import { DEFAULT_NODE_TEMPLATE } from "./templates";
-import { LinkHandle, calculateNormal } from "./link-handle";
+import { map, Map } from 'd3';
+import { Node } from './node';
+import { Edge, edgeId } from './edge';
+import { DEFAULT_NODE_TEMPLATE } from './templates';
+import { LinkHandle, calculateNormal } from './link-handle';
 
 export class GraphObjectCache {
 
-    private nodeTemplates: Map<string, string>;
-    private nodeTemplateLinkHandles: Map<string, LinkHandle[]>;
-    private markerTemplates: Map<string, string>;
-    private nodes: Map<number|string, Node>;
-    private edges: Map<number|string, Edge>;
-    private edgesBySource: Map<number|string, Set<Edge>>;
-    private edgesByTarget: Map<number|string, Set<Edge>>;
+    private nodeTemplates: Map<string>;
+    private nodeTemplateLinkHandles: Map<LinkHandle[]>;
+    private markerTemplates: Map<string>;
+    private nodes: Map<Node>;
+    private edges: Map<Edge>;
+    private edgesBySource: Map<Set<Edge>>;
+    private edgesByTarget: Map<Set<Edge>>;
 
     constructor() {
-        this.nodeTemplates = new Map();
-        this.nodeTemplateLinkHandles = new Map();
-        this.markerTemplates = new Map();
-        this.nodes = new Map();
-        this.edges = new Map();
-        this.edgesBySource = new Map();
-        this.edgesByTarget = new Map();
+        this.nodeTemplates = map<string>();
+        this.nodeTemplateLinkHandles = map<LinkHandle[]>();
+        this.markerTemplates = map<string>();
+        this.nodes = map<Node>();
+        this.edges = map<Edge>();
+        this.edgesBySource = map<Set<Edge>>();
+        this.edgesByTarget = map<Set<Edge>>();
     }
 
     updateNodeTemplateCache(templates: {id: string, innerHTML: string, [prop: string]: any}[]) {
-        const templateMap = new Map();
+        const templateMap = map();
         templates.forEach((template) => templateMap.set(template.id, template.innerHTML));
         this.nodeTemplates = templateMap;
-        this.nodeTemplateLinkHandles = new Map();
+        this.nodeTemplateLinkHandles = map();
     }
 
     updateMarkerTemplateCache(templates: {id: string, innerHTML: string, [prop: string]: any}[]) {
-        const templateMap = new Map();
+        const templateMap = map();
         templates.forEach((template) => templateMap.set(template.id, template.innerHTML));
         this.markerTemplates = templateMap;
     }
 
     updateNodeCache(nodes: Node[]) {
-        const nodeMap = new Map();
-        nodes.forEach((node) => nodeMap.set(node.id, node));
+        const nodeMap = map();
+        nodes.forEach((node) => nodeMap.set(node.id.toString(), node));
         this.nodes = nodeMap;
     }
 
     updateEdgeCache(edges: Edge[]) {
-        const edgeMap = new Map();
-        const bySourceMap = new Map();
-        const byTargetMap = new Map();
+        const edgeMap = map();
+        const bySourceMap = map();
+        const byTargetMap = map();
         edges.forEach((edge) => {
             edgeMap.set(edgeId(edge), edge);
-            let bySource: Set<Edge> = bySourceMap.get(edge.source);
+            let bySource: Set<Edge> = bySourceMap.get(edge.source.toString());
             if (bySource == null) {
                 bySource = new Set();
-                bySourceMap.set(edge.source, bySource)
+                bySourceMap.set(edge.source.toString(), bySource);
             }
             bySource.add(edge);
-            let byTarget: Set<Edge> = byTargetMap.get(edge.target);
+            let byTarget: Set<Edge> = byTargetMap.get(edge.target.toString());
             if (byTarget == null) {
                 byTarget = new Set();
-                byTargetMap.set(edge.target, byTarget)
+                byTargetMap.set(edge.target.toString(), byTarget);
             }
             bySource.add(edge);
         });
@@ -108,15 +108,15 @@ export class GraphObjectCache {
     }
 
     getNode(id: number|string) {
-        return this.nodes.get(id);
+        return this.nodes.get(id.toString());
     }
 
     getEdge(id: number|string) {
-        return this.edges.get(id);
+        return this.edges.get(id.toString());
     }
 
     getEdgesByTarget(targetId: number|string): Set<Edge> {
-        const edges = this.edgesByTarget.get(targetId);
+        const edges = this.edgesByTarget.get(targetId.toString());
         if (edges == null) {
             return new Set();
         }
@@ -124,7 +124,7 @@ export class GraphObjectCache {
     }
 
     getEdgesBySource(targetId: number|string): Set<Edge> {
-        const edges = this.edgesBySource.get(targetId);
+        const edges = this.edgesBySource.get(targetId.toString());
         if (edges == null) {
             return new Set();
         }
@@ -137,7 +137,7 @@ export class GraphObjectCache {
         const sourceHandles = edge.sourceHandle != null ? [edge.sourceHandle] : this.getNodeTemplateLinkHandles(source.type);
         let targetHandles;
         if (edge.targetHandle != null) {
-            targetHandles = [edge.targetHandle]
+            targetHandles = [edge.targetHandle];
         } else if (edge.target != null) {
             targetHandles = this.getNodeTemplateLinkHandles(target.type);
         } else {
@@ -153,7 +153,8 @@ export class GraphObjectCache {
         };
     }
 
-    private calculateNearestHandles(sourceHandles: LinkHandle[], source: Node, targetHandles: LinkHandle[], target: {x: number, y: number}) {
+    private calculateNearestHandles(sourceHandles: LinkHandle[], source: Node, targetHandles: LinkHandle[],
+                                    target: {x: number, y: number}) {
         let currentSourceHandle: LinkHandle = {id: 0, x: 0, y: 0, normal: {dx: 1, dy: 1}};
         if (sourceHandles != null && sourceHandles.length > 0) {
             currentSourceHandle = sourceHandles[0];
@@ -166,11 +167,13 @@ export class GraphObjectCache {
         } else {
             calculateNormal(currentTargetHandle);
         }
-        let currentDist = Math.pow((source.x + currentSourceHandle.x) - target.x, 2) + Math.pow((source.y + currentSourceHandle.y) - target.y, 2);
+        let currentDist = Math.pow((source.x + currentSourceHandle.x) - target.x, 2) +
+                          Math.pow((source.y + currentSourceHandle.y) - target.y, 2);
         targetHandles.forEach((targetHandle) => {
             for (let i = 0; i < sourceHandles.length; i++) {
                 const handle = sourceHandles[i];
-                const dist = Math.pow((source.x + handle.x) - (target.x + targetHandle.x), 2) + Math.pow((source.y + handle.y) - (target.y + targetHandle.y), 2);
+                const dist = Math.pow((source.x + handle.x) - (target.x + targetHandle.x), 2) +
+                             Math.pow((source.y + handle.y) - (target.y + targetHandle.y), 2);
                 if (dist <= currentDist) {
                     currentSourceHandle = handle;
                     currentTargetHandle = targetHandle;

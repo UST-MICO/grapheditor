@@ -3,12 +3,12 @@
  */
 export interface Node {
     /** Unique identifier. */
-    id: number|string,
+    id: number|string;
     /** X coordinate of Node(center). */
-    x: number,
+    x: number;
     /** Y coordinate of Node(center). */
-    y: number,
+    y: number;
     /** Node type. Can be used for styling. */
-    type?: any,
-    [prop: string]: any,
+    type?: any;
+    [prop: string]: any;
 }

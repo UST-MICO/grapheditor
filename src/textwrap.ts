@@ -1,4 +1,4 @@
-import {select, scaleLinear, zoom, zoomIdentity, zoomTransform, event, line, curveStep, drag} from "d3";
+import {select} from 'd3';
 
 /**
  * Wrap text in an svg text element.
@@ -56,8 +56,8 @@ export function wrapText(element: SVGTextElement, newText) {
     const lines = spanSelection.nodes();
     for (let index = 0; index < lines.length; index++) {
         const line = lines[index];
-        const last = index < (lines.length-1);
-        newText = lTrim(wrapSingleLine(line, width, newText, last ? 'clip' : overflowMode, last ? wordBreak : 'break-all'))
+        const last = index < (lines.length - 1);
+        newText = lTrim(wrapSingleLine(line, width, newText, last ? 'clip' : overflowMode, last ? wordBreak : 'break-all'));
     }
 }
 
@@ -84,11 +84,11 @@ function lTrim(text: string) {
  *
  * @param text parent text element
  * @param height max height
- * @param x
- * @param y
+ * @param x x coordinate
+ * @param y y coordinate
  * @param linespacing 'auto' or number (default: 'auto')
  */
-function calculateMultiline(text, height, x, y, linespacing: string='auto') {
+function calculateMultiline(text, height, x, y, linespacing: string= 'auto') {
     let lineheight = parseFloat(text.attr('data-lineheight'));
     if (isNaN(lineheight)) {
         lineheight = parseFloat(text.style('line-height'));
@@ -131,7 +131,7 @@ function calculateMultiline(text, height, x, y, linespacing: string='auto') {
  *
  * @param element element to wraptext into
  * @param width max linewidth for text
- * @param newText
+ * @param newText new text to set
  * @param mode wrapping mode
  * @param wordBreak break mode
  */
@@ -190,14 +190,14 @@ function wrapSingleLine(element: SVGTextElement|SVGTSpanElement, width: number,
 /**
  * Wrap single line, can break after every character.
  *
- * @param newText
+ * @param newText new text to set
  * @param text d3 selection of element to wrap text into
  * @param width width of the  line
  * @param overflowChar wrapping mode
  */
 function wrapCharacters(newText: string, text: any, width: number, overflowChar: string) {
     let divider = newText.length;
-    let lastText = newText;
+    const lastText = newText;
     let step = newText.length;
     let counter = 0;
     while (step > 1 && counter < 1000) {
@@ -205,8 +205,7 @@ function wrapCharacters(newText: string, text: any, width: number, overflowChar:
         step = Math.ceil(step / 2);
         if (text.node().getBBox().width > width) {
             divider -= step;
-        }
-        else {
+        } else {
             divider += step;
         }
         text.text(rTrim(newText.substr(0, divider)) + overflowChar);
@@ -222,7 +221,7 @@ function wrapCharacters(newText: string, text: any, width: number, overflowChar:
 /**
  * Wrap single line, can break at spaces only.
  *
- * @param newText
+ * @param newText new text to set
  * @param text d3 selection of element to wrap text into
  * @param width width of the  line
  * @param overflowChar wrapping mode

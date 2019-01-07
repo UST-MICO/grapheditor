@@ -9,12 +9,12 @@ export interface RotationVector {
  * @param vector vector to normalize
  */
 export function normalizeVector(vector: RotationVector): RotationVector {
-    let x = vector.dx;
-    let y = vector.dy;
-    const length = Math.sqrt(x*x + y*y);
+    const x = vector.dx;
+    const y = vector.dy;
+    const length = Math.sqrt(x * x + y * y);
     return {
-        dx: x/length,
-        dy: y/length,
+        dx: x / length,
+        dy: y / length,
     };
 }
 
@@ -29,6 +29,6 @@ export function calculateAngle(vector: RotationVector): number {
         return 0;
     }
     vector = normalizeVector(vector);
-    const angle = Math.atan2(vector.dy, vector.dx)
-    return angle * 180/Math.PI;
+    const angle = Math.atan2(vector.dy, vector.dx);
+    return angle * 180 / Math.PI;
 }

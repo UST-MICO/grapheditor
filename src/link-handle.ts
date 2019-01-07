@@ -1,4 +1,4 @@
-import { RotationVector, normalizeVector } from "./rotation-vector";
+import { RotationVector, normalizeVector } from './rotation-vector';
 
 /**
  * Start- or End-Point of edge.
@@ -15,7 +15,7 @@ export interface LinkHandle {
      * edge should come in/out of the handle.
      * Usually away from the node center.
      */
-    normal?: RotationVector
+    normal?: RotationVector;
 }
 
 /**
@@ -24,8 +24,8 @@ export interface LinkHandle {
  * @param handle link handle to calculate normal for
  */
 export function calculateNormal(handle: LinkHandle) {
-    let x = handle.normal != null ? handle.normal.dx : handle.x;
-    let y = handle.normal != null ? handle.normal.dy : handle.y;
+    const x = handle.normal != null ? handle.normal.dx : handle.x;
+    const y = handle.normal != null ? handle.normal.dy : handle.y;
 
     handle.normal = normalizeVector({
         dx: x,
@@ -48,27 +48,27 @@ export function handlesForRectangle(x: number, y: number, width: number, height:
         handles.push({id: 0, x: x, y: y});
     }
     if (linkHandles === 'all' || linkHandles === 'edges' || linkHandles === 'minimal') {
-        handles.push({id: 0, x: x+(width/2), y: y});
+        handles.push({id: 0, x: x + (width / 2), y: y});
     }
     if (linkHandles === 'all' || linkHandles === 'corners') {
-        handles.push({id: 0, x: x+width, y: y});
+        handles.push({id: 0, x: x + width, y: y});
     }
     if (linkHandles === 'all' || linkHandles === 'edges' || linkHandles === 'minimal') {
-        handles.push({id: 0, x: x+width, y: y+(height/2)});
+        handles.push({id: 0, x: x + width, y: y + (height / 2)});
     }
     if (linkHandles === 'all' || linkHandles === 'corners') {
-        handles.push({id: 0, x: x, y: y+height});
+        handles.push({id: 0, x: x, y: y + height});
     }
     if (linkHandles === 'all' || linkHandles === 'edges' || linkHandles === 'minimal') {
-        handles.push({id: 0, x: x+(width/2), y: y+height});
+        handles.push({id: 0, x: x + (width / 2), y: y + height});
     }
     if (linkHandles === 'all' || linkHandles === 'corners') {
-        handles.push({id: 0, x: x+width, y: y+height});
+        handles.push({id: 0, x: x + width, y: y + height});
     }
     if (linkHandles === 'all' || linkHandles === 'edges' || linkHandles === 'minimal') {
-        handles.push({id: 0, x: x, y: y+(height/2)});
+        handles.push({id: 0, x: x, y: y + (height / 2)});
     }
-    handles.forEach((element, index) => {element.id = index});
+    handles.forEach((element, index) => {element.id = index; });
     handles.forEach(calculateNormal);
     return handles;
 }
@@ -85,35 +85,35 @@ export function handlesForCircle(radius: number, linkHandles: string): LinkHandl
     if (linkHandles === 'all') {
         handles.push({
             id: 0,
-            x: Math.sin((Math.PI/2)+(Math.PI/4))*radius,
-            y: Math.cos((Math.PI/2)+(Math.PI/4))*radius,
+            x: Math.sin((Math.PI / 2) + (Math.PI / 4)) * radius,
+            y: Math.cos((Math.PI / 2) + (Math.PI / 4)) * radius,
         });
     }
     handles.push({id: 0, x: radius, y: 0});
     if (linkHandles === 'all') {
         handles.push({
             id: 0,
-            x: Math.sin(Math.PI/4)*radius,
-            y: Math.cos(Math.PI/4)*radius,
+            x: Math.sin(Math.PI / 4) * radius,
+            y: Math.cos(Math.PI / 4) * radius,
         });
     }
     handles.push({id: 0, x: 0, y: -radius});
     if (linkHandles === 'all') {
         handles.push({
             id: 0,
-            x: Math.sin((3*Math.PI/2)+(Math.PI/4))*radius,
-            y: Math.cos((3*Math.PI/2)+(Math.PI/4))*radius,
+            x: Math.sin((3 * Math.PI / 2) + (Math.PI / 4)) * radius,
+            y: Math.cos((3 * Math.PI / 2) + (Math.PI / 4)) * radius,
         });
     }
     handles.push({id: 0, x: -radius, y: 0});
     if (linkHandles === 'all') {
         handles.push({
             id: 0,
-            x: Math.sin((2*Math.PI/2)+(Math.PI/4))*radius,
-            y: Math.cos((2*Math.PI/2)+(Math.PI/4))*radius,
+            x: Math.sin((2 * Math.PI / 2) + (Math.PI / 4)) * radius,
+            y: Math.cos((2 * Math.PI / 2) + (Math.PI / 4)) * radius,
         });
     }
-    handles.forEach((element, index) => {element.id = index});
+    handles.forEach((element, index) => {element.id = index; });
     handles.forEach(calculateNormal);
     return handles;
 }

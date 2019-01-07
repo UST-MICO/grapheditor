@@ -1,4 +1,4 @@
-import { RotationVector } from "./rotation-vector";
+import { RotationVector } from './rotation-vector';
 
 interface RotationData {
     /** Absolute rotation via direction vector. */

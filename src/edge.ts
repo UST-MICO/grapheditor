@@ -1,5 +1,5 @@
-import { LinkHandle } from "./link-handle";
-import { Marker } from "./marker";
+import { LinkHandle } from './link-handle';
+import { Marker } from './marker';
 
 /**
  * A single point.
@@ -13,18 +13,18 @@ export interface Point {
  * Interface for edges between nodes.
  */
 export interface Edge {
-    id?: number|string,
+    id?: number|string;
     /** The id of the source node of this edge. */
-    source: number|string,
+    source: number|string;
     /** The id of the target node of this edge. */
-    target: number|string,
-    sourceHandle?: LinkHandle,
-    targetHandle?: LinkHandle,
+    target: number|string;
+    sourceHandle?: LinkHandle;
+    targetHandle?: LinkHandle;
     /** Edge type. Can be used for styling. */
-    type?: any,
+    type?: any;
     /** List of markers to draw for this edge. */
-    markers?: Marker[],
-    [prop: string]: any,
+    markers?: Marker[];
+    [prop: string]: any;
 }
 
 /**
