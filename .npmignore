@@ -1,6 +1,6 @@
 .*
+src
 node_modules
-/node
 .vscode
 docs
 default.nix
