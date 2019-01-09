@@ -1,5 +1,7 @@
 /target/
 node_modules
-dist
+_bundles
+lib
+lib-esm
 /node
 .vscode

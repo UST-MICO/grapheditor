@@ -1,0 +1,12 @@
+.*
+node_modules
+/node
+.vscode
+docs
+default.nix
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md
+readthedocs.yml
+tsconfig.json
+tslint.json
+webpack.config.js

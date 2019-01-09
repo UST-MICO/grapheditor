@@ -1,19 +1,24 @@
 {
   "name": "grapheditor-webcomponent",
   "version": "0.0.1",
-  "description": "",
-  "main": "index.ts",
+  "description": "Webcomponent for displaying and editing graphs.",
+  "author": "MICO Authors",
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
   "scripts": {
-    "build": "webpack --mode production",
     "start": "webpack --mode development --watch",
-    "lint": "tslint --project ."
+    "lint": "tslint --project .",
+    "clean": "rm -rf _bundles lib lib-esm",
+    "package": "tsc",
+    "package-es6": "tsc -m es6 --outDir lib-esm",
+    "package-bundle": "webpack --mode production",
+    "package-all": "npm run clean && npm run package && npm run package-es6 && npm run package-bundle"
   },
-  "author": "",
   "dependencies": {
-    "d3": "^5.7.0"
+    "d3": "^5.7.0",
+    "@types/d3": "^5.5.0"
   },
   "devDependencies": {
-    "@types/d3": "^5.5.0",
     "tslint": "~5.12.0",
     "webpack": "^4.28.3",
     "webpack-cli": "^3.2.1",
