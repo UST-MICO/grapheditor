@@ -31,6 +31,8 @@ export default class GraphEditor extends HTMLElement {
 
     private hovered: Set<number | string> = new Set();
 
+    private _classes: string[];
+    private classesToRemove: Set<string>;
     private _nodes: Node[];
     private _edges: Edge[];
     private draggedEdges: DraggedEdge[];
@@ -63,14 +65,38 @@ export default class GraphEditor extends HTMLElement {
      *
      * Only modify the existing edge!
      */
-    public onDraggedEdgeTargetChange: (edge: DraggedEdge, sourceNode?: Node, targetNode?: Node) => void;
+    public onDraggedEdgeTargetChange: (edge: DraggedEdge, sourceNode: Node, targetNode?: Node) => void;
 
     /**
      * Callback when a existing dragged edge is dropped.
      *
      * Use this callback only to customize the edge attributes like markers or type!
      */
-    public onDropDraggedEdge: (edge: DraggedEdge, sourceNode?: Node, targetNode?: Node) => Edge;
+    public onDropDraggedEdge: (edge: DraggedEdge, sourceNode: Node, targetNode: Node) => Edge;
+
+    /**
+     * Callback to set/unset a given class for a node.
+     */
+    public setNodeClass: (className: string, node: Node) => boolean;
+
+    /**
+     * Callback to set/unset a given class for an edge.
+     */
+    public setEdgeClass: (className: string, edge: Edge|DraggedEdge, sourceNode: Node, targetNode?: Node) => boolean;
+
+    get classes() {
+        return this._classes;
+    }
+
+    set classes(classes: string[]) {
+        if (this._classes != null) {
+            this._classes.forEach(className => this.classesToRemove.add(className));
+        }
+        const deduped = new Set<string>();
+        classes.forEach(className => deduped.add(className));
+        this._classes = new Array(...deduped);
+        this._classes.forEach(className => this.classesToRemove.delete(className));
+    }
 
     get nodeList() {
         return this._nodes;
@@ -110,6 +136,8 @@ export default class GraphEditor extends HTMLElement {
 
     constructor() {
         super();
+        this._classes = [];
+        this.classesToRemove = new Set();
         this._nodes = [];
         this._edges = [];
         this.draggedEdges = [];
@@ -144,7 +172,7 @@ export default class GraphEditor extends HTMLElement {
         });
     }
 
-    static get observedAttributes() { return ['nodes', 'edges', 'mode', 'zoom']; }
+    static get observedAttributes() { return ['nodes', 'edges', 'classes', 'mode', 'zoom']; }
 
     attributeChangedCallback(name, oldValue, newValue: string) {
         if (name === 'nodes') {
@@ -157,9 +185,17 @@ export default class GraphEditor extends HTMLElement {
             console.log('Edges ' + newValue);
             this.edgeList = JSON.parse(newValue);
         }
+        if (name === 'classes') {
+            if (newValue.startsWith('[')) {
+                newValue = newValue.replace(/'/g, '"');
+                console.log('Classes ' + newValue);
+                this.classes = JSON.parse(newValue);
+            } else {
+                this.classes = newValue.split(' ');
+            }
+        }
         if (name === 'zoom') {
             this.setZoomMode(newValue.toLowerCase());
-            this.completeRender();
         }
         if (name === 'mode') {
             this.setMode(newValue.toLowerCase());
@@ -419,6 +455,9 @@ export default class GraphEditor extends HTMLElement {
         }
     }
 
+    /**
+     * Get the svg containing the graph as a d3 selection.
+     */
     private getSvg() {
         return select(this.root).select('svg.graph-editor');
     }
@@ -576,7 +615,7 @@ export default class GraphEditor extends HTMLElement {
 
         // update edges ////////////////////////////////////////////////////////
         if (updateTemplates) {
-            graph.select('.edges').selectAll('g.edge:not(.dragged)').remove();
+            graph.select('.edges').selectAll('g.edge-group:not(.dragged)').remove();
         }
         const self = this;
         const edgeGroupSelection = graph.select('.edges')
@@ -605,6 +644,8 @@ export default class GraphEditor extends HTMLElement {
             .call(self.updateEdgeGroups.bind(this))
             .call(self.updateEdgePositions.bind(this))
             .on('click', (d) => { this.onEdgeClick.bind(this)(d); });
+
+        this.classesToRemove.clear();
     }
 
 
@@ -622,6 +663,15 @@ export default class GraphEditor extends HTMLElement {
             .call(this.updateLinkHandles.bind(this));
     }
 
+    /**
+     * Check nodes of nodeSelection if used templates don't have
+     * calculated link handle positions.
+     *
+     * If true the link handle positions ere calculated using the first child
+     * or the first element with the class 'outline'.
+     *
+     * @param nodeSelection d3 selection of nodes
+     */
     private updateLinkHandles(nodeSelection) {
         const self = this;
         nodeSelection.each(function (d) {
@@ -703,6 +753,7 @@ export default class GraphEditor extends HTMLElement {
             }
         });
 
+        // update link handles for node
         nodeSelection.each(function (node) {
             const handles = self.objectCache.getNodeTemplateLinkHandles(node.type);
             if (handles == null) {
@@ -719,7 +770,7 @@ export default class GraphEditor extends HTMLElement {
                 .attr('cy', (d) => d.y)
                 .attr('r', 3);
 
-
+            // allow edge drag from link handles
             if (self.isInteractive) {
                 handleSelection.call(
                     drag()
@@ -739,8 +790,10 @@ export default class GraphEditor extends HTMLElement {
         });
 
         nodeSelection
+            .call(this.updateNodeClasses.bind(this))
             .call(this.updateNodeHighligts.bind(this));
 
+        // allow node drag and drop
         nodeSelection.each(function (d) {
             const singleNodeSelection = select(this);
             const textSelection = singleNodeSelection.selectAll('.text').datum(function () {
@@ -760,6 +813,32 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
+     * Update node classes.
+     *
+     * @param nodeSelection d3 selection of nodes to update with bound data
+     */
+    private updateNodeClasses(nodeSelection) {
+        if (this.classesToRemove != null) {
+            this.classesToRemove.forEach((className) => {
+                nodeSelection.classed(className, (d) => {
+                    return false;
+                });
+            });
+        }
+        if (this.classes != null) {
+            this.classes.forEach((className) => {
+                nodeSelection.classed(className, (d) => {
+                    if (this.setNodeClass != null) {
+                        return this.setNodeClass(className, d);
+                    }
+                    return true;
+                });
+            });
+        }
+    }
+
+
+    /**
      * Update node positions.
      *
      * @param nodeSelection d3 selection of nodes to update with bound data
@@ -772,6 +851,11 @@ export default class GraphEditor extends HTMLElement {
         });
     }
 
+    /**
+     * Update edge groups.
+     *
+     * @param edgeGroupSelection d3 selection of edgeGroups
+     */
     private updateEdgeGroups(edgeGroupSelection) {
         if (edgeGroupSelection == null) {
             const svg = this.getSvg();
@@ -782,9 +866,14 @@ export default class GraphEditor extends HTMLElement {
         edgeGroupSelection.each(function (d) {
             self.updateEdgeGroup(select(this), d);
         }, this)
+            .call(this.updateEdgeGroupClasses.bind(this))
             .call(this.updateEdgeHighligts.bind(this));
     }
 
+
+    /**
+     * Update draggededge groups.
+     */
     private updateDraggedEdgeGroups() {
         const svg = this.getSvg();
 
@@ -804,10 +893,42 @@ export default class GraphEditor extends HTMLElement {
                     .attr('fill', 'none');
             })
           .merge(edgeGroupSelection as any)
+            .call(this.updateEdgeGroupClasses.bind(this))
             .call(this.updateEdgeGroups.bind(this))
             .call(this.updateEdgePositions.bind(this));
     }
 
+    /**
+     * Update classes of edgeGroups
+     *
+     * @param edgeGroupSelection d3 selection
+     */
+    private updateEdgeGroupClasses(edgeGroupSelection) {
+        if (this.classesToRemove != null) {
+            this.classesToRemove.forEach((className) => {
+                edgeGroupSelection.classed(className, (d) => {
+                    return false;
+                });
+            });
+        }
+        if (this.classes != null) {
+            this.classes.forEach((className) => {
+                edgeGroupSelection.classed(className, (d) => {
+                    if (this.setEdgeClass != null) {
+                        return this.setEdgeClass(className, d, this.objectCache.getNode(d.source),
+                            (d.target != null) ? this.objectCache.getNode(d.target) : null);
+                    }
+                    return true;
+                });
+            });
+        }
+    }
+
+    /**
+     * Update edge path and marker positions.
+     *
+     * @param edgeGroupSelection d3 selection
+     */
     private updateEdgePositions(edgeGroupSelection) {
         if (edgeGroupSelection == null) {
             const svg = this.getSvg();
@@ -833,9 +954,15 @@ export default class GraphEditor extends HTMLElement {
         });
     }
 
+    /**
+     * Update markers and path attributes.
+     *
+     * @param edgeGroupSelection d3 selection of single edge group
+     * @param d edge datum
+     */
     private updateEdgeGroup(edgeGroupSelection, d) {
         const pathSelection = edgeGroupSelection.select('path.edge:not(.dragged)').datum(d);
-        pathSelection.call(this.updateEdge.bind(this));
+        pathSelection.attr('stroke', 'black');
         const markerSelection = edgeGroupSelection.selectAll('g.marker').data(d.markers != null ? d.markers : []);
         markerSelection.exit().remove();
         markerSelection.enter().append('g')
@@ -861,25 +988,6 @@ export default class GraphEditor extends HTMLElement {
         } else {
             edgeGroupSelection.select('circle.link-handle').on('.drag', null);
         }
-    }
-
-    /**
-     * Update existing edges.
-     *
-     * @param edgeSelection d3 selection of edges to update with bound data
-     */
-    private updateEdge(edgeSelection) {
-        if (edgeSelection == null) {
-            const svg = this.getSvg();
-
-            const graph = svg.select('g.zoom-group');
-            edgeSelection = graph.select('.edges')
-                .selectAll('path.edge:not(.dragged)')
-                .data(this._edges, edgeId);
-        }
-
-        edgeSelection
-            .attr('stroke', 'black');
     }
 
     /**
@@ -909,6 +1017,11 @@ export default class GraphEditor extends HTMLElement {
         });
     }
 
+    /**
+     * Create a new edge marker in edgeGroup.
+     *
+     * @param markerSelection d3 selection
+     */
     private createMarker = (markerSelection) => {
         markerSelection
             .attr('data-template', (d) => d.template)
@@ -917,6 +1030,11 @@ export default class GraphEditor extends HTMLElement {
             });
     }
 
+    /**
+     * Update existing edge marker.
+     *
+     * @param markerSelection d3 selection
+     */
     private updateMarker(markerSelection) {
         const self = this;
         markerSelection.each(function (d) {
@@ -929,6 +1047,11 @@ export default class GraphEditor extends HTMLElement {
         });
     }
 
+    /**
+     * Update all edge marker positions
+     *
+     * @param markerSelection d3 selection
+     */
     private updateMarkerPositions(markerSelection) {
         markerSelection.each(function (d) {
             const parent = select(this.parentElement);
@@ -947,11 +1070,14 @@ export default class GraphEditor extends HTMLElement {
                 positionOnLine = 0;
             }
             let transform = '';
+
             const point = (path.node() as SVGPathElement).getPointAtLength(length * positionOnLine);
             transform += `translate(${point.x},${point.y})`;
+
             if (d.scale != null) {
                 transform += `scale(${d.scale})`;
             }
+
             if (d.rotate != null) {
                 let angle = 0;
                 if (d.rotate.normal == null) {
@@ -968,6 +1094,7 @@ export default class GraphEditor extends HTMLElement {
                 angle += d.rotate.relativeAngle != null ? d.rotate.relativeAngle : 0;
                 transform += `rotate(${angle})`;
             }
+
             marker.attr('transform', transform);
         });
     }
@@ -995,6 +1122,11 @@ export default class GraphEditor extends HTMLElement {
             .call(this.updateEdgePositions.bind(this));
     }
 
+    /**
+     * Create a new dragged edge from a source node.
+     *
+     * @param sourceNode node that edge was dragged from
+     */
     private createDraggedEdge(sourceNode: Node): DraggedEdge {
         const validTargets = new Set<string>();
         this._nodes.forEach(node => validTargets.add(node.id.toString()));
@@ -1017,6 +1149,11 @@ export default class GraphEditor extends HTMLElement {
         return draggedEdge;
     }
 
+    /**
+     * Create a dragged edge from an existing edge.
+     *
+     * @param edge existing edge
+     */
     private createDraggedEdgeFromExistingEdge(edge: Edge): DraggedEdge {
         const validTargets = new Set<string>();
         this._nodes.forEach(node => validTargets.add(node.id.toString()));
@@ -1047,6 +1184,9 @@ export default class GraphEditor extends HTMLElement {
         return draggedEdge;
     }
 
+    /**
+     * Update dragged edge on drag event.
+     */
     private updateDraggedEdge() {
         const oldTarget = event.subject.target;
         event.subject.target = null;
@@ -1081,6 +1221,9 @@ export default class GraphEditor extends HTMLElement {
         }
     }
 
+    /**
+     * Drop dragged edge.
+     */
     private dropDraggedEdge() {
         let updateEdgeCache = false;
         if (event.subject.createdFrom != null) {
@@ -1297,6 +1440,11 @@ export default class GraphEditor extends HTMLElement {
         this.updateEdgeHighligts();
     }
 
+    /**
+     * Internal selection changed callback.
+     *
+     * Create new 'selection' event.
+     */
     private onSelectionChangeInternal() {
         let selected: Set<number | string> = new Set();
         if (this.mode === 'select') {
