@@ -45,6 +45,7 @@ from os.path import relpath, join
 from sphinx.errors import SphinxError
 from errno import ENOENT
 from json import load, dump
+from pathlib import Path
 
 
 def analyze_typescript(abs_source_paths, app):
@@ -92,6 +93,13 @@ def analyze_typescript(abs_source_paths, app):
 
 doclets.ANALYZERS['custom_typescript'] = analyze_typescript
 
+
+def new_relpath(path, basedir):
+    if Path(path).drive != Path(basedir).drive:
+        return path
+    return relpath(path, basedir)
+
+doclets.relpath = new_relpath
 
 # -- Project information -----------------------------------------------------
 

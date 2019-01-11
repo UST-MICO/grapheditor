@@ -12,6 +12,7 @@
         <script src="./_bundles/grapheditor-webcomponent.js"></script>
         <network-graph nodes="[{'id': 1, 'title': 'hello world', 'type': 'REST', 'x': 0, 'y': 0}, {'id': 2, 'title': 'HI2', 'type': 'gRPC', 'x': 150, 'y': 100}]"
                 edges="[{'source': 1, 'target': 2}]"
+                classes="rest grpc mqtt"
                 mode="layout"
                 onclick="() => console.log('HI')"
                 zoom="both">
@@ -26,12 +27,17 @@
                     .text.title {font-size: initial; text-overflow: clip; word-break: break-word;}
                     .node.hovered {fill: red;}
                     .hovered .link-handle {display: initial;}
-                    .node.selected {fill: green; content:attr(class)}
-                    .edge {marker-end: url(#arrow)}
+                    .node.selected {fill: green; }
                     .highlight-outgoing .edge {stroke: red;}
                     .highlight-incoming .edge {stroke: green;}
                     .highlight-outgoing .marker {fill: red;}
                     .highlight-incoming .marker {fill: green;}
+                    .rest {fill: green;}
+                    .grpc {fill: blueviolet;}
+                    .mqtt {fill: lightsalmon;}
+                    .rest .edge {stroke: green;}
+                    .grpc .edge {stroke: blueviolet;}
+                    .mqtt .edge {stroke: lightsalmon;}
                 </style>
             </template>
             <template id="REST" template-type="node">
@@ -53,6 +59,35 @@
 
         <script>
             var graph = document.querySelector('network-graph');
+
+            graph.setNodeClass = (className, node) => {
+                if (className === 'rest' && node.type === 'REST') {
+                    return true;
+                }
+                if (className === 'grpc' && node.type === 'gRPC') {
+                    return true;
+                }
+                if (className === 'mqtt' && node.type === 'mqtt') {
+                    return true;
+                }
+                return false;
+            }
+
+            graph.setEdgeClass = (className, edge, sourceNode, targetNode) => {
+                if (targetNode == null) {
+                    return false;
+                }
+                if (className === 'rest' && targetNode.type === 'REST') {
+                    return true;
+                }
+                if (className === 'grpc' && targetNode.type === 'gRPC') {
+                    return true;
+                }
+                if (className === 'mqtt' && targetNode.type === 'mqtt') {
+                    return true;
+                }
+                return false;
+            }
 
             graph.onCreateDraggedEdge = (edge) => {
                 if (edge.createdFrom == null || edge.createdFrom == undefined) {
