@@ -93,6 +93,11 @@ def analyze_typescript(abs_source_paths, app):
 doclets.ANALYZERS['custom_typescript'] = analyze_typescript
 
 
+def new_relpath(path, basedir):
+    return relpath(path, basedir)
+
+doclets.relpath = new_relpath
+
 # -- Project information -----------------------------------------------------
 
 project = 'MICO Grapheditor Documentation'
