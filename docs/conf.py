@@ -49,14 +49,16 @@ from pathlib import Path
 
 
 def analyze_typescript(abs_source_paths, app):
-    command = doclets.Command('typedoc')
+    command = doclets.Command('npm')
+    command.add('run', 'doc', '--')
     if app.config.jsdoc_config_path:
         command.add('--tsconfig', app.config.jsdoc_config_path)
 
     json_path = './docs/typedoc.json'
 
     source = abs_source_paths[0]
-    command.add('--exclude', '**/node_modules/**/*.*', '--json', json_path, '--ignoreCompilerErrors', *abs_source_paths)
+    print(source)
+    command.add('--json', json_path, *abs_source_paths)
     if not on_rtd:
         # only build typedoc json locally as readthedocs build container does not
         # support it natively (and typedoc process takes a while to finish)
@@ -65,24 +67,29 @@ def analyze_typescript(abs_source_paths, app):
             with open('typedoc.json') as typedoc_json:
                 typedoc = load(typedoc_json)
 
-            def clean_paths(typedoc):
+            def sanitize_typedoc_json(typedoc):
                 """Make all paths relative to not leak path info to github."""
                 if not isinstance(typedoc, dict):
                     return
                 for key in typedoc:
                     if isinstance(typedoc[key], dict):
-                        clean_paths(typedoc[key])
+                        sanitize_typedoc_json(typedoc[key])
                     if isinstance(typedoc[key], list):
                         for entry in typedoc[key]:
-                            clean_paths(entry)
+                            sanitize_typedoc_json(entry)
                     if key == 'originalName':
                         filepath = typedoc[key]
                         typedoc[key] = relpath(filepath)
-            clean_paths(typedoc)
+                    if key == 'getSignature':
+                        # fix parsing error in sphinx extension
+                        if isinstance(typedoc[key], list) and len(typedoc[key]) > 0:
+                            typedoc[key] = typedoc[key][0]
+            sanitize_typedoc_json(typedoc)
             with open('typedoc.json', mode='w') as typedoc_json:
                 dump(typedoc, typedoc_json)
         except OSError as exc:
             if exc.errno == ENOENT:
+                print(exc)
                 raise SphinxError('%s was not found. Install it using "npm install -g typedoc".' % command.program)
             else:
                 raise

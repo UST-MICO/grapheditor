@@ -8,6 +8,7 @@
   "scripts": {
     "start": "webpack-dev-server --config webpack-dev.config.js",
     "lint": "tslint --project .",
+    "doc": "typedoc --exclude **/node_modules/**/*.* --externalPattern **/node_modules/**/* --excludeExternals --ignoreCompilerErrors",
     "clean": "rm -rf _bundles lib lib-esm",
     "package": "tsc",
     "package-es6": "tsc -m es6 --outDir lib-esm",
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "tslint": "~5.12.1",
+    "typedoc": "^0.14.1",
     "webpack": "^4.28.4",
     "webpack-cli": "^3.2.1",
     "webpack-dev-server": "^3.1.14",
