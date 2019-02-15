@@ -1,10 +1,29 @@
 {
-  "name": "grapheditor-webcomponent",
+  "name": "@ustutt/grapheditor-webcomponent",
   "version": "0.0.1",
   "description": "Webcomponent for displaying and editing graphs.",
   "author": "MICO Authors",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
+  "directories": {
+    "doc": "docs",
+    "lib": "lib",
+    "example": "example"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/UST-MICO/grapheditor.git"
+  },
+  "keywords": [
+    "webcomponent",
+    "d3",
+    "graph"
+  ],
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/UST-MICO/grapheditor/issues"
+  },
+  "homepage": "https://github.com/UST-MICO/grapheditor#readme",
   "scripts": {
     "start": "webpack-dev-server --config webpack-dev.config.js",
     "lint": "tslint --project .",

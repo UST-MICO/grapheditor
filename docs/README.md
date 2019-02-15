@@ -1,11 +1,5 @@
 # Grapheditor Documentation
 
-<!--
-Documentation: [readthedocs](https://mico-dev.readthedocs.io)
-
-![build badge](https://readthedocs.org/projects/mico-dev/badge/?version=latest)
--->
-
 
 ## Useful links:
 

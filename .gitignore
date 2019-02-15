@@ -1,8 +1,7 @@
 /target/
 node_modules
 _bundles
-# uncomment if package is published on npm
-#lib
+lib
 lib-esm
 /node
 .vscode

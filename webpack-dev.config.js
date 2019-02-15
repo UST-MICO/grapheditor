@@ -8,7 +8,7 @@ module.exports = merge(common, {
 
     plugins: [
         new HtmlWebpackPlugin({
-            template: 'test.html',
+            template: 'example/test.html',
             hash: true,
             inject: 'head',
         }),

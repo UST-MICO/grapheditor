@@ -2,7 +2,7 @@
 src
 node_modules
 .vscode
-docs
+docs/_build
 default.nix
 CODE_OF_CONDUCT.md
 CONTRIBUTING.md

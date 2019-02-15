@@ -57,7 +57,6 @@ def analyze_typescript(abs_source_paths, app):
     json_path = './docs/typedoc.json'
 
     source = abs_source_paths[0]
-    print(source)
     command.add('--json', json_path, *abs_source_paths)
     if not on_rtd:
         # only build typedoc json locally as readthedocs build container does not
