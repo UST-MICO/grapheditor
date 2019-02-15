@@ -802,7 +802,20 @@ export default class GraphEditor extends HTMLElement {
             textSelection.each(function (attr) {
                 let newText = '';
                 if (attr != null) {
-                    newText = d[attr];
+                    if (attr.includes('.')) {
+                        const path = attr.split('.');
+                        let temp = d;
+                        path.forEach(segment => {
+                            if (temp != null && temp.hasOwnProperty(segment)) {
+                                temp = temp[segment];
+                            } else {
+                                temp = null;
+                            }
+                        });
+                        newText = temp;
+                    } else {
+                        newText = d[attr];
+                    }
                 }
                 if (newText == null) {
                     newText = '';

@@ -118,6 +118,8 @@ Text injection
 It is possible to use text from the node object inside a templated node.
 The template has to contain a ``text`` tag with an ``data-content`` attribute and the ``text`` class.
 The ``data-content`` attribute is used to determine wich attribute of the node is used as text for this element.
+To use a value of a nested Object as text source a path can be provided in ``data-content`` where the path segments are seperated by ``.``.
+Currently arrays are not supported as a text source.
 
 .. code-block:: html
 
