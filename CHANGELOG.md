@@ -7,3 +7,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 ## [Unreleased]
 
 ### Added
+
+## [0.0.1] - 2019-02-15
+### Added
+- Initial webcomponent
+- Documentation
