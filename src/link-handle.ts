@@ -16,6 +16,7 @@
  */
 
 import { RotationVector, normalizeVector } from './rotation-vector';
+import { Point } from './edge';
 
 /**
  * Start- or End-Point of edge.
@@ -128,6 +129,66 @@ export function handlesForCircle(radius: number, linkHandles: string): LinkHandl
             id: 0,
             x: Math.sin((2 * Math.PI / 2) + (Math.PI / 4)) * radius,
             y: Math.cos((2 * Math.PI / 2) + (Math.PI / 4)) * radius,
+        });
+    }
+    handles.forEach((element, index) => {element.id = index; });
+    handles.forEach(calculateNormal);
+    return handles;
+}
+
+/**
+ * Generate link handles list for a polygon.
+ *
+ * @param points
+ * @param linkHandles one of ['all', 'minimal']
+ */
+export function handlesForPolygon(points: Point[], linkHandles: string): LinkHandle[] {
+    const handles: LinkHandle[] = [];
+    points.forEach((point, index) => {
+        const pointAfter = points[(index + 1) % points.length];
+        if (linkHandles === 'all' || linkHandles === 'corners') {
+            handles.push({
+                id: 0,
+                x: point.x,
+                y: point.y,
+            });
+        }
+        if (linkHandles === 'all' || linkHandles === 'edges' || linkHandles === 'minimal') {
+            handles.push({
+                id: 0,
+                x: (point.x + pointAfter.x) / 2,
+                y: (point.y + pointAfter.y) / 2,
+            });
+        }
+    });
+    handles.forEach((element, index) => {element.id = index; });
+    handles.forEach(calculateNormal);
+    return handles;
+}
+
+/**
+ * Generate link handles list for a path.
+ *
+ * @param path
+ * @param linkHandles one of ['all', 'minimal']
+ */
+export function handlesForPath(path: SVGPathElement, linkHandles: string): LinkHandle[] {
+    const handles: LinkHandle[] = [];
+    const length = path.getTotalLength();
+    let nrOfHandles = 1;
+    if (linkHandles === 'all' || linkHandles === '') {
+        nrOfHandles = 8;
+    } else if (linkHandles === 'minimal') {
+        nrOfHandles = 4;
+    } else if (isNaN(parseInt(linkHandles, 10))) {
+        nrOfHandles = parseInt(linkHandles, 10);
+    }
+    for (let i = 0; i < nrOfHandles; i++) {
+        const point = path.getPointAtLength(length * (i / nrOfHandles));
+        handles.push({
+            id: 0,
+            x: point.x,
+            y: point.y,
         });
     }
     handles.forEach((element, index) => {element.id = index; });

@@ -18,8 +18,8 @@
 import { select, scaleLinear, zoom, zoomIdentity, zoomTransform, event, line, curveBasis, drag } from 'd3';
 
 import { Node } from './node';
-import { Edge, DraggedEdge, edgeId } from './edge';
-import { LinkHandle, handlesForRectangle, handlesForCircle, calculateNormal } from './link-handle';
+import { Edge, DraggedEdge, edgeId, Point } from './edge';
+import { LinkHandle, handlesForRectangle, handlesForCircle, calculateNormal, handlesForPolygon, handlesForPath } from './link-handle';
 import { GraphObjectCache } from './object-cache';
 import { wrapText } from './textwrap';
 import { calculateAngle } from './rotation-vector';
@@ -737,6 +737,16 @@ export default class GraphEditor extends HTMLElement {
                     const handles: LinkHandle[] = handlesForRectangle(x, y, width, height, linkHandles);
                     self.objectCache.setNodeTemplateLinkHandles(d.type, handles);
                 }
+            } else if ((backgroundSelection.node() as Element).tagName === 'polygon') {
+                const points: Point[] = [];
+                for (const point of backgroundSelection.property('points')) {
+                    points.push(point);
+                }
+                const handles: LinkHandle[] = handlesForPolygon(points, linkHandles);
+                self.objectCache.setNodeTemplateLinkHandles(d.type, handles);
+            } else if ((backgroundSelection.node() as Element).tagName === 'path') {
+                const handles: LinkHandle[] = handlesForPath(backgroundSelection.node() as SVGPathElement, linkHandles);
+                self.objectCache.setNodeTemplateLinkHandles(d.type, handles);
             } else {
                 self.objectCache.setNodeTemplateLinkHandles(d.type, []);
             }
