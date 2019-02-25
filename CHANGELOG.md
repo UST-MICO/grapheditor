@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 ## [Unreleased]
 
 ### Added
+
+## [0.0.2] - 2019-02-25
+### Added
 - LinkHandles for `path` and `polygon` elements
 - scaleRelative attribute in `Marker` for scaling relative to stroke-width of edge path
 - markerEnd attribute in `Edge` for better arrowheads
