@@ -29,8 +29,12 @@ export interface Marker {
     template: string;
     /** The relative position of the marker on the edge (between 0 and 1). */
     positionOnLine: number|string;
+    /** The length used for end/start markers to offset the line position. */
+    lineOffset?: number;
     /** A factor to scale the marker. */
     scale?: number;
+    /** If true the marker is scaled relative to the stroke width. */
+    scaleRelative?: boolean;
     /** Rotation information for the marker. */
     rotate?: RotationData;
 }

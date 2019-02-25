@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-import { select, scaleLinear, zoom, zoomIdentity, zoomTransform, event, line, curveBasis, drag } from 'd3';
+import { select, scaleLinear, zoom, zoomIdentity, zoomTransform, event, line, curveBasis, drag, selection } from 'd3';
 
 import { Node } from './node';
 import { Edge, DraggedEdge, edgeId, Point } from './edge';
 import { LinkHandle, handlesForRectangle, handlesForCircle, calculateNormal, handlesForPolygon, handlesForPath } from './link-handle';
 import { GraphObjectCache } from './object-cache';
 import { wrapText } from './textwrap';
-import { calculateAngle } from './rotation-vector';
+import { calculateAngle, normalizeVector } from './rotation-vector';
 
 const SHADOW_DOM_TEMPLATE = `
 <style>
@@ -979,8 +979,10 @@ export default class GraphEditor extends HTMLElement {
         edgeGroupSelection.select('path.edge')
             .call(this.updateEdgePath.bind(this));
         edgeGroupSelection.each(function (d) {
-            select(this).selectAll('g.marker').data(d.markers != null ? d.markers : [])
+            select(this).selectAll('g.marker:not(.marker-end)').data(d.markers != null ? d.markers : [])
                 .call(self.updateMarkerPositions.bind(self));
+        }).each(function (d) {
+            self.updateEndMarker(select(this), d);
         }).each(function () {
             const edgeGroup = select(this);
             const path = edgeGroup.select('path.edge');
@@ -1003,7 +1005,8 @@ export default class GraphEditor extends HTMLElement {
     private updateEdgeGroup(edgeGroupSelection, d) {
         const pathSelection = edgeGroupSelection.select('path.edge:not(.dragged)').datum(d);
         pathSelection.attr('stroke', 'black');
-        const markerSelection = edgeGroupSelection.selectAll('g.marker').data(d.markers != null ? d.markers : []);
+        this.updateEndMarker(edgeGroupSelection, d);
+        const markerSelection = edgeGroupSelection.selectAll('g.marker:not(.marker-end)').data(d.markers != null ? d.markers : []);
         markerSelection.exit().remove();
         markerSelection.enter().append('g')
             .classed('marker', true)
@@ -1046,13 +1049,19 @@ export default class GraphEditor extends HTMLElement {
                     y: handles.sourceCoordinates.y + (handles.sourceHandle.normal.dy * 10),
                 });
             }
+            const offset = (d.markerEnd != null  && d.markerEnd.lineOffset != null) ? d.markerEnd.lineOffset : 0;
             if (handles.targetHandle.normal != null) {
                 points.push({
-                    x: handles.targetCoordinates.x + (handles.targetHandle.normal.dx * 10),
-                    y: handles.targetCoordinates.y + (handles.targetHandle.normal.dy * 10),
+                    x: handles.targetCoordinates.x + (handles.targetHandle.normal.dx * (10 + offset)),
+                    y: handles.targetCoordinates.y + (handles.targetHandle.normal.dy * (10 + offset)),
                 });
+                points.push({
+                    x: handles.targetCoordinates.x + (handles.targetHandle.normal.dx * offset),
+                    y: handles.targetCoordinates.y + (handles.targetHandle.normal.dy * offset),
+                });
+            } else {
+                points.push(handles.targetCoordinates);
             }
-            points.push(handles.targetCoordinates);
             return this.edgeGenerator(points);
         });
     }
@@ -1087,6 +1096,85 @@ export default class GraphEditor extends HTMLElement {
         });
     }
 
+
+    /**
+     * Update edge-end marker.
+     *
+     * @param edgeGroupSelection d3 selection of single edge group
+     * @param d edge datum
+     */
+    private updateEndMarker(edgeGroupSelection, d: DraggedEdge) {
+        if (d.markerEnd == null) {
+            // delete
+            edgeGroupSelection.select('g.marker.marker-end').remove();
+        } else {
+            let markerSelection = edgeGroupSelection.select('g.marker.marker-end');
+            if (markerSelection.empty()) {
+                // create
+                markerSelection = edgeGroupSelection.append('g')
+                    .classed('marker', true)
+                    .classed('marker-end', true);
+                markerSelection.attr('data-template', d.markerEnd.template)
+                    .html(() => {
+                        return this.objectCache.getMarkerTemplate(d.markerEnd.template);
+                    });
+            }
+            const templateType = markerSelection.attr('data-template');
+            if (templateType !== d.markerEnd.template) {
+                // change template
+                markerSelection.selectAll().remove();
+                markerSelection.attr('data-template', d.markerEnd.template)
+                    .html(() => {
+                        return this.objectCache.getMarkerTemplate(d.markerEnd.template);
+                    });
+            }
+            // calculate position size and rotation
+            const path = edgeGroupSelection.select('path.edge');
+            const length = (path.node() as SVGPathElement).getTotalLength();
+            const strokeWidth: number = parseFloat(path.style('stroke-width').replace(/px/, ''));
+
+            const pathEndpoint = (path.node() as SVGPathElement).getPointAtLength(length);
+            const pointBeforePathEnd = (path.node() as SVGPathElement).getPointAtLength(length - 1e-3);
+
+            const edgeNormal = normalizeVector({
+                dx: length > 1e-3 ? pathEndpoint.x - pointBeforePathEnd.x : 1,
+                dy: length > 1e-3 ? pathEndpoint.y - pointBeforePathEnd.y : 0,
+            });
+
+            let transform = '';
+
+            const offset = (d.markerEnd.lineOffset != null) ? d.markerEnd.lineOffset : 0;
+
+            const point = {
+                x: pathEndpoint.x + (edgeNormal.dx * offset),
+                y: pathEndpoint.y + (edgeNormal.dy * offset),
+            };
+
+            transform += `translate(${point.x},${point.y})`;
+
+            if (d.markerEnd.scale != null) {
+                if (!(!d.markerEnd.scaleRelative)) {
+                    transform += `scale(${d.markerEnd.scale * strokeWidth})`;
+                } else {
+                    transform += `scale(${d.markerEnd.scale})`;
+                }
+            }
+
+            if (d.markerEnd.rotate != null) {
+                let angle = 0;
+                if (d.markerEnd.rotate.normal == null) {
+                    angle += calculateAngle(edgeNormal);
+                } else {
+                    angle += calculateAngle(d.markerEnd.rotate.normal);
+                }
+                angle += d.markerEnd.rotate.relativeAngle != null ? d.markerEnd.rotate.relativeAngle : 0;
+                transform += `rotate(${angle})`;
+            }
+
+            markerSelection.attr('transform', transform);
+        }
+    }
+
     /**
      * Update all edge marker positions
      *
@@ -1098,6 +1186,7 @@ export default class GraphEditor extends HTMLElement {
             const marker = select(this);
             const path = parent.select('path.edge');
             const length = (path.node() as SVGPathElement).getTotalLength();
+            const strokeWidth: number = parseFloat(path.style('stroke-width').replace(/px/, ''));
             let positionOnLine = d.positionOnLine;
             if (positionOnLine === 'end') {
                 positionOnLine = 1;
@@ -1115,7 +1204,11 @@ export default class GraphEditor extends HTMLElement {
             transform += `translate(${point.x},${point.y})`;
 
             if (d.scale != null) {
-                transform += `scale(${d.scale})`;
+                if (!(!d.scaleRelative)) {
+                    transform += `scale(${d.scale * strokeWidth})`;
+                } else {
+                    transform += `scale(${d.scale})`;
+                }
             }
 
             if (d.rotate != null) {
@@ -1213,6 +1306,9 @@ export default class GraphEditor extends HTMLElement {
         };
         if (edge.markers != null) {
             draggedEdge.markers = JSON.parse(JSON.stringify(edge.markers));
+        }
+        if (edge.markerEnd != null) {
+            draggedEdge.markerEnd = JSON.parse(JSON.stringify(edge.markerEnd));
         }
         if (this.onCreateDraggedEdge != null) {
             draggedEdge = this.onCreateDraggedEdge(draggedEdge);

@@ -94,7 +94,7 @@
 
             graph.onCreateDraggedEdge = (edge) => {
                 if (edge.createdFrom == null || edge.createdFrom == undefined) {
-                    edge.markers = [{template: 'arrow', positionOnLine: 1, scale: 0.5, rotate: {relativeAngle: 0}},];
+                    edge.markerEnd = {template: 'arrow', positionOnLine: 1, lineOffset:4, scale: 0.5, rotate: {relativeAngle: 0}};
                 }
                 return edge
             }
@@ -104,13 +104,12 @@
                     // leave edge in last state
                 } else if (target.type === 'gRPC') {
                     edge.markers = [
-                        {template: 'arrow', positionOnLine: 0.97, scale: 0.5, rotate: {relativeAngle: 0}},
                         {template: 'arrow', positionOnLine: 1, scale: 0.5, rotate: {relativeAngle: 0}},
                     ];
+                    edge.markerEnd = {template: 'arrow', positionOnLine: 1, lineOffset:4, scale: 0.5, rotate: {relativeAngle: 0}};
                 } else if (target.type === 'REST') {
-                    edge.markers = [
-                        {template: 'arrow', positionOnLine: 1, scale: 0.5, rotate: {relativeAngle: 0}},
-                    ];
+                    edge.markers = [];
+                    edge.markerEnd = {template: 'arrow', positionOnLine: 1, lineOffset:4, scale: 0.5, rotate: {relativeAngle: 0}};
                 }
                 return edge
             }
@@ -118,9 +117,9 @@
             graph.onDropDraggedEdge = (edge, source, target) => {
                 if (target.type === 'gRPC') {
                     edge.markers = [
-                        {template: 'arrow', positionOnLine: 0.99, scale: 0.5, rotate: {relativeAngle: 0}},
                         {template: 'arrow', positionOnLine: 1, scale: 0.5, rotate: {relativeAngle: 0}},
                     ];
+                    edge.markerEnd = {template: 'arrow', positionOnLine: 1, lineOffset:4, scale: 0.5, rotate: {relativeAngle: 0}};
                 }
                 return edge
             }
@@ -139,7 +138,7 @@
                 graph.addNode({id: 4, title: 'NEU', type: 'mqtt', x: 130, y: -50});
                 graph.addEdge({source: 4, target: 1, markers: [
                     {template: 'arrow', positionOnLine: 1, scale: 0.5, rotate: {relativeAngle: 0}},
-                    {template: 'arrow', positionOnLine: 0.3, scale: 0.5, rotate: {normal: {dx: -1, dy: 0}, relativeAngle: 0}},
+                    {template: 'arrow', positionOnLine: 0.3, scale: 0.5, scaleRelative: true, rotate: {normal: {dx: -1, dy: 0}, relativeAngle: 0}},
                     {template: 'arrow', positionOnLine: 0.1, scale: 0.5, rotate: {relativeAngle: 0}},
                 ]});
 

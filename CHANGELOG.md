@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Added
 - LinkHandles for `path` and `polygon` elements
+- scaleRelative attribute in `Marker` for scaling relative to stroke-width of edge path
+- markerEnd attribute in `Edge` for better arrowheads
+- lineOffset attribute in `Marker` for offsetting markerEnd from the end of the edge path
+
 
 ## [0.0.1] - 2019-02-15
 ### Added

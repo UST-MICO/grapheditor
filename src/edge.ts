@@ -41,6 +41,8 @@ export interface Edge {
     type?: any;
     /** List of markers to draw for this edge. */
     markers?: Marker[];
+    /** Markers to draw at the end of this edge. */
+    markerEnd?: Marker;
     [prop: string]: any;
 }
 

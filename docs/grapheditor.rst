@@ -169,6 +169,9 @@ List of special edge classes
 ``marker``
     Class for all edge markers.
 
+``marker-end``
+    Special class for marker at the end of the edge.
+
 ``link-handle``
     Class for edge drag handle.
 
@@ -182,6 +185,8 @@ Edge markers
 """"""""""""
 
 :js:class:`Edges <Edge>` can have a list of :js:class:`Markers <Marker>` that use marker templates for display.
+For an arrowhead at the end of the edge use the special edge-end-marker :js:attr:`markerEnd <Edge.markerEnd>` together with a :js:attr:`lineOffset <Marker.lineOffset>` in the marker.
+The :js:attr:`lineOffset <Marker.lineOffset>` controls how much the marker should extend beyond the end of the edge.
 
 To update markers of dragged edges it is possible to set the function :js:func:`onCreateDraggedEdge <GraphEditor.onCreateDraggedEdge>`, :js:func:`onDraggedEdgeTargetChange <GraphEditor.onDraggedEdgeTargetChange>` and :js:func:`onDropDraggedEdge <GraphEditor.onDropDraggedEdge>`.
 
