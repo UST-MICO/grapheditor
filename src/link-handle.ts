@@ -180,7 +180,7 @@ export function handlesForPath(path: SVGPathElement, linkHandles: string): LinkH
         nrOfHandles = 8;
     } else if (linkHandles === 'minimal') {
         nrOfHandles = 4;
-    } else if (isNaN(parseInt(linkHandles, 10))) {
+    } else if (!isNaN(parseInt(linkHandles, 10))) {
         nrOfHandles = parseInt(linkHandles, 10);
     }
     for (let i = 0; i < nrOfHandles; i++) {
