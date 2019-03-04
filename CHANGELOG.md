@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 ### Fixed
 
 - First multiline textwrap not rendering the text
+- `scaleRelative` not affecting `lineOffset` position of `edge.markerEnd`
 
 
 ## [0.0.2] - 2019-02-25

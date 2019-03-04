@@ -1065,30 +1065,40 @@ export default class GraphEditor extends HTMLElement {
      * @param edgeSelection d3 selection of edges to update with bound data
      */
     private updateEdgePath(edgeSelection) {
-        edgeSelection.attr('d', (d) => {
-            const handles = this.objectCache.getEdgeLinkHandles(d);
-            const points: { x: number, y: number, [prop: string]: any }[] = [];
-            points.push(handles.sourceCoordinates);
-            if (handles.sourceHandle.normal != null) {
-                points.push({
-                    x: handles.sourceCoordinates.x + (handles.sourceHandle.normal.dx * 10),
-                    y: handles.sourceCoordinates.y + (handles.sourceHandle.normal.dy * 10),
-                });
-            }
-            const offset = (d.markerEnd != null  && d.markerEnd.lineOffset != null) ? d.markerEnd.lineOffset : 0;
-            if (handles.targetHandle.normal != null) {
-                points.push({
-                    x: handles.targetCoordinates.x + (handles.targetHandle.normal.dx * (10 + offset)),
-                    y: handles.targetCoordinates.y + (handles.targetHandle.normal.dy * (10 + offset)),
-                });
-                points.push({
-                    x: handles.targetCoordinates.x + (handles.targetHandle.normal.dx * offset),
-                    y: handles.targetCoordinates.y + (handles.targetHandle.normal.dy * offset),
-                });
-            } else {
-                points.push(handles.targetCoordinates);
-            }
-            return this.edgeGenerator(points);
+        const self = this;
+        edgeSelection.each(function (d) {
+            const singleEdgeSelection = select(this);
+            const strokeWidth: number = parseFloat(singleEdgeSelection.style('stroke-width').replace(/px/, ''));
+            singleEdgeSelection.attr('d', () => {
+                const handles = self.objectCache.getEdgeLinkHandles(d);
+                const points: { x: number, y: number, [prop: string]: any }[] = [];
+                points.push(handles.sourceCoordinates);
+                if (handles.sourceHandle.normal != null) {
+                    points.push({
+                        x: handles.sourceCoordinates.x + (handles.sourceHandle.normal.dx * 10),
+                        y: handles.sourceCoordinates.y + (handles.sourceHandle.normal.dy * 10),
+                    });
+                }
+                let offset = (d.markerEnd != null && d.markerEnd.lineOffset != null) ? d.markerEnd.lineOffset : 0;
+                if (d.markerEnd != null && d.markerEnd.scale != null && !(!d.markerEnd.scaleRelative)) {
+                    offset *= strokeWidth;
+                }
+
+                if (handles.targetHandle.normal != null) {
+                    points.push({
+                        x: handles.targetCoordinates.x + (handles.targetHandle.normal.dx * (10 + offset)),
+                        y: handles.targetCoordinates.y + (handles.targetHandle.normal.dy * (10 + offset)),
+                    });
+                    points.push({
+                        x: handles.targetCoordinates.x + (handles.targetHandle.normal.dx * offset),
+                        y: handles.targetCoordinates.y + (handles.targetHandle.normal.dy * offset),
+                    });
+                } else {
+                    points.push(handles.targetCoordinates);
+                }
+                return self.edgeGenerator(points);
+
+            });
         });
     }
 
@@ -1169,7 +1179,11 @@ export default class GraphEditor extends HTMLElement {
 
             let transform = '';
 
-            const offset = (d.markerEnd.lineOffset != null) ? d.markerEnd.lineOffset : 0;
+            let offset = (d.markerEnd.lineOffset != null) ? d.markerEnd.lineOffset : 0;
+
+            if (d.markerEnd.scale != null && !(!d.markerEnd.scaleRelative)) {
+                offset *= strokeWidth;
+            }
 
             const point = {
                 x: pathEndpoint.x + (edgeNormal.dx * offset),

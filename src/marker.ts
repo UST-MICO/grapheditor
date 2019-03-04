@@ -33,7 +33,7 @@ export interface Marker {
     lineOffset?: number;
     /** A factor to scale the marker. */
     scale?: number;
-    /** If true the marker is scaled relative to the stroke width. */
+    /** If true the marker and lineOffset is scaled relative to the stroke width. */
     scaleRelative?: boolean;
     /** Rotation information for the marker. */
     rotate?: RotationData;
