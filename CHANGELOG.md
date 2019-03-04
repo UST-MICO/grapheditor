@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 ### Added
 
 - `updateTextElements` function to update and reflow text with `force` parameter
+- `getNode`, `getEdge`, `getEdgesBySource` and `getEdgesByTarget` functions in grapheditor
 
 ### Fixed
 

@@ -253,6 +253,15 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
+     * Get the node with the given id.
+     *
+     * @param nodeId the id of the node
+     */
+    public getNode(nodeId: number|string): Node {
+        return this.objectCache.getNode(nodeId);
+    }
+
+    /**
      * Remove a single node from the graph.
      *
      * @param node node or id to remove
@@ -315,6 +324,15 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
+     * Get the edge with the given id.
+     *
+     * @param edgeId the id of the edge
+     */
+    public getEdge(edgeId: number|string): Edge {
+        return this.objectCache.getEdge(edgeId);
+    }
+
+    /**
      * Remove a single edge from the graph.
      *
      * @param edge edge or id to remove
@@ -334,6 +352,24 @@ export default class GraphEditor extends HTMLElement {
                 this.zoomToBoundingBox(false);
             }
         }
+    }
+
+    /**
+     * Get all edges that have the given nodeId as source
+     *
+     * @param sourceNodeId the node id of the edge source
+     */
+    public getEdgesBySource(sourceNodeId: number|string): Set<Edge> {
+        return this.objectCache.getEdgesBySource(sourceNodeId);
+    }
+
+    /**
+     * Get all edges that have the given nodeId as target
+     *
+     * @param targetNodeId the node id of the edge target
+     */
+    public getEdgesByTarget(targetNodeId: number|string): Set<Edge> {
+        return this.objectCache.getEdgesByTarget(targetNodeId);
     }
 
     /**

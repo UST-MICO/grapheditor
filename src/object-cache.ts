@@ -140,8 +140,8 @@ export class GraphObjectCache {
         return edges;
     }
 
-    getEdgesBySource(targetId: number|string): Set<Edge> {
-        const edges = this.edgesBySource.get(targetId.toString());
+    getEdgesBySource(sourceId: number|string): Set<Edge> {
+        const edges = this.edgesBySource.get(sourceId.toString());
         if (edges == null) {
             return new Set();
         }
