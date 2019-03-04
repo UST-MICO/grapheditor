@@ -868,11 +868,11 @@ export default class GraphEditor extends HTMLElement {
                         newText = d[attr];
                     }
                 }
-                // make sure it is a string
-                newText = newText.toString();
                 if (newText == null) {
                     newText = '';
                 }
+                // make sure it is a string
+                newText = newText.toString();
                 wrapText(this as SVGTextElement, newText, force);
             });
         });
