@@ -8,8 +8,17 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Added
 
+- `updateTextElements` function to update and reflow text with `force` parameter
+
+### Fixed
+
+- First multiline textwrap not rendering the text
+
+
 ## [0.0.2] - 2019-02-25
+
 ### Added
+
 - LinkHandles for `path` and `polygon` elements
 - scaleRelative attribute in `Marker` for scaling relative to stroke-width of edge path
 - markerEnd attribute in `Edge` for better arrowheads
@@ -17,6 +26,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 
 ## [0.0.1] - 2019-02-15
+
 ### Added
+
 - Initial webcomponent
 - Documentation

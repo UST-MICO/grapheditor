@@ -665,6 +665,22 @@ export default class GraphEditor extends HTMLElement {
         this.classesToRemove.clear();
     }
 
+    /**
+     * Updates and reflows all text elements in nodes.
+     *
+     * @param force force text rewrap even when text has not changed
+     * (useful if node classes can change text attributes like size)
+     */
+    public updateTextElements(force: boolean = false) {
+        const svg = this.getSvg();
+        const graph = svg.select('g.zoom-group');
+
+        const nodeSelection = graph.select('.nodes')
+            .selectAll<any, Node>('g.node')
+            .data<Node>(this._nodes, (d: Node) => d.id.toString());
+        this.updateNodeText(nodeSelection, force);
+    }
+
 
     /**
      * Add nodes to graph.
@@ -818,9 +834,16 @@ export default class GraphEditor extends HTMLElement {
 
         nodeSelection
             .call(this.updateNodeClasses.bind(this))
-            .call(this.updateNodeHighligts.bind(this));
+            .call(this.updateNodeHighligts.bind(this))
+            .call(this.updateNodeText.bind(this));
+    }
 
-        // allow node drag and drop
+    /**
+     * Update text of existing nodes.
+     *
+     * @param nodeSelection d3 selection of nodes to update with bound data
+     */
+    private updateNodeText(nodeSelection: any, force: boolean= false) {
         nodeSelection.each(function (d) {
             const singleNodeSelection = select(this);
             const textSelection = singleNodeSelection.selectAll('.text').datum(function () {
@@ -830,6 +853,7 @@ export default class GraphEditor extends HTMLElement {
                 let newText = '';
                 if (attr != null) {
                     if (attr.includes('.')) {
+                        // recursive decend along path
                         const path = attr.split('.');
                         let temp = d;
                         path.forEach(segment => {
@@ -844,10 +868,12 @@ export default class GraphEditor extends HTMLElement {
                         newText = d[attr];
                     }
                 }
+                // make sure it is a string
+                newText = newText.toString();
                 if (newText == null) {
                     newText = '';
                 }
-                wrapText(this as SVGTextElement, newText);
+                wrapText(this as SVGTextElement, newText, force);
             });
         });
     }
