@@ -193,7 +193,7 @@ function wrapSingleLine(element: SVGTextElement|SVGTSpanElement, width: number,
 
     // Try naive without wrapping
     text.text(newText);
-    if (text.node().getBBox().width <= width) {
+    if (text.node().getComputedTextLength() <= width) {
         return '' + suffix;
     }
 
@@ -220,14 +220,14 @@ function wrapCharacters(newText: string, text: any, width: number, overflowChar:
     while (step > 1 && counter < 1000) {
         counter++;
         step = Math.ceil(step / 2);
-        if (text.node().getBBox().width > width) {
+        if (text.node().getComputedTextLength() > width) {
             divider -= step;
         } else {
             divider += step;
         }
         text.text(rTrim(newText.substr(0, divider)) + overflowChar);
     }
-    if (text.node().getBBox().width > width) {
+    if (text.node().getComputedTextLength() > width) {
         divider -= step;
         text.text(rTrim(newText.substr(0, divider)) + overflowChar);
     }
@@ -249,7 +249,7 @@ function wrapWords(newText: string, text: any, width: number, overflowChar: stri
     while (nextWhitespace < newText.length && !(lastWhitespace < 0 && nextWhitespace < 0)) {
         // while(not(reached end of string) && not(no space in string))
         text.text(rTrim(newText.substr(0, nextWhitespace)) + overflowChar);
-        if (text.node().getBBox().width > width) {
+        if (text.node().getComputedTextLength() > width) {
             // last word was too much
             break;
         }
