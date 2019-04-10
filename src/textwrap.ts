@@ -74,8 +74,8 @@ export function wrapText(element: SVGTextElement, newText, force: boolean= false
     const lines = spanSelection.nodes();
     for (let index = 0; index < lines.length; index++) {
         const line = lines[index];
-        const last = index < (lines.length - 1);
-        newText = lTrim(wrapSingleLine(line, width, newText, last ? 'clip' : overflowMode, last ? wordBreak : 'break-all', force));
+        const notLast = index < (lines.length - 1);
+        newText = lTrim(wrapSingleLine(line, width, newText, notLast ? 'clip' : overflowMode, notLast ? wordBreak : 'break-all', force));
     }
 }
 
@@ -117,6 +117,7 @@ function calculateMultiline(text, height, x, y, linespacing: string= 'auto') {
         }
         text.attr('data-lineheight', lineheight);
     }
+    lineheight = Math.abs(lineheight); // don't allow negative lineheight
     const lines: number[] = [];
     if (linespacing === 'auto') {
         // ideal linespacing => max number of lines, equal distance, last line at y+height
@@ -133,6 +134,7 @@ function calculateMultiline(text, height, x, y, linespacing: string= 'auto') {
     if (isNaN(factor)) {
         factor = 1;
     }
+    factor = Math.abs(factor); // don't allow negative factors
     while (currentY < height) {
         lines.push(y + currentY);
         currentY += lineheight * factor;
@@ -217,7 +219,10 @@ function wrapCharacters(newText: string, text: any, width: number, overflowChar:
     const lastText = newText;
     let step = newText.length;
     let counter = 0;
-    while (step > 1 && counter < 1000) {
+    // upper bound to catch infinite loops
+    const maxStepsAllowed = Math.log2(newText.length) + 10;
+    // perform binary search for division point
+    while (step > 1 && counter < maxStepsAllowed) {
         counter++;
         step = Math.ceil(step / 2);
         if (text.node().getComputedTextLength() > width) {
@@ -246,7 +251,13 @@ function wrapCharacters(newText: string, text: any, width: number, overflowChar:
 function wrapWords(newText: string, text: any, width: number, overflowChar: string) {
     let lastWhitespace = -1;
     let nextWhitespace = newText.indexOf(' ');
+    let counter = 0; // counter to catch infinite loops
     while (nextWhitespace < newText.length && !(lastWhitespace < 0 && nextWhitespace < 0)) {
+        counter ++;
+        if (counter > 10000) {
+            console.warn('Wrapping the text encountered a loop!', 'Text to wrap:', newText);
+            break;
+        }
         // while(not(reached end of string) && not(no space in string))
         text.text(rTrim(newText.substr(0, nextWhitespace)) + overflowChar);
         if (text.node().getComputedTextLength() > width) {
@@ -260,6 +271,10 @@ function wrapWords(newText: string, text: any, width: number, overflowChar: stri
         } else {
             // calculate next space position
             nextWhitespace = newText.indexOf(' ', (lastWhitespace < 0) ? 0 : lastWhitespace + 1);
+            if (nextWhitespace < 0) {
+                // no whitespace left in newText => default to text end
+                nextWhitespace = newText.length;
+            }
         }
     }
     if (lastWhitespace < 0) {
