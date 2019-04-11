@@ -335,7 +335,7 @@ export default class GraphEditor extends HTMLElement {
     /**
      * Remove a single edge from the graph.
      *
-     * @param edge edge or id to remove
+     * @param edge edge to remove
      * @param redraw if the graph should be redrawn
      */
     public removeEdge(edge: Edge, redraw: boolean = false) {
@@ -1768,5 +1768,5 @@ export default class GraphEditor extends HTMLElement {
             .classed('highlight-outgoing', (d) => nodes.has(d.source))
             .classed('highlight-incoming', (d) => nodes.has(d.target));
     }
-
 }
+
