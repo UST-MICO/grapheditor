@@ -33,6 +33,7 @@ const SHADOW_DOM_TEMPLATE = `
 export default class GraphEditor extends HTMLElement {
 
     private mutationObserver: MutationObserver;
+    private resizeObserver;
 
     private initialized: boolean;
     private root: ShadowRoot;
@@ -172,6 +173,11 @@ export default class GraphEditor extends HTMLElement {
             this.completeRender(true);
             this.zoomToBoundingBox(false);
         });
+        if ((window as any).ResizeObserver != null) {
+            this.resizeObserver = new (window as any).ResizeObserver((entries) => {
+                this.updateSize();
+            });
+        }
     }
 
     connectedCallback() {
@@ -187,6 +193,9 @@ export default class GraphEditor extends HTMLElement {
             characterData: false,
             subtree: false,
         });
+        if (this.resizeObserver != null) {
+            this.resizeObserver.observe(this.getSvg().node());
+        }
     }
 
     static get observedAttributes() { return ['nodes', 'edges', 'classes', 'mode', 'zoom']; }
@@ -535,6 +544,10 @@ export default class GraphEditor extends HTMLElement {
     public zoomToBoundingBox = (force: boolean = true) => {
         if (!this.initialized || !this.isConnected) {
             return;
+        }
+
+        if (this.resizeObserver == null) {
+            this.updateSize();
         }
 
         if (!(force || this._zoomMode === 'automatic' || this._zoomMode === 'both')) {
