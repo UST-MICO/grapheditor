@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Added
 
+- Use regex to determine word boundarys when wrapping text (before only spaces were valid word boundarys for texwrapping)
+
 ### Fixed
 
 

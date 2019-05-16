@@ -249,38 +249,41 @@ function wrapCharacters(newText: string, text: any, width: number, overflowChar:
  * @param overflowChar wrapping mode
  */
 function wrapWords(newText: string, text: any, width: number, overflowChar: string) {
-    let lastWhitespace = -1;
-    let nextWhitespace = newText.indexOf(' ');
+    const WORD_BOUNDARY = /\b\s*/g;
+    // start searching from the first charcter in the string
+    // don't start with 0 because 0 is always a word boundary
+    WORD_BOUNDARY.lastIndex = 1;
+    let lastIndex = WORD_BOUNDARY.lastIndex;
+    let lastBoundary: RegExpExecArray;
+    let boundary: RegExpExecArray = WORD_BOUNDARY.exec(newText);
+
     let counter = 0; // counter to catch infinite loops
-    while (nextWhitespace < newText.length && !(lastWhitespace < 0 && nextWhitespace < 0)) {
+    while (boundary.index < newText.length && !(lastBoundary == null && boundary == null)) {
         counter ++;
         if (counter > 10000) {
             console.warn('Wrapping the text encountered a loop!', 'Text to wrap:', newText);
             break;
         }
-        // while(not(reached end of string) && not(no space in string))
-        text.text(rTrim(newText.substr(0, nextWhitespace)) + overflowChar);
+        text.text(rTrim(newText.substr(0, boundary.index)) + overflowChar);
         if (text.node().getComputedTextLength() > width) {
             // last word was too much
             break;
         }
-        lastWhitespace = nextWhitespace;
-        if (lastWhitespace + 1 >= newText.length) {
-            // reached end of text
-            nextWhitespace = newText.length;
-        } else {
-            // calculate next space position
-            nextWhitespace = newText.indexOf(' ', (lastWhitespace < 0) ? 0 : lastWhitespace + 1);
-            if (nextWhitespace < 0) {
-                // no whitespace left in newText => default to text end
-                nextWhitespace = newText.length;
-            }
+        lastBoundary = boundary;
+        if (boundary.length > 0) {
+            WORD_BOUNDARY.lastIndex += boundary.length;
+            lastIndex = WORD_BOUNDARY.lastIndex;
+        }
+        boundary = WORD_BOUNDARY.exec(newText);
+        if (boundary.index === lastIndex) {
+            WORD_BOUNDARY.lastIndex++;
+            boundary = WORD_BOUNDARY.exec(newText);
         }
     }
-    if (lastWhitespace < 0) {
+    if (lastBoundary == null) {
         // one long word
         return wrapCharacters(newText, text, width, '-');
     }
-    text.text(rTrim(newText.substr(0, lastWhitespace)) + overflowChar);
-    return newText.substr(lastWhitespace);
+    text.text(rTrim(newText.substr(0, lastBoundary.index)) + overflowChar);
+    return lTrim(newText.substr(lastBoundary.index));
 }
