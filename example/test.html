@@ -189,6 +189,9 @@
                 graph.addEventListener('edgeremove', function test(event) {
                     console.log(event.type, event.detail);
                 });
+                graph.addEventListener('edgedrop', function test(event) {
+                    console.log(event.type, event.detail);
+                });
             }
         </script>
     </body>

@@ -29,6 +29,18 @@ const SHADOW_DOM_TEMPLATE = `
 </style>
 `;
 
+/**
+ * An enum describing the source of the event.
+ *
+ * All events that happen because of API interactions will have the API value.
+ * All events that were directly triggered by the user will have the USER_INTERACTION value.
+ */
+export enum EventSource {
+    INTERNAL = 'INTERNAL',
+    API = 'API',
+    USER_INTERACTION = 'USER_INTERACTION',
+}
+
 
 export default class GraphEditor extends HTMLElement {
 
@@ -254,7 +266,7 @@ export default class GraphEditor extends HTMLElement {
     public addNode(node: Node, redraw: boolean = false) {
         this._nodes.push(node);
         this.objectCache.updateNodeCache(this._nodes);
-        this.onNodeCreate(node);
+        this.onNodeCreate(node, EventSource.API);
         if (redraw) {
             this.completeRender();
             this.zoomToBoundingBox(false);
@@ -280,17 +292,17 @@ export default class GraphEditor extends HTMLElement {
         const id: string | number = (node as Node).id != null ? (node as Node).id : (node as number | string);
         const index = this._nodes.findIndex(n => n.id === id);
         if (index >= 0) {
-            this.onNodeRemove(this._nodes[index]);
+            this.onNodeRemove(this._nodes[index], EventSource.API);
             this._nodes.splice(index, 1);
             this.objectCache.updateNodeCache(this._nodes);
             const newEdgeList = [];
             this._edges.forEach(edge => {
                 if (edge.source === id) {
-                    this.onEdgeRemove(edge);
+                    this.onEdgeRemove(edge, EventSource.API);
                     return;
                 }
                 if (edge.target === id) {
-                    this.onEdgeRemove(edge);
+                    this.onEdgeRemove(edge, EventSource.API);
                     return;
                 }
                 newEdgeList.push(edge);
@@ -353,7 +365,7 @@ export default class GraphEditor extends HTMLElement {
                 (e.target === edge.target);
         });
         if (index >= 0) {
-            this.onEdgeRemove(this._edges[index]);
+            this.onEdgeRemove(this._edges[index], EventSource.API);
             this._edges.splice(index, 1);
             this.objectCache.updateEdgeCache(this._edges);
             if (redraw) {
@@ -428,7 +440,11 @@ export default class GraphEditor extends HTMLElement {
                 bubbles: true,
                 composed: true,
                 cancelable: false,
-                detail: { oldMode: oldMode, newMode: mode }
+                detail: {
+                    eventSource: EventSource.INTERNAL,
+                    oldMode: oldMode,
+                    newMode: mode
+                }
             });
             this.dispatchEvent(ev);
             this.completeRender();
@@ -471,7 +487,11 @@ export default class GraphEditor extends HTMLElement {
                 bubbles: true,
                 composed: true,
                 cancelable: false,
-                detail: { oldMode: oldMode, newMode: mode }
+                detail: {
+                    eventSource: EventSource.INTERNAL,
+                    oldMode: oldMode,
+                    newMode: mode
+                }
             });
             this.dispatchEvent(ev);
             this.completeRender();
@@ -1456,7 +1476,7 @@ export default class GraphEditor extends HTMLElement {
             if (event.subject.target !== edge.target.toString()) {
                 // only remove original edge if target of dropped edge is different then original target
                 const index = this._edges.findIndex(edge => edgeId(edge) === event.subject.createdFrom);
-                if (!this.onEdgeRemove(this._edges[index])) {
+                if (!this.onEdgeRemove(this._edges[index], EventSource.USER_INTERACTION)) {
                     return;
                 }
                 this._edges.splice(index, 1);
@@ -1479,7 +1499,7 @@ export default class GraphEditor extends HTMLElement {
                 // edge was dropped on the node that was the original target for the edge
                 this.completeRender();
             } else {
-                if (this.onEdgeCreate(edge)) {
+                if (this.onEdgeCreate(edge, EventSource.USER_INTERACTION)) {
                     this._edges.push(edge);
                     updateEdgeCache = true;
                 }
@@ -1499,12 +1519,15 @@ export default class GraphEditor extends HTMLElement {
      * @param edge the created edge
      * @returns false if event was cancelled
      */
-    private onEdgeCreate(edge: Edge): boolean {
+    private onEdgeCreate(edge: Edge, eventSource: EventSource): boolean {
         const ev = new CustomEvent('edgeadd', {
             bubbles: true,
             composed: true,
             cancelable: true,
-            detail: { edge: edge }
+            detail: {
+                eventSource: eventSource,
+                edge: edge
+            }
         });
         return this.dispatchEvent(ev);
     }
@@ -1524,6 +1547,7 @@ export default class GraphEditor extends HTMLElement {
             composed: true,
             cancelable: false,
             detail: {
+                eventSource: EventSource.USER_INTERACTION,
                 edge: edge,
                 sourceNode: this.objectCache.getNode(edge.source),
                 dropPosition: dropPosition,
@@ -1538,12 +1562,15 @@ export default class GraphEditor extends HTMLElement {
      * @param edge the created edge
      * @returns false if event was cancelled
      */
-    private onEdgeRemove(edge: Edge) {
+    private onEdgeRemove(edge: Edge, eventSource: EventSource) {
         const ev = new CustomEvent('edgeremove', {
             bubbles: true,
             composed: true,
             cancelable: true,
-            detail: { edge: edge }
+            detail: {
+                eventSource: eventSource,
+                edge: edge
+            }
         });
         return this.dispatchEvent(ev);
     }
@@ -1555,6 +1582,7 @@ export default class GraphEditor extends HTMLElement {
      */
     private onEdgeClick(edgeDatum) {
         const eventDetail: any = {};
+        eventDetail.eventSource = EventSource.USER_INTERACTION,
         eventDetail.sourceEvent = event;
         eventDetail.edge = edgeDatum;
         const ev = new CustomEvent('edgeclick', { bubbles: true, composed: true, cancelable: true, detail: eventDetail });
@@ -1569,12 +1597,15 @@ export default class GraphEditor extends HTMLElement {
      * @param node the created node
      * @returns false if event was cancelled
      */
-    private onNodeCreate(node: Node): boolean {
+    private onNodeCreate(node: Node, eventSource: EventSource): boolean {
         const ev = new CustomEvent('nodeadd', {
             bubbles: true,
             composed: true,
             cancelable: true,
-            detail: { node: node }
+            detail: {
+                eventSource: eventSource,
+                node: node
+            }
         });
         return this.dispatchEvent(ev);
     }
@@ -1585,12 +1616,15 @@ export default class GraphEditor extends HTMLElement {
      * @param node the created node
      * @returns false if event was cancelled
      */
-    private onNodeRemove(node: Node) {
+    private onNodeRemove(node: Node, eventSource: EventSource) {
         const ev = new CustomEvent('noderemove', {
             bubbles: true,
             composed: true,
             cancelable: true,
-            detail: { node: node }
+            detail: {
+                eventSource: eventSource,
+                node: node
+            }
         });
         return this.dispatchEvent(ev);
     }
@@ -1605,7 +1639,10 @@ export default class GraphEditor extends HTMLElement {
             bubbles: true,
             composed: true,
             cancelable: false,
-            detail: { node: node }
+            detail: {
+                eventSource: EventSource.USER_INTERACTION,
+                node: node
+            }
         });
         this.dispatchEvent(ev);
     }
@@ -1626,7 +1663,11 @@ export default class GraphEditor extends HTMLElement {
             bubbles: true,
             composed: true,
             cancelable: false,
-            detail: { sourceEvent: event, node: nodeDatum }
+            detail: {
+                eventSource: EventSource.USER_INTERACTION,
+                sourceEvent: event,
+                node: nodeDatum
+            }
         });
         this.dispatchEvent(ev);
     }
@@ -1647,7 +1688,11 @@ export default class GraphEditor extends HTMLElement {
             bubbles: true,
             composed: true,
             cancelable: false,
-            detail: { sourceEvent: event, node: nodeDatum }
+            detail: {
+                eventSource: EventSource.USER_INTERACTION,
+                sourceEvent: event,
+                node: nodeDatum
+            }
         });
         this.dispatchEvent(ev);
     }
@@ -1659,6 +1704,7 @@ export default class GraphEditor extends HTMLElement {
      */
     private onNodeClick = (nodeDatum) => {
         const eventDetail: any = {};
+        eventDetail.eventSource = EventSource.USER_INTERACTION,
         eventDetail.sourceEvent = event;
         eventDetail.node = nodeDatum;
         if (event.target != null) {
@@ -1703,7 +1749,14 @@ export default class GraphEditor extends HTMLElement {
         if (this.mode === 'select') {
             selected = this.interactionStateData.selected;
         }
-        const ev = new CustomEvent('selection', { bubbles: true, composed: true, detail: { selection: selected } });
+        const ev = new CustomEvent('selection', {
+            bubbles: true,
+            composed: true,
+            detail: {
+                eventSource: EventSource.USER_INTERACTION,
+                selection: selected
+            }
+        });
         this.dispatchEvent(ev);
     }
 
@@ -1729,7 +1782,7 @@ export default class GraphEditor extends HTMLElement {
                 (e.target === this.interactionStateData.target);
         });
         if (oldEdge !== -1) {
-            if (!this.onEdgeRemove(this._edges[oldEdge])) {
+            if (!this.onEdgeRemove(this._edges[oldEdge], EventSource.USER_INTERACTION)) {
                 return; // event cancelled
             }
             this._edges.splice(oldEdge, 1);
@@ -1738,7 +1791,7 @@ export default class GraphEditor extends HTMLElement {
                 source: this.interactionStateData.source,
                 target: this.interactionStateData.target,
             };
-            if (!this.onEdgeCreate(newEdge)) {
+            if (!this.onEdgeCreate(newEdge, EventSource.USER_INTERACTION)) {
                 return; // event cancelled
             }
             this._edges.push(newEdge);

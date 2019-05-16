@@ -259,6 +259,16 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
 
     Custom events get dispatched synchronously!
 
+.. hint::
+
+    All events have an attribute ``eventSource`` in the event detail that can have the following values:
+
+    * ``INTERNAL`` for events triggered by internal/unknown source
+    * ``API`` for events triggered using the public API.
+    * ``USER_INTERACTION`` for events triggered by the user interacting with the graph.
+
+    The eventSource can be used in event listeners to ignore all events triggered by using the API.
+
 .. describe:: modechange
 
     Fired after the interaction mode changed.
