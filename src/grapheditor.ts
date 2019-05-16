@@ -1454,6 +1454,7 @@ export default class GraphEditor extends HTMLElement {
         if (event.subject.createdFrom != null) {
             const edge = this.objectCache.getEdge(event.subject.createdFrom);
             if (event.subject.target !== edge.target.toString()) {
+                // only remove original edge if target of dropped edge is different then original target
                 const index = this._edges.findIndex(edge => edgeId(edge) === event.subject.createdFrom);
                 if (!this.onEdgeRemove(this._edges[index])) {
                     return;
@@ -1466,6 +1467,7 @@ export default class GraphEditor extends HTMLElement {
         this.draggedEdges.splice(index, 1);
         this.updateDraggedEdgeGroups();
         if (event.subject.target != null) {
+            // dragged edge has atarget
             let edge = event.subject;
             delete edge.id;
             if (this.onDropDraggedEdge != null) {
@@ -1474,6 +1476,7 @@ export default class GraphEditor extends HTMLElement {
             }
             if (event.subject.createdFrom != null &&
                 event.subject.target === this.objectCache.getEdge(event.subject.createdFrom).target.toString()) {
+                // edge was dropped on the node that was the original target for the edge
                 this.completeRender();
             } else {
                 if (this.onEdgeCreate(edge)) {
@@ -1481,6 +1484,8 @@ export default class GraphEditor extends HTMLElement {
                     updateEdgeCache = true;
                 }
             }
+        } else {
+            this.onEdgeDrop(event.subject, {x: event.x, y: event.y});
         }
         if (updateEdgeCache) {
             this.objectCache.updateEdgeCache(this._edges);
@@ -1500,6 +1505,29 @@ export default class GraphEditor extends HTMLElement {
             composed: true,
             cancelable: true,
             detail: { edge: edge }
+        });
+        return this.dispatchEvent(ev);
+    }
+
+
+    /**
+     * Callback for creating edgedrop events.
+     *
+     * The event is only for dragged edges that are dropped in the void.
+     *
+     * @param edge the dropped dragged edge
+     * @returns false if event was cancelled
+     */
+    private onEdgeDrop(edge: DraggedEdge, dropPosition: Point) {
+        const ev = new CustomEvent('edgedrop', {
+            bubbles: true,
+            composed: true,
+            cancelable: false,
+            detail: {
+                edge: edge,
+                sourceNode: this.objectCache.getNode(edge.source),
+                dropPosition: dropPosition,
+            }
         });
         return this.dispatchEvent(ev);
     }

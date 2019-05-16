@@ -455,6 +455,29 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
             }
         }
 
+.. describe:: edgedrop
+
+    Fired when a dragged edge was dropped over the void by the user.
+
+    The event can be used to create a new node where the user dropped the edge.
+
+    **Example** ``detail``
+
+    .. code-block:: ts
+
+        {
+            "edge": {
+                "source": 1,
+                "target": null
+            },
+            "sourceNode": {
+                "id": 1,
+                "x": 0,
+                "y": 0
+            },
+            "dropPosition": {x: 1, y: 1}
+        }
+
 
 
 .. _example-events:

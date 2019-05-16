@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 - Use regex to determine word boundarys when wrapping text (before only spaces were valid word boundarys for texwrapping)
 - Use [ResizeObserver](https://developer.mozilla.org/en-US/docs/Web/API/ResizeObserver) to detect resizes if available (if unavailable calculate current size before zooming to bounding box)
+- New `edgedrop` event to enable creating nodes where an edge was dropped in the void
 
 
 ### Fixed
