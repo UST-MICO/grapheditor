@@ -1191,14 +1191,16 @@ export default class GraphEditor extends HTMLElement {
      */
     private updateMarker(markerSelection) {
         const self = this;
-        markerSelection.each(function (d) {
-            const marker = select(this);
-            const templateType = marker.attr('data-template');
-            if (templateType !== d.template) {
-                marker.selectAll().remove();
-                self.createMarker(marker);
-            }
-        });
+        markerSelection
+            .attr('data-click', (d) => d.clickEventKey)
+            .each(function (d) {
+                const marker = select(this);
+                const templateType = marker.attr('data-template');
+                if (templateType !== d.template) {
+                    marker.selectAll().remove();
+                    self.createMarker(marker);
+                }
+            });
     }
 
 
@@ -1582,7 +1584,25 @@ export default class GraphEditor extends HTMLElement {
      */
     private onEdgeClick(edgeDatum) {
         const eventDetail: any = {};
-        eventDetail.eventSource = EventSource.USER_INTERACTION,
+        eventDetail.eventSource = EventSource.USER_INTERACTION;
+        if (event.path != null) {
+            let i = 0;
+            let target;
+            // search in event path for data-click attribute
+            while (i === 0 || target != null && i < event.path.length) {
+                target = select(event.path[i]);
+                const key = target.attr('data-click');
+                if (key != null) {
+                    eventDetail.key = key;
+                    break;
+                }
+                if (target.classed('edge-group')) {
+                    // reached edge boundary in dom
+                    break;
+                }
+                i++;
+            }
+        }
         eventDetail.sourceEvent = event;
         eventDetail.edge = edgeDatum;
         const ev = new CustomEvent('edgeclick', { bubbles: true, composed: true, cancelable: true, detail: eventDetail });
@@ -1707,11 +1727,22 @@ export default class GraphEditor extends HTMLElement {
         eventDetail.eventSource = EventSource.USER_INTERACTION,
         eventDetail.sourceEvent = event;
         eventDetail.node = nodeDatum;
-        if (event.target != null) {
-            const target = select(event.target);
-            const key = target.attr('data-click');
-            if (key != null) {
-                eventDetail.key = key;
+        if (event.path != null) {
+            let i = 0;
+            let target;
+            // search in event path for data-click attribute
+            while (i === 0 || target != null && i < event.path.length) {
+                target = select(event.path[i]);
+                const key = target.attr('data-click');
+                if (key != null) {
+                    eventDetail.key = key;
+                    break;
+                }
+                if (target.classed('node')) {
+                    // reached node boundary in dom
+                    break;
+                }
+                i++;
             }
         }
         const ev = new CustomEvent('nodeclick', { bubbles: true, composed: true, cancelable: true, detail: eventDetail });

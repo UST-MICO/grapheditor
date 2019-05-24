@@ -415,7 +415,7 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
         }
 .. describe:: edgeclick
 
-    Fired when a user clicks on a edge.
+    Fired when a user clicks on a edge. The ``key`` can be used to create :ref:`custom buttons <example-events>`.
 
     Use ``event.preventDefault()`` to prevent standard graph behaviour.
 
@@ -495,7 +495,9 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
 Example Event Usage
 ^^^^^^^^^^^^^^^^^^^
 
-This example uses a node template where one part has the ``data-click="remove"`` attribute. This attribute is used in the event to populate the ``key`` attribute.
+This example uses a node template where one part has the ``data-click="remove"`` attribute.
+This attribute is used in the event to populate the ``key`` attribute.
+For custom buttons in edges use markers with the :js:attr:`clickEventKey <Marker.clickEventKey>` attribute.
 
 .. code-block:: html
 

@@ -37,4 +37,6 @@ export interface Marker {
     scaleRelative?: boolean;
     /** Rotation information for the marker. */
     rotate?: RotationData;
+    /** A key used in a click event when the marker was clicked. */
+    clickEventKey?: string;
 }

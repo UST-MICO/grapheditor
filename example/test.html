@@ -137,7 +137,7 @@
 
                 graph.addNode({id: 4, title: 'NEU', type: 'mqtt', x: 130, y: -50});
                 graph.addEdge({source: 4, target: 1, markers: [
-                    {template: 'arrow', positionOnLine: 1, scale: 0.5, rotate: {relativeAngle: 0}},
+                    {template: 'arrow', positionOnLine: 1, scale: 0.5, rotate: {relativeAngle: 0}, clickEventKey: 'HelloWorld'},
                     {template: 'arrow', positionOnLine: 0.3, scale: 0.5, scaleRelative: true, rotate: {normal: {dx: -1, dy: 0}, relativeAngle: 0}},
                     {template: 'arrow', positionOnLine: 0.1, scale: 0.5, rotate: {relativeAngle: 0}},
                 ]});
@@ -163,6 +163,9 @@
                     if (event.detail.key === 'title') {
                         event.preventDefault();
                     }
+                });
+                graph.addEventListener('edgeclick', function test(event) {
+                    console.log(event.type, event.detail);
                 });
             }
             if (false) {
