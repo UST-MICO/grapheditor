@@ -27,6 +27,26 @@ export interface Point {
 }
 
 /**
+ * Interface for text components that are part of an edge.
+ */
+export interface TextComponent {
+    /** The relative position of the marker on the edge (between 0 and 1). */
+    positionOnLine: number;
+    /** The actual text content. */
+    value?: string;
+    /** The path to the attribute containing the text. */
+    attributePath?: string;
+    /** The width used for wrapping the text. */
+    width: number;
+    /** The height used for wrapping multiline text. */
+    height?: number;
+    /** The complete class attribute. */
+    class?: string;
+    /** The padding is used to avoid collisions. */
+    padding?: number;
+}
+
+/**
  * Interface for edges between nodes.
  */
 export interface Edge {
@@ -43,6 +63,8 @@ export interface Edge {
     markers?: Marker[];
     /** Markers to draw at the end of this edge. */
     markerEnd?: Marker;
+    /** List of text components of this edge. */
+    texts?: TextComponent[];
     [prop: string]: any;
 }
 

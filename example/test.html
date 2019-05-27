@@ -131,7 +131,12 @@
                     {id: 3, title: 'New', type: 'gRPC', x: 270, y: 50},
                 ];
                 graph.edgeList = [
-                    {source: 1, target: 2},
+                    {source: 1, target: 2, texts: [{
+                        positionOnLine: 0.8,
+                        value: 'Hello World!',
+                        width: 30,
+                        height: 30
+                    }]},
                     {source: 2, target: 3},
                 ]
 
@@ -140,7 +145,12 @@
                     {template: 'arrow', positionOnLine: 1, scale: 0.5, rotate: {relativeAngle: 0}, clickEventKey: 'HelloWorld'},
                     {template: 'arrow', positionOnLine: 0.3, scale: 0.5, scaleRelative: true, rotate: {normal: {dx: -1, dy: 0}, relativeAngle: 0}},
                     {template: 'arrow', positionOnLine: 0.1, scale: 0.5, rotate: {relativeAngle: 0}},
-                ]});
+                ], texts: [{
+                    positionOnLine: 0.2,
+                    value: 'Hello World!',
+                    width: 30,
+                    padding: 5
+                }]});
 
                 graph.removeNode(3);
 

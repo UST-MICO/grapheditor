@@ -70,7 +70,7 @@ export function wrapText(element: SVGTextElement, newText, force: boolean= false
     }
 
     // wrap multiline
-    const spanSelection = calculateMultiline(text, height, x, y);
+    const spanSelection = calculateMultiline(text, height, x, y); // TODO rerun lineheight detection for forced text wrapping
     const lines = spanSelection.nodes();
     for (let index = 0; index < lines.length; index++) {
         const line = lines[index];
@@ -142,7 +142,11 @@ function calculateMultiline(text, height, x, y, linespacing: string= 'auto') {
 
     const spanSelection = text.selectAll('tspan').data(lines);
     spanSelection.exit().remove();
-    return spanSelection.enter().append('tspan').attr('x', x).attr('y', d => d).merge(spanSelection);
+    return spanSelection.enter().append('tspan')
+        .attr('x', x)
+        .attr('y', d => d)
+        .attr('data-deltay', d => d-y)
+      .merge(spanSelection);
 }
 
 /**

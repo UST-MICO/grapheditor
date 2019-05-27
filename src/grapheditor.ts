@@ -748,6 +748,8 @@ export default class GraphEditor extends HTMLElement {
             .selectAll<any, Node>('g.node')
             .data<Node>(this._nodes, (d: Node) => d.id.toString());
         this.updateNodeText(nodeSelection, force);
+
+        // TODO rewrap edge text
     }
 
 
@@ -913,30 +915,14 @@ export default class GraphEditor extends HTMLElement {
      * @param nodeSelection d3 selection of nodes to update with bound data
      */
     private updateNodeText(nodeSelection: any, force: boolean= false) {
+        const self = this;
         nodeSelection.each(function (d) {
             const singleNodeSelection = select(this);
             const textSelection = singleNodeSelection.selectAll('.text').datum(function () {
                 return (this as Element).getAttribute('data-content');
             });
             textSelection.each(function (attr) {
-                let newText = '';
-                if (attr != null) {
-                    if (attr.includes('.')) {
-                        // recursive decend along path
-                        const path = attr.split('.');
-                        let temp = d;
-                        path.forEach(segment => {
-                            if (temp != null && temp.hasOwnProperty(segment)) {
-                                temp = temp[segment];
-                            } else {
-                                temp = null;
-                            }
-                        });
-                        newText = temp;
-                    } else {
-                        newText = d[attr];
-                    }
-                }
+                let newText = self.recursiveAttributeGet(d, attr);
                 if (newText == null) {
                     newText = '';
                 }
@@ -945,6 +931,36 @@ export default class GraphEditor extends HTMLElement {
                 wrapText(this as SVGTextElement, newText, force);
             });
         });
+    }
+
+    /**
+     * Recursively retrieve an attribute.
+     *
+     * This only supports '.' access of attributes.
+     *
+     * @param obj the object to get the attribute from
+     * @param attr the attribute or attribute path to get
+     */
+    private recursiveAttributeGet(obj: any, attr: string) {
+        let result;
+        if (attr != null) {
+            if (attr.includes('.')) {
+                // recursive decend along path
+                const path = attr.split('.');
+                let temp = obj;
+                path.forEach(segment => {
+                    if (temp != null && temp.hasOwnProperty(segment)) {
+                        temp = temp[segment];
+                    } else {
+                        temp = null;
+                    }
+                });
+                result = temp;
+            } else {
+                result = obj[attr];
+            }
+        }
+        return result;
     }
 
     /**
@@ -1074,6 +1090,9 @@ export default class GraphEditor extends HTMLElement {
         edgeGroupSelection.select('path.edge')
             .call(this.updateEdgePath.bind(this));
         edgeGroupSelection.each(function (d) {
+            self.updateEdgeTextPositions(select(this), d);
+        });
+        edgeGroupSelection.each(function (d) {
             select(this).selectAll('g.marker:not(.marker-end)').data(d.markers != null ? d.markers : [])
                 .call(self.updateMarkerPositions.bind(self));
         }).each(function (d) {
@@ -1110,6 +1129,9 @@ export default class GraphEditor extends HTMLElement {
             .call(this.updateMarker.bind(this))
             .call(this.updateMarkerPositions.bind(this));
 
+        this.updateEdgeText(edgeGroupSelection, d);
+        this.updateEdgeTextPositions(edgeGroupSelection, d);
+
         if (this.isInteractive) {
             edgeGroupSelection.select('circle.link-handle').call(drag()
                 .subject(() => {
@@ -1126,6 +1148,41 @@ export default class GraphEditor extends HTMLElement {
         } else {
             edgeGroupSelection.select('circle.link-handle').on('.drag', null);
         }
+    }
+
+    /**
+     * Update all edge texts in a edge group.
+     *
+     * @param edgeGroupSelection d3 selection of single edge group
+     * @param d edge datum
+     * @param force force text to re-wrap
+     */
+    private updateEdgeText(edgeGroupSelection: any, d: any, force: boolean= false) {
+        const self = this;
+        const textSelection = edgeGroupSelection.selectAll('text').data(d.texts != null ? d.texts : []);
+        textSelection.exit().remove();
+        textSelection.enter().append('text')
+            .attr('x', 0)
+            .attr('y', 0)
+          .merge(textSelection)
+            .attr('class', (d) => d.class)
+            .classed('text', true)
+            .attr('width', (d) => d.width)
+            .attr('height', (d) => d.height)
+            .each(function (text) {
+                let newText = '';
+                if (text.value != null) {
+                    newText = text.value;
+                } else {
+                    newText = self.recursiveAttributeGet(d, text.attribute);
+                }
+                if (newText == null) {
+                    newText = '';
+                }
+                // make sure it is a string
+                newText = newText.toString();
+                wrapText(this as SVGTextElement, newText, force);
+            });
     }
 
     /**
@@ -1341,6 +1398,118 @@ export default class GraphEditor extends HTMLElement {
 
             marker.attr('transform', transform);
         });
+    }
+
+    /**
+     * Update all edge text positions in a edge group.
+     *
+     * @param edgeGroupSelection d3 selection of single edge group
+     * @param d edge datum
+     */
+    private updateEdgeTextPositions(edgeGroupSelection, d) {
+        const path = edgeGroupSelection.select('path.edge');
+        const length = (path.node() as SVGPathElement).getTotalLength();
+        const textSelection = edgeGroupSelection.selectAll('text').data(d.texts != null ? d.texts : []);
+        textSelection.each(function (d) {
+            const text = select(this);
+            let positionOnLine = d.positionOnLine;
+            if (positionOnLine === 'end') {
+                positionOnLine = 1;
+            }
+            if (positionOnLine === 'start') {
+                positionOnLine = 0;
+            }
+            positionOnLine = parseFloat(positionOnLine);
+            if (isNaN(positionOnLine)) {
+                positionOnLine = 0;
+            }
+            const referencePoint = (path.node() as SVGPathElement).getPointAtLength(length * positionOnLine);
+            // calculate nearest endpoint of line
+            const endpoint = (path.node() as SVGPathElement).getPointAtLength(length * (positionOnLine < 0.5 ? 0 : 1));
+
+            // use second point to calculate the angle of the nearest node
+            const normal = {
+                dx: endpoint.x - referencePoint.x,
+                dy: endpoint.y - referencePoint.y,
+            };
+            let angle = calculateAngle(normal);
+            if (angle < 0) {
+                angle += 380;
+            }
+
+            // account for different text anchors
+            let textAnchorCorrection = 1;
+            const textAnchor = text.style('text-anchor');
+            if (textAnchor === 'end') {
+                // text is right aligned and 100% to the left of the x position
+                textAnchorCorrection = 0;
+            }
+            if (textAnchor === 'middle') {
+                // text is center aligned and 50% to the left of the x position
+                textAnchorCorrection = 0.5;
+            }
+            const bbox = text.node().getBBox();
+
+            const targetPoint: Point = {
+                x: referencePoint.x,
+                y: referencePoint.y,
+            };
+
+            const lineheight = text.attr('data-lineheight');
+            // Account for text origin beeing at the bottom of the line
+            let lineHeightCorrection = bbox.height; // single line texts only have bbox height
+            if (lineheight) {
+                // use calculated line height from text wrapping for multi line texts
+                lineHeightCorrection = parseFloat(lineheight);
+            }
+            if (angle > 0 && angle < 180) {
+                // bottom of the text (possibly) overlaps
+                let delta = endpoint.y - (referencePoint.y + bbox.height - lineHeightCorrection);
+                if (d.padding) {
+                    delta -= d.padding;
+                }
+                if (delta < 0) {
+                    targetPoint.y += delta;
+                }
+            }
+            if (angle > 180 && angle < 360) {
+                // top of the text (possibly) overlaps
+                let delta = endpoint.y - (referencePoint.y - lineHeightCorrection);
+                if (d.padding) {
+                    delta += d.padding;
+                }
+                if (delta > 0) {
+                    targetPoint.y += delta;
+                }
+            }
+            if (angle > 90 && angle < 270) {
+                // left side of text (possibly) overlaps
+                let delta = endpoint.x - (referencePoint.x - (bbox.width * (1 - textAnchorCorrection)));
+                if (d.padding) {
+                    delta += d.padding;
+                }
+                if (delta > 0) { // only update target if text actually overlaps
+                    targetPoint.x += delta;
+                }
+            }
+            if (angle > 270 || angle < 90) {
+                // right side of text (possibly) overlaps
+                let delta = endpoint.x - (referencePoint.x + (bbox.width * textAnchorCorrection));
+                if (d.padding) {
+                    delta -= d.padding;
+                }
+                if (delta < 0) { // only update target if text actually overlaps
+                    targetPoint.x += delta;
+                }
+            }
+
+            text.attr('x', targetPoint.x).attr('y', targetPoint.y);
+            // update span positions for multiline texts
+            text.selectAll('tspan').datum(function () {
+                return parseFloat((this as Element).getAttribute('data-deltay'));
+            }).attr('x', targetPoint.x).attr('y', (y) => targetPoint.y + y);
+        });
+
     }
 
     /**

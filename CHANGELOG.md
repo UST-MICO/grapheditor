@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - Add `eventSource` to all custom events to distinguish events by how they were triggered (possible values: `INTERNAL`, `API`, `USER_INTERACTION`)
 - Add `clickEventKey` attribute to `Marker` class (used to set `data-click` attribute in html)
 - Click events `edgeclick` and `nodeclick` now search the whole path (only inside the specific svg group) for a `data-click` attribute to use as key
+- Add textcomponents to edge to display text in an edge with text wrapping
 
 
 ### Fixed

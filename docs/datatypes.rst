@@ -44,3 +44,9 @@ EdgeMarker
 
 .. js:autoclass:: RotationData
    :members:
+
+TextComponent
+
+.. js:autoclass:: TextComponent
+   :members:
+

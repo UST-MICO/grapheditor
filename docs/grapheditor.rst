@@ -190,6 +190,26 @@ The :js:attr:`lineOffset <Marker.lineOffset>` controls how much the marker shoul
 
 To update markers of dragged edges it is possible to set the function :js:func:`onCreateDraggedEdge <GraphEditor.onCreateDraggedEdge>`, :js:func:`onDraggedEdgeTargetChange <GraphEditor.onDraggedEdgeTargetChange>` and :js:func:`onDropDraggedEdge <GraphEditor.onDropDraggedEdge>`.
 
+Text-Components
+"""""""""""""""
+
+:js:class:`Edges <Edge>` can have a list of :js:class:`Text-Components <TextComponent>`.
+To set the displayed text either use :js:attr:`value <TextComponent.value>` to set a specific text or :js:attr:`attributePath <TextComponent.attributePath>` to set the text based on an attribute of the edge.
+The position of the Text can be controlled via the :js:attr:`positionOnLine <TextComponent.positionOnLine>` Attribute similar to the Markers.
+A Text-Component must have a :js:attr:`width <TextComponent.width>` > 0 which is used to wrap the text.
+For multiline text wrapping also set the :js:attr:`height <TextComponent.height>` attribute.
+
+To adjust the styling of the displayed text use the :js:attr:`class <TextComponent.class>` attribute which is used to set class attribute of the svg ``text`` element.
+The ``text`` element will always have the ``text`` class.
+Normally the text origin is the left of the baseline.
+This means that a single line text is to the right and above the calculated anchor point on the edge path.
+This can be changed by the ``text-anchor`` css attribute.
+
+The Text-Component will always try not to clip into nodes.
+This is achieved by checking whether the text is nearer to the start or end of the edge and then checking for overlaps with that endpoint.
+If the text overlaps it gets pushed in the direction towards the center of the edge.
+The :js:attr:`padding <TextComponent.padding>` is used as a buffer zone around the text.
+
 
 Example Styling Usage
 ^^^^^^^^^^^^^^^^^^^^^
