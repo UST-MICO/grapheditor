@@ -620,9 +620,10 @@ export default class GraphEditor extends HTMLElement {
                 });
             });
         }
-        const styles = select(this.root).selectAll('style').data(stylehtml);
-        styles.exit().remove();
-        styles.enter().merge(styles as any).html((d) => d.innerHTML);
+        const styles = select(this.root).selectAll('style')
+            .data(stylehtml)
+            .join('style')
+            .html((d) => d.innerHTML);
 
         if (nodeTemplateList == null) {
             const nodeTemplates = templates.filter(function () {
@@ -671,17 +672,15 @@ export default class GraphEditor extends HTMLElement {
             graph.select('.nodes').selectAll('g.node').remove();
         }
 
-        let nodeSelection = graph.select('.nodes')
+        const nodeSelection = graph.select('.nodes')
             .selectAll<any, Node>('g.node')
-            .data<Node>(this._nodes, (d: Node) => d.id.toString());
-
-        nodeSelection.exit().remove();
-
-        nodeSelection = nodeSelection.enter().append('g')
-            .classed('node', true)
-            .attr('id', (d) => d.id)
-            .call(this.createNodes.bind(this))
-          .merge(nodeSelection as any)
+            .data<Node>(this._nodes, (d: Node) => d.id.toString())
+            .join(
+                enter => enter.append('g')
+                    .classed('node', true)
+                    .attr('id', (d) => d.id)
+                    .call(this.createNodes.bind(this))
+            )
             .call(this.updateNodes.bind(this))
             .call(this.updateNodePositions.bind(this))
             .on('mouseover', (d) => { this.onNodeEnter.bind(this)(d); })
@@ -706,23 +705,23 @@ export default class GraphEditor extends HTMLElement {
         const self = this;
         const edgeGroupSelection = graph.select('.edges')
             .selectAll('g.edge-group:not(.dragged)')
-            .data(this._edges, edgeId);
-        edgeGroupSelection.exit().remove();
-        edgeGroupSelection.enter().append('g')
-            .attr('id', (d) => edgeId(d))
-            .classed('edge-group', true)
-            .each(function () {
-                const edgeGroup = select(this);
-                edgeGroup.append('path')
-                    .classed('edge', true)
-                    .attr('fill', 'none');
+            .data(this._edges, edgeId)
+            .join(
+                enter => enter.append('g')
+                    .attr('id', (d) => edgeId(d))
+                    .classed('edge-group', true)
+                    .each(function () {
+                        const edgeGroup = select(this);
+                        edgeGroup.append('path')
+                            .classed('edge', true)
+                            .attr('fill', 'none');
 
-                edgeGroup.append('circle')
-                    .classed('link-handle', true)
-                    .attr('fill', 'black')
-                    .attr('r', 3);
-            })
-          .merge(edgeGroupSelection as any)
+                        edgeGroup.append('circle')
+                            .classed('link-handle', true)
+                            .attr('fill', 'black')
+                            .attr('r', 3);
+                    })
+            )
             .classed('ghost', (d) => {
                 const id = edgeId(d);
                 return this.draggedEdges.some((edge) => edge.createdFrom === id);
@@ -873,12 +872,12 @@ export default class GraphEditor extends HTMLElement {
             if (handles == null) {
                 return;
             }
-            let handleSelection = select(this).selectAll<any, LinkHandle>('circle.link-handle')
-                .data<LinkHandle>(handles as any, (handle: LinkHandle) => handle.id.toString());
-            handleSelection.exit().remove();
-            handleSelection = handleSelection.enter().append('circle')
-                .classed('link-handle', true)
-              .merge(handleSelection as any)
+            const handleSelection = select(this).selectAll<any, LinkHandle>('circle.link-handle')
+                .data<LinkHandle>(handles as any, (handle: LinkHandle) => handle.id.toString())
+                .join(
+                    enter => enter.append('circle')
+                        .classed('link-handle', true)
+                )
                 .attr('fill', 'black')
                 .attr('cx', (d) => d.x)
                 .attr('cy', (d) => d.y)
@@ -1031,19 +1030,18 @@ export default class GraphEditor extends HTMLElement {
         const graph = svg.select('g.zoom-group');
         const edgeGroupSelection = graph.select('.edges')
             .selectAll('g.edge-group.dragged')
-            .data(this.draggedEdges, edgeId);
-
-        edgeGroupSelection.exit().remove();
-        edgeGroupSelection.enter().append('g')
-            .attr('id', (d) => edgeId(d))
-            .classed('edge-group', true)
-            .classed('dragged', true)
-            .each(function () {
-                select(this).append('path')
-                    .classed('edge', true)
-                    .attr('fill', 'none');
-            })
-          .merge(edgeGroupSelection as any)
+            .data(this.draggedEdges, edgeId)
+            .join(
+                enter => enter.append('g')
+                    .attr('id', (d) => edgeId(d))
+                    .classed('edge-group', true)
+                    .classed('dragged', true)
+                    .each(function () {
+                        select(this).append('path')
+                            .classed('edge', true)
+                            .attr('fill', 'none');
+                    })
+            )
             .call(this.updateEdgeGroupClasses.bind(this))
             .call(this.updateEdgeGroups.bind(this))
             .call(this.updateEdgePositions.bind(this));
@@ -1120,12 +1118,13 @@ export default class GraphEditor extends HTMLElement {
         const pathSelection = edgeGroupSelection.select('path.edge:not(.dragged)').datum(d);
         pathSelection.attr('stroke', 'black');
         this.updateEndMarker(edgeGroupSelection, d);
-        const markerSelection = edgeGroupSelection.selectAll('g.marker:not(.marker-end)').data(d.markers != null ? d.markers : []);
-        markerSelection.exit().remove();
-        markerSelection.enter().append('g')
-            .classed('marker', true)
-            .call(this.createMarker.bind(this))
-          .merge(markerSelection)
+        const markerSelection = edgeGroupSelection.selectAll('g.marker:not(.marker-end)')
+            .data(d.markers != null ? d.markers : [])
+            .join(
+                enter => enter.append('g')
+                    .classed('marker', true)
+                    .call(this.createMarker.bind(this))
+            )
             .call(this.updateMarker.bind(this))
             .call(this.updateMarkerPositions.bind(this));
 
@@ -1159,12 +1158,13 @@ export default class GraphEditor extends HTMLElement {
      */
     private updateEdgeText(edgeGroupSelection: any, d: any, force: boolean= false) {
         const self = this;
-        const textSelection = edgeGroupSelection.selectAll('text').data(d.texts != null ? d.texts : []);
-        textSelection.exit().remove();
-        textSelection.enter().append('text')
-            .attr('x', 0)
-            .attr('y', 0)
-          .merge(textSelection)
+        const textSelection = edgeGroupSelection.selectAll('text')
+            .data(d.texts != null ? d.texts : [])
+            .join(
+                enter => enter.append('text')
+                    .attr('x', 0)
+                    .attr('y', 0)
+            )
             .attr('class', (d) => d.class)
             .classed('text', true)
             .attr('width', (d) => d.width)

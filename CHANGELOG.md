@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - Add `clickEventKey` attribute to `Marker` class (used to set `data-click` attribute in html)
 - Click events `edgeclick` and `nodeclick` now search the whole path (only inside the specific svg group) for a `data-click` attribute to use as key
 - Add textcomponents to edge to display text in an edge with text wrapping
+- Update d3 to >5.9 to use [join](https://github.com/d3/d3-selection/blob/master/README.md#selection_join)
 
 
 ### Fixed
