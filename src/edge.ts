@@ -44,6 +44,10 @@ export interface TextComponent {
     class?: string;
     /** The padding is used to avoid collisions. */
     padding?: number;
+    /** Offset from the reference point in x direction. */
+    offsetX?: number;
+    /** Offset from the reference point in y direction. */
+    offsetY?: number;
 }
 
 /**

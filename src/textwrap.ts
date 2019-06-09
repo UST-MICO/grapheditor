@@ -70,7 +70,7 @@ export function wrapText(element: SVGTextElement, newText, force: boolean= false
     }
 
     // wrap multiline
-    const spanSelection = calculateMultiline(text, height, x, y); // TODO rerun lineheight detection for forced text wrapping
+    const spanSelection = calculateMultiline(text, height, x, y, force);
     const lines = spanSelection.nodes();
     for (let index = 0; index < lines.length; index++) {
         const line = lines[index];
@@ -104,13 +104,15 @@ function lTrim(text: string) {
  * @param height max height
  * @param x x coordinate
  * @param y y coordinate
+ * @param force force rewrap
  * @param linespacing 'auto' or number (default: 'auto')
  */
-function calculateMultiline(text, height, x, y, linespacing: string= 'auto') {
+function calculateMultiline(text, height, x, y, force: boolean= false, linespacing: string= 'auto') {
     let lineheight = parseFloat(text.attr('data-lineheight'));
-    if (isNaN(lineheight)) {
+    if (force || isNaN(lineheight)) {
         lineheight = parseFloat(text.style('line-height'));
         if (isNaN(lineheight)) {
+            text.selectAll('tspan').remove(); // remove all child elements before calculation
             text.text('M'); // use M as measurement character.
             lineheight = text.node().getBBox().height;
             text.text(null);

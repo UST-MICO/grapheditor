@@ -18,7 +18,7 @@
 import { select, scaleLinear, zoom, zoomIdentity, zoomTransform, event, line, curveBasis, drag, selection } from 'd3';
 
 import { Node } from './node';
-import { Edge, DraggedEdge, edgeId, Point } from './edge';
+import { Edge, DraggedEdge, edgeId, Point, TextComponent } from './edge';
 import { LinkHandle, handlesForRectangle, handlesForCircle, calculateNormal, handlesForPolygon, handlesForPath } from './link-handle';
 import { GraphObjectCache } from './object-cache';
 import { wrapText } from './textwrap';
@@ -743,12 +743,18 @@ export default class GraphEditor extends HTMLElement {
         const svg = this.getSvg();
         const graph = svg.select('g.zoom-group');
 
+        const self = this;
+
         const nodeSelection = graph.select('.nodes')
             .selectAll<any, Node>('g.node')
             .data<Node>(this._nodes, (d: Node) => d.id.toString());
         this.updateNodeText(nodeSelection, force);
 
-        // TODO rewrap edge text
+        const edgeGroupSelection = graph.select('.edges')
+            .selectAll('g.edge-group:not(.dragged)')
+            .data(this._edges, edgeId).each(function (d) {
+                self.updateEdgeText(select(this), d, force);
+            });
     }
 
 
@@ -905,7 +911,10 @@ export default class GraphEditor extends HTMLElement {
         nodeSelection
             .call(this.updateNodeClasses.bind(this))
             .call(this.updateNodeHighligts.bind(this))
-            .call(this.updateNodeText.bind(this));
+            .call(this.updateNodeText.bind(this))
+            .each(function(d) {
+                self.objectCache.setNodeBBox(d.id, this.getBBox());
+            });
     }
 
     /**
@@ -1011,6 +1020,10 @@ export default class GraphEditor extends HTMLElement {
             const svg = this.getSvg();
 
             const graph = svg.select('g.zoom-group');
+
+            edgeGroupSelection = graph.select('.edges')
+                .selectAll('g.edge-group:not(.dragged)')
+                .data(this._edges, edgeId);
         }
         const self = this;
         edgeGroupSelection.each(function (d) {
@@ -1183,6 +1196,18 @@ export default class GraphEditor extends HTMLElement {
                 newText = newText.toString();
                 wrapText(this as SVGTextElement, newText, force);
             });
+        if (this.isInteractive) {
+            const path = edgeGroupSelection.select('path.edge');
+            const length = (path.node() as SVGPathElement).getTotalLength();
+            textSelection.call(drag().on('drag', (text: TextComponent) => {
+                const referencePoint = (path.node() as SVGPathElement).getPointAtLength(length * text.positionOnLine);
+                text.offsetX = event.x - referencePoint.x;
+                text.offsetY = event.y - referencePoint.y;
+                this.updateEdgeTextPositions(edgeGroupSelection, d);
+            }) as any);
+        } else {
+            textSelection.on('drag', null);
+        }
     }
 
     /**
@@ -1410,6 +1435,40 @@ export default class GraphEditor extends HTMLElement {
         const path = edgeGroupSelection.select('path.edge');
         const length = (path.node() as SVGPathElement).getTotalLength();
         const textSelection = edgeGroupSelection.selectAll('text').data(d.texts != null ? d.texts : []);
+
+        // calculate the node bounding boxes for collision detection
+        const svg = this.getSvg();
+        let sourceBB = {x: 0, y: 0, width: 0, height: 0};
+        let targetBB = {x: 0, y: 0, width: 0, height: 0};
+        try {
+            const sourceNode = this.objectCache.getNode(d.source);
+            const targetNode = this.objectCache.getNode(d.target);
+            const sourceNodeBB = this.objectCache.getNodeBBox(d.source);
+            const targetNodeBB = this.objectCache.getNodeBBox(d.target);
+            // add node position to bounding box
+            sourceBB = {
+                x: sourceNodeBB.x + sourceNode.x,
+                y: sourceNodeBB.y + sourceNode.y,
+                width: sourceNodeBB.width,
+                height: sourceNodeBB.height,
+            };
+            targetBB = {
+                x: targetNodeBB.x + targetNode.x,
+                y: targetNodeBB.y + targetNode.y,
+                width: targetNodeBB.width,
+                height: targetNodeBB.height,
+            };
+        } catch (error) {
+            // use line endpoints as fallback
+            const sourceEndpoint = (path.node() as SVGPathElement).getPointAtLength(0);
+            const targetEndpoint = (path.node() as SVGPathElement).getPointAtLength(0);
+            sourceBB.x = sourceEndpoint.x;
+            sourceBB.y = sourceEndpoint.y;
+            targetBB.x = targetEndpoint.x;
+            targetBB.y = targetEndpoint.y;
+        }
+
+        // update text selections
         textSelection.each(function (d) {
             const text = select(this);
             let positionOnLine = d.positionOnLine;
@@ -1423,18 +1482,32 @@ export default class GraphEditor extends HTMLElement {
             if (isNaN(positionOnLine)) {
                 positionOnLine = 0;
             }
-            const referencePoint = (path.node() as SVGPathElement).getPointAtLength(length * positionOnLine);
-            // calculate nearest endpoint of line
-            const endpoint = (path.node() as SVGPathElement).getPointAtLength(length * (positionOnLine < 0.5 ? 0 : 1));
+            const pathPoint = (path.node() as SVGPathElement).getPointAtLength(length * positionOnLine);
 
-            // use second point to calculate the angle of the nearest node
+            // factor in offset coordinates of text component
+            const referencePoint = {
+                x: pathPoint.x + (d.offsetX != null ? d.offsetX : 0),
+                y: pathPoint.y + (d.offsetY != null ? d.offsetY : 0),
+            };
+
+            // calculate center of nearest node (line distance not euklidean distance)
+            const nodeBB = (positionOnLine > 0.5) ? targetBB : sourceBB;
+            const nodeCenter = {
+                x: nodeBB.x + (nodeBB.width / 2),
+                y: nodeBB.y + (nodeBB.height / 2),
+            };
+
+            // use node center point to calculate the angle with the reference point
             const normal = {
-                dx: endpoint.x - referencePoint.x,
-                dy: endpoint.y - referencePoint.y,
+                dx: nodeCenter.x - referencePoint.x,
+                dy: nodeCenter.y - referencePoint.y,
             };
             let angle = calculateAngle(normal);
             if (angle < 0) {
                 angle += 380;
+            }
+            if (angle > 360) {
+                angle -= 360;
             }
 
             // account for different text anchors
@@ -1462,44 +1535,58 @@ export default class GraphEditor extends HTMLElement {
                 // use calculated line height from text wrapping for multi line texts
                 lineHeightCorrection = parseFloat(lineheight);
             }
+            let deltaX = 0;
+            let deltaY = 0;
             if (angle > 0 && angle < 180) {
                 // bottom of the text (possibly) overlaps
-                let delta = endpoint.y - (referencePoint.y + bbox.height - lineHeightCorrection);
+                let delta = (nodeBB.y) - (referencePoint.y + bbox.height - lineHeightCorrection);
                 if (d.padding) {
                     delta -= d.padding;
                 }
                 if (delta < 0) {
-                    targetPoint.y += delta;
+                    deltaY = delta;
                 }
             }
+
             if (angle > 180 && angle < 360) {
                 // top of the text (possibly) overlaps
-                let delta = endpoint.y - (referencePoint.y - lineHeightCorrection);
+                let delta = (nodeBB.y + nodeBB.height) - (referencePoint.y - lineHeightCorrection);
                 if (d.padding) {
                     delta += d.padding;
                 }
                 if (delta > 0) {
-                    targetPoint.y += delta;
+                     deltaY = delta;
                 }
             }
             if (angle > 90 && angle < 270) {
                 // left side of text (possibly) overlaps
-                let delta = endpoint.x - (referencePoint.x - (bbox.width * (1 - textAnchorCorrection)));
+                let delta = (nodeBB.x + nodeBB.width) - (referencePoint.x - (bbox.width * (1 - textAnchorCorrection)));
                 if (d.padding) {
                     delta += d.padding;
                 }
                 if (delta > 0) { // only update target if text actually overlaps
-                    targetPoint.x += delta;
+                    deltaX = delta;
                 }
             }
             if (angle > 270 || angle < 90) {
                 // right side of text (possibly) overlaps
-                let delta = endpoint.x - (referencePoint.x + (bbox.width * textAnchorCorrection));
+                let delta = (nodeBB.x) - (referencePoint.x + (bbox.width * textAnchorCorrection));
                 if (d.padding) {
                     delta -= d.padding;
                 }
                 if (delta < 0) { // only update target if text actually overlaps
-                    targetPoint.x += delta;
+                    deltaX = delta;
+                }
+            }
+
+            // only adjust for actual overlap in both directions
+            if (deltaX !== 0 && deltaY !== 0) {
+                // only adjust in one direction
+                if ((angle > 45 && angle < 135) || (angle > 225 && angle < 315)) {
+                    console.log(angle, (angle > 45 && angle < 135), (angle > 225 && angle < 315))
+                    targetPoint.y += deltaY;
+                } else {
+                    targetPoint.x += deltaX;
                 }
             }
 

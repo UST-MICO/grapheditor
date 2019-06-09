@@ -27,6 +27,7 @@ export class GraphObjectCache {
     private nodeTemplateLinkHandles: Map<LinkHandle[]>;
     private markerTemplates: Map<string>;
     private nodes: Map<Node>;
+    private nodeBBoxes: Map<DOMRect>;
     private edges: Map<Edge>;
     private edgesBySource: Map<Set<Edge>>;
     private edgesByTarget: Map<Set<Edge>>;
@@ -36,6 +37,7 @@ export class GraphObjectCache {
         this.nodeTemplateLinkHandles = map<LinkHandle[]>();
         this.markerTemplates = map<string>();
         this.nodes = map<Node>();
+        this.nodeBBoxes = map<DOMRect>();
         this.edges = map<Edge>();
         this.edgesBySource = map<Set<Edge>>();
         this.edgesByTarget = map<Set<Edge>>();
@@ -58,6 +60,7 @@ export class GraphObjectCache {
         const nodeMap = map();
         nodes.forEach((node) => nodeMap.set(node.id.toString(), node));
         this.nodes = nodeMap;
+        this.nodeBBoxes = map<DOMRect>();
     }
 
     updateEdgeCache(edges: Edge[]) {
@@ -126,6 +129,14 @@ export class GraphObjectCache {
 
     getNode(id: number|string) {
         return this.nodes.get(id.toString());
+    }
+
+    setNodeBBox(id: number|string, bbox: DOMRect) {
+        return this.nodeBBoxes.set(id.toString(), bbox);
+    }
+
+    getNodeBBox(id: number|string) {
+        return this.nodeBBoxes.get(id.toString());
     }
 
     getEdge(id: number|string) {
