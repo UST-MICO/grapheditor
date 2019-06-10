@@ -7,11 +7,11 @@ Component Attributes
 
 .. describe:: nodes
 
-   A json list of ``Node`` objects. All ``'`` characters will be replaced with ``"`` before parsing the json!
+   A json list of :js:class:`Node` objects. All ``'`` characters will be replaced with ``"`` before parsing the json!
 
 .. describe:: edges
 
-   A json list of ``Edge`` objects. All ``'`` characters will be replaced with ``"`` before parsing the json!
+   A json list of :js:class:`Edge` objects. All ``'`` characters will be replaced with ``"`` before parsing the json!
 
 .. _classes-attribute:
 
@@ -58,11 +58,11 @@ Example Usage
 Component Styling
 -----------------
 
-It is possible to inject styles and node templates into the component via ``template`` tags.
+It is possible to inject styles and :js:class:`Node` templates into the component via ``template`` tags.
 
 Style templates need to have the attribute ``template-type="style"`` and contain one ``<style>`` tag.
 
-Node templates need to have the attribute ``template-type="node"`` and should have a unique id that corresponds to a specific node type.
+:js:class:`Node` templates need to have the attribute ``template-type="node"`` and should have a unique id that corresponds to a specific :js:class:`Node` type.
 
 Styling Nodes
 ^^^^^^^^^^^^^
@@ -115,9 +115,9 @@ List of special node classes
 Text injection
 """"""""""""""
 
-It is possible to use text from the node object inside a templated node.
+It is possible to use text from the :js:class:`Node` object inside a templated node.
 The template has to contain a ``text`` tag with an ``data-content`` attribute and the ``text`` class.
-The ``data-content`` attribute is used to determine wich attribute of the node is used as text for this element.
+The ``data-content`` attribute is used to determine wich attribute of the :js:class:`Node` is used as text for this element.
 To use a value of a nested Object as text source a path can be provided in ``data-content`` where the path segments are seperated by ``.``.
 Currently arrays are not supported as a text source.
 
@@ -206,7 +206,7 @@ This means that a single line text is to the right and above the calculated anch
 This can be changed by the ``text-anchor`` css attribute.
 
 The Text-Component will always try not to clip into nodes.
-This is achieved by checking whether the text is nearer to the start or end of the edge and then checking for overlaps with that endpoint.
+This is achieved by checking whether the text is nearer to the start or end of the edge and then checking for overlaps with the node at that endpoint.
 If the text overlaps it gets pushed in the direction towards the center of the edge.
 The :js:attr:`padding <TextComponent.padding>` is used as a buffer zone around the text.
 
@@ -317,7 +317,7 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
 
 .. describe:: selection
 
-    Fired when a user (de-)selects a node.
+    Fired when a user (de-)selects a :js:class:`Node`.
 
     **Example** ``detail``
 
@@ -329,7 +329,7 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
 
 .. describe:: nodeclick
 
-    Fired when a user clicks on a node. The ``key`` can be used to create :ref:`custom buttons <example-events>`.
+    Fired when a user clicks on a :js:class:`Node`. The ``key`` can be used to create :ref:`custom buttons <example-events>`.
 
     Use ``event.preventDefault()`` to prevent standard graph behaviour.
 
@@ -350,7 +350,7 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
 
 .. describe:: nodeenter
 
-    Fired when a user enters a node with a mouse or pointer device.
+    Fired when a user enters a :js:class:`Node` with a mouse or pointer device.
 
     **Example** ``detail``
 
@@ -367,7 +367,7 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
 
 .. describe:: nodeleave
 
-    Fired when a user leaves a node with a mouse or pointer device.
+    Fired when a user leaves a :js:class:`Node` with a mouse or pointer device.
 
     **Example** ``detail``
 
@@ -384,7 +384,7 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
 
 .. describe:: nodepositionchange
 
-    Fired when a node gets new coordinates.
+    Fired when a :js:class:`Node` gets new coordinates.
 
     **Example** ``detail``
 
@@ -400,7 +400,7 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
 
 .. describe:: nodeadd
 
-    Fired when a node gets added to the graph.
+    Fired when a :js:class:`Node` gets added to the graph.
 
     Use ``event.preventDefault()`` to prevent standard graph behaviour.
 
@@ -418,7 +418,7 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
 
 .. describe:: noderemove
 
-    Fired when a node gets removed from the graph.
+    Fired when a :js:class:`Node` gets removed from the graph.
 
     Use ``event.preventDefault()`` to prevent standard graph behaviour.
 
@@ -435,7 +435,7 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
         }
 .. describe:: edgeclick
 
-    Fired when a user clicks on a edge. The ``key`` can be used to create :ref:`custom buttons <example-events>`.
+    Fired when a user clicks on a :js:class:`Edge`. The ``key`` can be used to create :ref:`custom buttons <example-events>`.
 
     Use ``event.preventDefault()`` to prevent standard graph behaviour.
 
@@ -451,9 +451,30 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
             }
         }
 
+.. describe:: edgetextpositionchange
+
+    Fired when a :js:class:`TextComponent` of an :js:class:`Edge` got moved by the user.
+    This event could be used to limit the offset coordinates.
+
+    **Example** ``detail``
+
+    .. code-block:: ts
+
+        {
+            "sourceEvent": {},
+            "text": {
+                "offsetX": 10,
+                "offsetY": 24
+            },
+            "edge": {
+                "source": 1,
+                "target": 2
+            }
+        }
+
 .. describe:: edgeadd
 
-    Fired when an edge gets added to the graph.
+    Fired when an :js:class:`Edge` gets added to the graph.
 
     Use ``event.preventDefault()`` to prevent standard graph behaviour.
 
@@ -470,7 +491,7 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
 
 .. describe:: edgeremove
 
-    Fired when an edge gets removed from the graph.
+    Fired when an :js:class:`Edge` gets removed from the graph.
 
     Use ``event.preventDefault()`` to prevent standard graph behaviour.
 
@@ -487,9 +508,9 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
 
 .. describe:: edgedrop
 
-    Fired when a dragged edge was dropped over the void by the user.
+    Fired when a dragged :js:class:`Edge` was dropped over the void by the user.
 
-    The event can be used to create a new node where the user dropped the edge.
+    The event can be used to create a new :js:class:`Node` where the user dropped the :js:class:`Edge`.
 
     **Example** ``detail``
 
@@ -517,7 +538,7 @@ Example Event Usage
 
 This example uses a node template where one part has the ``data-click="remove"`` attribute.
 This attribute is used in the event to populate the ``key`` attribute.
-For custom buttons in edges use markers with the :js:attr:`clickEventKey <Marker.clickEventKey>` attribute.
+For custom buttons in :js:class:`Edges <Edge>` use markers with the :js:attr:`clickEventKey <Marker.clickEventKey>` attribute.
 
 .. code-block:: html
 

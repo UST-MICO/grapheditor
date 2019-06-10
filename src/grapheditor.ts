@@ -215,18 +215,15 @@ export default class GraphEditor extends HTMLElement {
     attributeChangedCallback(name, oldValue, newValue: string) {
         if (name === 'nodes') {
             newValue = newValue.replace(/'/g, '"');
-            console.log('Nodes ' + newValue);
             this.nodeList = JSON.parse(newValue);
         }
         if (name === 'edges') {
             newValue = newValue.replace(/'/g, '"');
-            console.log('Edges ' + newValue);
             this.edgeList = JSON.parse(newValue);
         }
         if (name === 'classes') {
             if (newValue.startsWith('[')) {
                 newValue = newValue.replace(/'/g, '"');
-                console.log('Classes ' + newValue);
                 this.classes = JSON.parse(newValue);
             } else {
                 this.classes = newValue.split(' ');
@@ -431,7 +428,7 @@ export default class GraphEditor extends HTMLElement {
                 this._mode = 'select';
             }
         } else {
-            console.log(`Wrong mode "${mode}". Allowed are: ["display", "layout", "link", "select"]`);
+            console.warn(`Wrong mode "${mode}". Allowed are: ["display", "layout", "link", "select"]`);
             return;
         }
 
@@ -478,7 +475,7 @@ export default class GraphEditor extends HTMLElement {
                 this._zoomMode = 'both';
             }
         } else {
-            console.log(`Wrong zoom mode "${mode}". Allowed are: ["none", "manual", "automatic", "both"]`);
+            console.warn(`Wrong zoom mode "${mode}". Allowed are: ["none", "manual", "automatic", "both"]`);
             return;
         }
 
@@ -1182,6 +1179,7 @@ export default class GraphEditor extends HTMLElement {
             .classed('text', true)
             .attr('width', (d) => d.width)
             .attr('height', (d) => d.height)
+            .attr('data-click', (d) => d.clickEventKey)
             .each(function (text) {
                 let newText = '';
                 if (text.value != null) {
@@ -1203,6 +1201,7 @@ export default class GraphEditor extends HTMLElement {
                 const referencePoint = (path.node() as SVGPathElement).getPointAtLength(length * text.positionOnLine);
                 text.offsetX = event.x - referencePoint.x;
                 text.offsetY = event.y - referencePoint.y;
+                this.onEdgeTextPositionChange(text, d);
                 this.updateEdgeTextPositions(edgeGroupSelection, d);
             }) as any);
         } else {
@@ -1583,7 +1582,6 @@ export default class GraphEditor extends HTMLElement {
             if (deltaX !== 0 && deltaY !== 0) {
                 // only adjust in one direction
                 if ((angle > 45 && angle < 135) || (angle > 225 && angle < 315)) {
-                    console.log(angle, (angle > 45 && angle < 135), (angle > 225 && angle < 315))
                     targetPoint.y += deltaY;
                 } else {
                     targetPoint.x += deltaX;
@@ -1865,6 +1863,26 @@ export default class GraphEditor extends HTMLElement {
         if (!this.dispatchEvent(ev)) {
             return; // prevent default / event cancelled
         }
+    }
+
+    /**
+     * Callback for creating edgetextpositionchange events.
+     *
+     * @param textComponent The text component that was dragged.
+     * @param edge The edge the text component belongs to.
+     */
+    private onEdgeTextPositionChange(textComponent: TextComponent, edge: Edge) {
+        const ev = new CustomEvent('edgetextpositionchange', {
+            bubbles: true,
+            composed: true,
+            cancelable: false,
+            detail: {
+                eventSource: EventSource.USER_INTERACTION,
+                text: textComponent,
+                edge: edge,
+            }
+        });
+        this.dispatchEvent(ev);
     }
 
     /**

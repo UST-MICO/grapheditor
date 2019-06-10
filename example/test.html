@@ -148,6 +148,7 @@
                 ], texts: [{
                     positionOnLine: 0.2,
                     value: 'Hello World!',
+                    clickEventKey: 'TextClick',
                     width: 30,
                     padding: 5
                 }]});
@@ -176,6 +177,21 @@
                 });
                 graph.addEventListener('edgeclick', function test(event) {
                     console.log(event.type, event.detail);
+                });
+                graph.addEventListener('edgetextpositionchange', function test(event) {
+                    var text = event.detail.text;
+                    if (text.offsetX > 50) {
+                        text.offsetX = 50;
+                    }
+                    if (text.offsetX < -50) {
+                        text.offsetX = -50;
+                    }
+                    if (text.offsetY > 50) {
+                        text.offsetY = 50;
+                    }
+                    if (text.offsetY < -50) {
+                        text.offsetY = -50;
+                    }
                 });
             }
             if (false) {

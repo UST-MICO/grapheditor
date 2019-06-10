@@ -36,6 +36,8 @@ export interface TextComponent {
     value?: string;
     /** The path to the attribute containing the text. */
     attributePath?: string;
+    /** The key used if the user clicked on the text. */
+    clickEventKey?: string;
     /** The width used for wrapping the text. */
     width: number;
     /** The height used for wrapping multiline text. */
