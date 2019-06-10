@@ -17,7 +17,7 @@
 
 import { map, Map } from 'd3';
 import { Node } from './node';
-import { Edge, edgeId } from './edge';
+import { Edge, edgeId, DraggedEdge, Point } from './edge';
 import { DEFAULT_NODE_TEMPLATE } from './templates';
 import { LinkHandle, calculateNormal } from './link-handle';
 
@@ -159,18 +159,37 @@ export class GraphObjectCache {
         return edges;
     }
 
-    getEdgeLinkHandles(edge: Edge) {
-        const source = this.getNode(edge.source);
-        const target = edge.target != null ? this.getNode(edge.target) : edge.currentTarget;
-        const sourceHandles = edge.sourceHandle != null ? [edge.sourceHandle] : this.getNodeTemplateLinkHandles(source.type);
-        let targetHandles;
-        if (edge.targetHandle != null) {
-            targetHandles = [edge.targetHandle];
-        } else if (edge.target != null) {
+    // tslint:disable-next-line:max-line-length
+    getEdgeLinkHandles(edge: Edge|DraggedEdge, _calculateHandlesToUse?: (edge: Edge|DraggedEdge, sourceHandles: LinkHandle[], source: Node, targetHandles: LinkHandle[], target: Node|Point) => {sourceHandles: LinkHandle[], targetHandles: LinkHandle[]}) {
+        let source = this.getNode(edge.source);
+        let sourceHandles = edge.sourceHandle != null ? [edge.sourceHandle] : [{id: 0, x: 0, y: 0, normal: {dx: 0, dy: 0}}];
+        if (source != null) {
+            sourceHandles = this.getNodeTemplateLinkHandles(source.type);
+        } else {
+            console.warn('Attempting to render Edge without valid source.', edge);
+            source = {id: 'UNDEFINED', x: 0, y: 0};
+        }
+        let target = edge.target != null ? this.getNode(edge.target) : null;
+        let targetHandles = edge.targetHandle != null ? [edge.targetHandle] : [{id: 0, x: 0, y: 0, normal: {dx: 0, dy: 0}}];
+        if (target != null) {
             targetHandles = this.getNodeTemplateLinkHandles(target.type);
         } else {
-            // target only null for dragged edges
-            targetHandles = [{id: 0, x: 0, y: 0}];
+            if (edge.currentTarget != null) {
+                target = edge.currentTarget;
+            } else {
+                console.warn('Attempting to render Edge without valid target.', edge);
+                target = {id: 'UNDEFINED', x: 1, y: 1};
+            }
+        }
+        if (_calculateHandlesToUse != null) {
+            // replace template link handle lists with user calculated lists
+            const calculatedHandles = _calculateHandlesToUse(edge, sourceHandles, source, targetHandles, target);
+            if (calculatedHandles != null && calculatedHandles.sourceHandles != null && calculatedHandles.sourceHandles.length > 0) {
+                sourceHandles = calculatedHandles.sourceHandles;
+            }
+            if (calculatedHandles != null && calculatedHandles.targetHandles != null && calculatedHandles.targetHandles.length > 0) {
+                targetHandles = calculatedHandles.targetHandles;
+            }
         }
         const result = this.calculateNearestHandles(sourceHandles, source, targetHandles, target);
         return {

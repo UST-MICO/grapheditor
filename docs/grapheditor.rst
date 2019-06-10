@@ -129,6 +129,32 @@ For text wrapping a ``width`` or ``data-width`` attribute must be supplied.
 To enable multiline text wrapping an additional ``height`` or ``data-height`` attribute must be supplied.
 The wrapping behaviour can be partially controlled with the css attributes ``text-overflow``, ``word-break`` and ``line-height``.
 
+Link handles
+""""""""""""
+
+:js:class:`Link handles <LinkHandle>` get calculated per node template.
+The calculation uses the first element in the dom with the class ``outline`` or the first element in the dom.
+Tha calculation can be influenced with the ``data-link-handles`` attribute set at the dom element.
+
+The following svg elements are supported for link handle calculation:
+
+``circle``
+    ``data-link-handles`` can either be ``all`` or ``minimal``
+
+``rect``
+    ``data-link-handles`` can either be ``all``, ``edges``, ``corners`` or ``minimal``
+
+``polygon``
+    ``data-link-handles`` can either be ``all``, ``edges``, ``corners`` or ``minimal``
+
+``path``
+    ``data-link-handles`` can either be ``all``, ``minimal`` or a number
+
+If ``data-link-handles`` is set to ``edges`` the midpoint between two corners will be added to the link handles.
+If ``data-link-handles`` is set to ``corners`` the corners will be added to the link handles.
+Setting ``all`` implies ``edges`` and ``corners``.
+For path objects the link handles are spaced evenly on the path (``all`` = 8 handles, ``minimal`` = 4 handles).
+
 
 Styling Edges
 ^^^^^^^^^^^^^
@@ -209,6 +235,13 @@ The Text-Component will always try not to clip into nodes.
 This is achieved by checking whether the text is nearer to the start or end of the edge and then checking for overlaps with the node at that endpoint.
 If the text overlaps it gets pushed in the direction towards the center of the edge.
 The :js:attr:`padding <TextComponent.padding>` is used as a buffer zone around the text.
+
+Customising where edges attach to nodes
+"""""""""""""""""""""""""""""""""""""""
+
+:js:class:`Edges <Edge>` will snap to the nearest :js:class:`LinkHandle`.
+:js:class:`Link handles <LinkHandle>` are :ref:`calculated per node template <grapheditor:link handles>`.
+To customize the position where the edge attaches to nodes set the :js:func:`calculateLinkHandlesForEdge <GraphEditor.calculateLinkHandlesForEdge>` callback.
 
 
 Example Styling Usage
@@ -563,5 +596,5 @@ Public API
 ----------
 
 .. js:autoclass:: GraphEditor
-   :members: nodeList, edgeList, mode, zoomMode, setMode, setZoomMode, setNodes, setEdges, addNode, getNode, removeNode, addEdge, getEdge, removeEdge, getEdgesBySource, getEdgesByTarget, completeRender, updateTextElements, zoomToBoundingBox, onCreateDraggedEdge, onDraggedEdgeTargetChange, onDropDraggedEdge, setNodeClass, setEdgeClass
+   :members: nodeList, edgeList, mode, zoomMode, setMode, setZoomMode, setNodes, setEdges, addNode, getNode, removeNode, addEdge, getEdge, removeEdge, getEdgesBySource, getEdgesByTarget, completeRender, updateTextElements, zoomToBoundingBox, onCreateDraggedEdge, onDraggedEdgeTargetChange, onDropDraggedEdge, setNodeClass, setEdgeClass, calculateLinkHandlesForEdge
 

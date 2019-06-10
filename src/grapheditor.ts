@@ -114,6 +114,18 @@ export default class GraphEditor extends HTMLElement {
      */
     public setEdgeClass: (className: string, edge: Edge|DraggedEdge, sourceNode: Node, targetNode?: Node) => boolean;
 
+    /**
+     * Callback to calculate LinkHandle lists used for rendering edges.
+     *
+     * This will NOT affect displayed link handles of nodes!
+     *
+     * Use this callback to customize where an edge attaches to a node.
+     * If more than one link handle is in the result list the nearest one will be used.
+     * If the list is empty or null then the LinkHandles of the template will be used.
+     */
+    // tslint:disable-next-line:max-line-length
+    public calculateLinkHandlesForEdge: (edge: Edge|DraggedEdge, sourceHandles: LinkHandle[], source: Node, targetHandles: LinkHandle[], target: Node|Point) => {sourceHandles: LinkHandle[], targetHandles: LinkHandle[]};
+
     get classes() {
         return this._classes;
     }
@@ -1220,7 +1232,7 @@ export default class GraphEditor extends HTMLElement {
             const singleEdgeSelection = select(this);
             const strokeWidth: number = parseFloat(singleEdgeSelection.style('stroke-width').replace(/px/, ''));
             singleEdgeSelection.attr('d', () => {
-                const handles = self.objectCache.getEdgeLinkHandles(d);
+                const handles = self.objectCache.getEdgeLinkHandles(d, self.calculateLinkHandlesForEdge);
                 const points: { x: number, y: number, [prop: string]: any }[] = [];
                 points.push(handles.sourceCoordinates);
                 if (handles.sourceHandle.normal != null) {

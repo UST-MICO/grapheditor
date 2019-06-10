@@ -92,6 +92,22 @@
                 return false;
             }
 
+            graph.calculateLinkHandlesForEdge = (edge, sourceHandles, source, targetHandles, target) => {
+                var result = {
+                    sourceHandles: [],
+                    targetHandles: [],
+                }
+                targetHandles.forEach(handle => {
+                    result.targetHandles.push({
+                        id: handle.id,
+                        x: handle.x + handle.normal.dx*3,
+                        y: handle.y + handle.normal.dy*3,
+                        normal: handle.normal,
+                    })
+                })
+                return result;
+            }
+
             graph.onCreateDraggedEdge = (edge) => {
                 if (edge.createdFrom == null || edge.createdFrom == undefined) {
                     edge.markerEnd = {template: 'arrow', positionOnLine: 1, lineOffset:4, scale: 0.5, rotate: {relativeAngle: 0}};
@@ -152,6 +168,9 @@
                     width: 30,
                     padding: 5
                 }]});
+
+                // invalid edge
+                // graph.addEdge({source: -1, target: -2});
 
                 graph.removeNode(3);
 

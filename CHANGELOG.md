@@ -18,9 +18,12 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - Add textcomponents to edge to display text in an edge with text wrapping and drag behaviour for manual positioning
 - Add `edgetextpositionchange` events used when the user drags a text component
 - Update d3 to >5.9 to use [join](https://github.com/d3/d3-selection/blob/master/README.md#selection_join)
+- Add `calculateLinkHandlesForEdge` callback to customise where edges attach to nodes
 
 
 ### Fixed
+
+- Grapheditor fails updating graph if an edge with a source or target pointing to a nonexisting node is present
 
 
 ## [0.1.0] - 2019-04-11
