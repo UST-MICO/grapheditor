@@ -778,6 +778,15 @@ export default class GraphEditor extends HTMLElement {
             .html((d) => {
                 return this.objectCache.getNodeTemplate(d.type);
             })
+            .call(nodes => {
+                // fix browsers guessing that <image> tags in template should be <img> tags
+                // this will stay as long as templates don't support svg directly
+                nodes.selectAll('img').each(function () {
+                    let outerHtml = this.outerHTML;
+                    outerHtml = outerHtml.replace(/^<img /, '<image ');
+                    this.outerHTML = outerHtml;
+                });
+            })
             .call(this.updateLinkHandles.bind(this));
     }
 
@@ -921,6 +930,7 @@ export default class GraphEditor extends HTMLElement {
             .call(this.updateNodeClasses.bind(this))
             .call(this.updateNodeHighligts.bind(this))
             .call(this.updateNodeText.bind(this))
+            .call(this.updateNodeDynamicProperties.bind(this))
             .each(function(d) {
                 self.objectCache.setNodeBBox(d.id, this.getBBox());
             });
@@ -947,6 +957,36 @@ export default class GraphEditor extends HTMLElement {
                 newText = newText.toString();
                 wrapText(this as SVGTextElement, newText, force);
             });
+        });
+    }
+
+    /**
+     * Update non text elements of existing nodes.
+     *
+     * @param nodeSelection d3 selection of nodes to update with bound data
+     */
+    private updateNodeDynamicProperties(nodeSelection: any) {
+        const self = this;
+        const updatableAttributes = ['fill', 'stroke'];
+        nodeSelection.each(function (d) {
+            const singleNodeSelection = select(this);
+            // update text
+            singleNodeSelection.selectAll('[data-content]:not(.text)').datum(function () {
+                const attribute = (this as Element).getAttribute('data-content');
+                return self.recursiveAttributeGet(d, attribute);
+            }).text(text => text);
+            // update attributes
+            updatableAttributes.forEach(attr => {
+                singleNodeSelection.selectAll(`[data-${attr}]`).datum(function () {
+                    const attribute = (this as Element).getAttribute(`data-${attr}`);
+                    return self.recursiveAttributeGet(d, attribute);
+                }).attr(attr, value => value);
+            });
+            // update href
+            singleNodeSelection.selectAll('[data-href]').datum(function () {
+                const attribute = (this as Element).getAttribute('data-href');
+                return self.recursiveAttributeGet(d, attribute);
+            }).attr('xlink:href', value => value);
         });
     }
 

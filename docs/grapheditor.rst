@@ -129,6 +129,25 @@ For text wrapping a ``width`` or ``data-width`` attribute must be supplied.
 To enable multiline text wrapping an additional ``height`` or ``data-height`` attribute must be supplied.
 The wrapping behaviour can be partially controlled with the css attributes ``text-overflow``, ``word-break`` and ``line-height``.
 
+Dynamic content
+"""""""""""""""
+
+To have the content of the node template change according to the node data use the following atrributes.
+
+``data-content``
+    Sets the text for this tag. Useful for ``<title>`` and ``<desc>`` tags. See :ref:`text-injection` for text wrapping.
+
+``data-fill``
+    Sets the ``fill`` attribute of the svg node.
+
+``data-stroke``
+    Sets the ``stroke`` attribute of the svg node.
+
+``data-href``
+    Sets the ``href`` attribute of ``<a>`` or ``<image>`` tags.
+
+The content of these custom attributes is the path to the value in the node object where the path segments are seperated by ``.``.
+
 Link handles
 """"""""""""
 

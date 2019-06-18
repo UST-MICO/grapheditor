@@ -53,7 +53,13 @@
                 <text class="text" data-content="type" x="-40" y="15"></text>
             </template>
             <template id="mqtt" template-type="node">
-                <path d="M -40 -15 L 40 -15 L 45 0 L 40 15 L -40 15 L -45 0 z" style="fill:lime;stroke:purple;stroke-width:1"></path>
+                <path class="outline" d="M -40 -15 L 40 -15 L 45 0 L 40 15 L -40 15 L -45 0 z" style="fill:lime;stroke:purple;stroke-width:1"></path>
+                <a data-href="link">
+                    <text class="text" data-content="link" x="-40", y="0"></text>
+                </a>
+                <title data-content="title"></title>
+                <desc data-content="description"></desc>
+                <image x="15" y="-13" width="26" height="26" data-href="image"></image>
             </template>
             <template id="arrow" template-type="marker">
                 <path d="M -9 -5 L 1 0 L -9 5 z" />
@@ -156,7 +162,7 @@
                     {source: 2, target: 3},
                 ]
 
-                graph.addNode({id: 4, title: 'NEU', type: 'mqtt', x: 130, y: -50});
+                graph.addNode({id: 4, title: 'NEU', type: 'mqtt', x: 130, y: -50, description: 'New node', image: 'https://d3js.org/logo.svg', link: 'https://d3js.org'});
                 graph.addEdge({source: 4, target: 1, markers: [
                     {template: 'arrow', positionOnLine: 1, scale: 0.5, rotate: {relativeAngle: 0}, clickEventKey: 'HelloWorld'},
                     {template: 'arrow', positionOnLine: 0.3, scale: 0.5, scaleRelative: true, rotate: {normal: {dx: -1, dy: 0}, relativeAngle: 0}},

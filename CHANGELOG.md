@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - Add `edgetextpositionchange` events used when the user drags a text component
 - Update d3 to >5.9 to use [join](https://github.com/d3/d3-selection/blob/master/README.md#selection_join)
 - Add `calculateLinkHandlesForEdge` callback to customise where edges attach to nodes
+- Allow dynamic propertys with `data-content`, `data-fill`, `data-stroke` and `data-href` attributes
 
 
 ### Fixed
