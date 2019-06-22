@@ -15,6 +15,6 @@ module.exports = merge(common, {
     ],
     devServer: {
         contentBase: path.resolve(__dirname, '_bundles'),
-        port: 9000
+        port: 9009
     },
 });
