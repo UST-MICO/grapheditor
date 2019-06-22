@@ -1,6 +1,6 @@
 {
   "name": "@ustutt/grapheditor-webcomponent",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Webcomponent for displaying and editing graphs.",
   "author": "MICO Authors",
   "main": "./lib/index.js",
