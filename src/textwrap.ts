@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {select} from 'd3';
+import {select} from 'd3-selection';
 
 /**
  * Wrap text in an svg text element.

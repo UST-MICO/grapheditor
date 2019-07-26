@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import { map, Map } from 'd3';
 import { Node } from './node';
 import { Edge, edgeId, DraggedEdge, Point } from './edge';
 import { DEFAULT_NODE_TEMPLATE } from './templates';
@@ -23,50 +22,50 @@ import { LinkHandle, calculateNormal } from './link-handle';
 
 export class GraphObjectCache {
 
-    private nodeTemplates: Map<string>;
-    private nodeTemplateLinkHandles: Map<LinkHandle[]>;
-    private markerTemplates: Map<string>;
-    private nodes: Map<Node>;
-    private nodeBBoxes: Map<DOMRect>;
-    private edges: Map<Edge>;
-    private edgesBySource: Map<Set<Edge>>;
-    private edgesByTarget: Map<Set<Edge>>;
+    private nodeTemplates: Map<string, string>;
+    private nodeTemplateLinkHandles: Map<string, LinkHandle[]>;
+    private markerTemplates: Map<string, string>;
+    private nodes: Map<string, Node>;
+    private nodeBBoxes: Map<string, DOMRect>;
+    private edges: Map<string, Edge>;
+    private edgesBySource: Map<string, Set<Edge>>;
+    private edgesByTarget: Map<string, Set<Edge>>;
 
     constructor() {
-        this.nodeTemplates = map<string>();
-        this.nodeTemplateLinkHandles = map<LinkHandle[]>();
-        this.markerTemplates = map<string>();
-        this.nodes = map<Node>();
-        this.nodeBBoxes = map<DOMRect>();
-        this.edges = map<Edge>();
-        this.edgesBySource = map<Set<Edge>>();
-        this.edgesByTarget = map<Set<Edge>>();
+        this.nodeTemplates = new Map<string, string>();
+        this.nodeTemplateLinkHandles = new Map<string, LinkHandle[]>();
+        this.markerTemplates = new Map<string, string>();
+        this.nodes = new Map<string, Node>();
+        this.nodeBBoxes = new Map<string, DOMRect>();
+        this.edges = new Map<string, Edge>();
+        this.edgesBySource = new Map<string, Set<Edge>>();
+        this.edgesByTarget = new Map<string, Set<Edge>>();
     }
 
     updateNodeTemplateCache(templates: {id: string, innerHTML: string, [prop: string]: any}[]) {
-        const templateMap = map();
+        const templateMap = new Map();
         templates.forEach((template) => templateMap.set(template.id, template.innerHTML));
         this.nodeTemplates = templateMap;
-        this.nodeTemplateLinkHandles = map();
+        this.nodeTemplateLinkHandles = new Map();
     }
 
     updateMarkerTemplateCache(templates: {id: string, innerHTML: string, [prop: string]: any}[]) {
-        const templateMap = map();
+        const templateMap = new Map();
         templates.forEach((template) => templateMap.set(template.id, template.innerHTML));
         this.markerTemplates = templateMap;
     }
 
     updateNodeCache(nodes: Node[]) {
-        const nodeMap = map();
+        const nodeMap = new Map();
         nodes.forEach((node) => nodeMap.set(node.id.toString(), node));
         this.nodes = nodeMap;
-        this.nodeBBoxes = map<DOMRect>();
+        this.nodeBBoxes = new Map<string, DOMRect>();
     }
 
     updateEdgeCache(edges: Edge[]) {
-        const edgeMap = map();
-        const bySourceMap = map();
-        const byTargetMap = map();
+        const edgeMap = new Map();
+        const bySourceMap = new Map();
+        const byTargetMap = new Map();
         edges.forEach((edge) => {
             edgeMap.set(edgeId(edge), edge);
             let bySource: Set<Edge> = bySourceMap.get(edge.source.toString());

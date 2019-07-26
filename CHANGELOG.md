@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Added
 
+- Changed single d3 dependency to dependencys on d3 modules
+
+### Fixed
+
+- Firefox display bugs
+
 
 ## [0.1.1] - 2019-06-22
 
