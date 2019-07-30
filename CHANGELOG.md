@@ -9,11 +9,16 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Added
 
+
+## [0.1.2] - 2019-07-30
+
+### Added
+
 - Changed single d3 dependency to dependencys on d3 modules
 
 ### Fixed
 
-- Firefox display bugs
+- Fixed display bugs when running in Firefox
 
 
 ## [0.1.1] - 2019-06-22
