@@ -9,6 +9,13 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Added
 
+- `originalEdge` in detail of edgedrop for edges that have createdFrom set
+
+### Fixed
+
+- Dragged edge not removed if edge remove event was cancelled
+- Click event key not found in newest firefox
+
 
 ## [0.1.2] - 2019-07-30
 

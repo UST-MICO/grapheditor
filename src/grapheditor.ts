@@ -1802,18 +1802,18 @@ export default class GraphEditor extends HTMLElement {
             if (event.subject.target !== edge.target.toString()) {
                 // only remove original edge if target of dropped edge is different then original target
                 const index = this._edges.findIndex(edge => edgeId(edge) === event.subject.createdFrom);
-                if (!this.onEdgeRemove(this._edges[index], EventSource.USER_INTERACTION)) {
-                    return;
+                if (this.onEdgeRemove(this._edges[index], EventSource.USER_INTERACTION)) {
+                    this._edges.splice(index, 1);
+                    updateEdgeCache = true;
                 }
-                this._edges.splice(index, 1);
-                updateEdgeCache = true;
             }
         }
+
         const index = this.draggedEdges.findIndex(edge => edge.id === event.subject.id);
         this.draggedEdges.splice(index, 1);
         this.updateDraggedEdgeGroups();
         if (event.subject.target != null) {
-            // dragged edge has atarget
+            // dragged edge has a target
             let edge = event.subject;
             delete edge.id;
             if (this.onDropDraggedEdge != null) {
@@ -1868,16 +1868,20 @@ export default class GraphEditor extends HTMLElement {
      * @returns false if event was cancelled
      */
     private onEdgeDrop(edge: DraggedEdge, dropPosition: Point) {
+        const detail: any = {
+            eventSource: EventSource.USER_INTERACTION,
+            edge: edge,
+            sourceNode: this.objectCache.getNode(edge.source),
+            dropPosition: dropPosition,
+        };
+        if (edge.createdFrom != null && edge.createdFrom !== '') {
+            detail.originalEdge = this.objectCache.getEdge(edge.createdFrom);
+        }
         const ev = new CustomEvent('edgedrop', {
             bubbles: true,
             composed: true,
             cancelable: false,
-            detail: {
-                eventSource: EventSource.USER_INTERACTION,
-                edge: edge,
-                sourceNode: this.objectCache.getNode(edge.source),
-                dropPosition: dropPosition,
-            }
+            detail: detail,
         });
         return this.dispatchEvent(ev);
     }
@@ -1909,12 +1913,13 @@ export default class GraphEditor extends HTMLElement {
     private onEdgeClick(edgeDatum) {
         const eventDetail: any = {};
         eventDetail.eventSource = EventSource.USER_INTERACTION;
-        if (event.path != null) {
+        const path = event.composedPath();
+        if (path != null) {
             let i = 0;
             let target;
             // search in event path for data-click attribute
-            while (i === 0 || target != null && i < event.path.length) {
-                target = select(event.path[i]);
+            while (i === 0 || target != null && i < path.length) {
+                target = select(path[i]);
                 const key = target.attr('data-click');
                 if (key != null) {
                     eventDetail.key = key;
@@ -2071,12 +2076,13 @@ export default class GraphEditor extends HTMLElement {
         eventDetail.eventSource = EventSource.USER_INTERACTION,
         eventDetail.sourceEvent = event;
         eventDetail.node = nodeDatum;
-        if (event.path != null) {
+        const path = event.composedPath();
+        if (path != null) {
             let i = 0;
             let target;
             // search in event path for data-click attribute
-            while (i === 0 || target != null && i < event.path.length) {
-                target = select(event.path[i]);
+            while (i === 0 || target != null && i < path.length) {
+                target = select(path[i]);
                 const key = target.attr('data-click');
                 if (key != null) {
                     eventDetail.key = key;
