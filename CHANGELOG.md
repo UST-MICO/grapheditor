@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Added
 
+
+## [0.1.3] - 2019-08-22
+
+### Added
+
 - `originalEdge` in detail of edgedrop for edges that have createdFrom set
 
 ### Fixed
