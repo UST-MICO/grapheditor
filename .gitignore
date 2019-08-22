@@ -5,3 +5,4 @@ lib
 lib-esm
 /node
 .vscode
+Pipfile.lock

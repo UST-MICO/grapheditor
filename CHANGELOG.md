@@ -15,6 +15,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 - Dragged edge not removed if edge remove event was cancelled
 - Click event key not found in newest firefox
+- zoom beahviour set every render
+- `getEdgesByTarget` always returning empty set
+- Fix documentation dependencies to specific versions and add Pipfile for use with pipenv
+- Update dependencies
 
 
 ## [0.1.2] - 2019-07-30

@@ -17,7 +17,7 @@
 
 import { select, event } from 'd3-selection';
 import { scaleLinear } from 'd3-scale';
-import { zoom, zoomIdentity, zoomTransform } from 'd3-zoom';
+import { zoom, zoomIdentity, zoomTransform, ZoomBehavior } from 'd3-zoom';
 import { drag } from 'd3-drag';
 import { line, curveBasis } from 'd3-shape';
 
@@ -55,7 +55,8 @@ export default class GraphEditor extends HTMLElement {
     private root: ShadowRoot;
     private xScale;
     private yScale;
-    private zoom;
+    private zoom: ZoomBehavior<any, any>;
+    private zoomActive: boolean = false;
     private edgeGenerator;
 
     private contentMinHeight = 0;
@@ -333,11 +334,11 @@ export default class GraphEditor extends HTMLElement {
     /**
      * Set edges and redraw graph.
      *
-     * @param nodes new edgeList
+     * @param edges new edgeList
      * @param redraw if the graph should be redrawn
      */
-    public setEdges(nodes: Edge[], redraw: boolean = false) {
-        this.edgeList = nodes;
+    public setEdges(edges: Edge[], redraw: boolean = false) {
+        this.edgeList = edges;
         if (redraw) {
             this.completeRender();
             this.zoomToBoundingBox(false);
@@ -673,8 +674,12 @@ export default class GraphEditor extends HTMLElement {
         const svg = this.getSvg();
 
         if (this._zoomMode === 'manual' || this._zoomMode === 'both') {
-            svg.call(this.zoom);
+            if (!this.zoomActive) {
+                this.zoomActive = true;
+                svg.call(this.zoom);
+            }
         } else {
+            this.zoomActive = false;
             svg.on('.zoom', null);
         }
 

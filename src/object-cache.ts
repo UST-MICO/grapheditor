@@ -79,7 +79,7 @@ export class GraphObjectCache {
                 byTarget = new Set();
                 byTargetMap.set(edge.target.toString(), byTarget);
             }
-            bySource.add(edge);
+            byTarget.add(edge);
         });
         this.edges = edgeMap;
         this.edgesBySource = bySourceMap;
