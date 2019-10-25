@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { select, event } from 'd3-selection';
+import { select, event, Selection } from 'd3-selection';
 import { scaleLinear } from 'd3-scale';
 import { zoom, zoomIdentity, zoomTransform, ZoomBehavior } from 'd3-zoom';
 import { drag } from 'd3-drag';
@@ -23,15 +23,17 @@ import { line, curveBasis } from 'd3-shape';
 
 import { Node } from './node';
 import { Edge, DraggedEdge, edgeId, Point, TextComponent } from './edge';
-import { LinkHandle, handlesForRectangle, handlesForCircle, calculateNormal, handlesForPolygon, handlesForPath } from './link-handle';
+import { LinkHandle } from './link-handle';
 import { GraphObjectCache } from './object-cache';
 import { wrapText } from './textwrap';
 import { calculateAngle, normalizeVector } from './rotation-vector';
+import { TemplateCache } from './templating';
+import { Marker } from './marker';
 
 const SHADOW_DOM_TEMPLATE = `
-<style>
-</style>
-`;
+<slot name="style"></slot>
+<slot name="graph"></slot>
+`.trim();
 
 /**
  * An enum describing the source of the event.
@@ -48,10 +50,10 @@ export enum EventSource {
 
 export default class GraphEditor extends HTMLElement {
 
-    private mutationObserver: MutationObserver;
     private resizeObserver;
 
-    private initialized: boolean;
+    private svg: Selection<SVGSVGElement, any, any, any>;
+
     private root: ShadowRoot;
     private xScale;
     private yScale;
@@ -74,6 +76,7 @@ export default class GraphEditor extends HTMLElement {
     private _mode: string = 'display'; // interaction mode ['display', 'layout', 'link', 'select']
     private _zoomMode: string = 'both'; // ['none', 'manual', 'automatic', 'both']
 
+    private templateCache: TemplateCache;
     private objectCache: GraphObjectCache;
 
     private interactionStateData: {
@@ -83,6 +86,11 @@ export default class GraphEditor extends HTMLElement {
         fromMode?: string,
         [property: string]: any
     } = null;
+
+    /** Private property to determine if the graph can be drawn. */
+    private get initialized(): boolean {
+        return this.svg != null && !this.svg.empty() && this.isConnected;
+    }
 
     private get isInteractive(): boolean {
         return (this._mode !== 'display') && !(this._mode === 'select' && this.interactionStateData.fromMode === 'display');
@@ -135,6 +143,9 @@ export default class GraphEditor extends HTMLElement {
         return this._classes;
     }
 
+    /**
+     * The list of css classes used for dynamic css classes together with `setNodeClass` or `setEdgeClass`.
+     */
     set classes(classes: string[]) {
         if (this._classes != null) {
             this._classes.forEach(className => this.classesToRemove.add(className));
@@ -149,6 +160,11 @@ export default class GraphEditor extends HTMLElement {
         return this._nodes;
     }
 
+    /**
+     * The list of nodes.
+     *
+     * This list should **not** be altered without updating the cache!
+     */
     set nodeList(nodes: Node[]) {
         this._nodes = nodes;
         this.objectCache.updateNodeCache(nodes);
@@ -158,6 +174,11 @@ export default class GraphEditor extends HTMLElement {
         return this._edges;
     }
 
+    /**
+     * The list of edges.
+     *
+     * This list should **not** be altered without updating the cache!
+     */
     set edgeList(edges: Edge[]) {
         this._edges = edges;
         this.objectCache.updateEdgeCache(edges);
@@ -167,6 +188,9 @@ export default class GraphEditor extends HTMLElement {
         return this._mode;
     }
 
+    /**
+     * The interaction mode of the grapheditor.
+     */
     set mode(mode: string) {
         this.setMode(mode.toLowerCase());
         select(this).attr('mode', mode);
@@ -176,6 +200,9 @@ export default class GraphEditor extends HTMLElement {
         return this._zoomMode;
     }
 
+    /**
+     * The zoom mode of the grapheditor.
+     */
     set zoomMode(mode: string) {
         this.setZoomMode(mode.toLowerCase());
         select(this).attr('zoom', mode);
@@ -188,27 +215,30 @@ export default class GraphEditor extends HTMLElement {
         this._nodes = [];
         this._edges = [];
         this.draggedEdges = [];
-        this.objectCache = new GraphObjectCache();
-        this.initialized = false;
+        this.templateCache = new TemplateCache();
+        this.objectCache = new GraphObjectCache(this.templateCache);
         this.edgeGenerator = line<{ x: number; y: number; }>().x((d) => d.x)
             .y((d) => d.y).curve(curveBasis);
 
+        this.xScale = scaleLinear()
+            .domain([10, 0])
+            .range([0, 10]);
+        this.yScale = scaleLinear()
+            .domain([10, 0])
+            .range([0, 10]);
+
         this.root = this.attachShadow({ mode: 'open' });
 
+        // prelaod shadow dom with html
         select(this.root).html(SHADOW_DOM_TEMPLATE);
 
-        this.mutationObserver = new MutationObserver((mutations) => {
-            this.updateTemplates();
-            this.completeRender(true);
-            this.zoomToBoundingBox(false);
+        // monitor graph slot
+        const self = this;
+        select(this.root).select('slot[name="graph"]').on('slotchange', function () {
+            self.graphSlotChanged(this as HTMLSlotElement);
         });
 
-        this.mutationObserver.observe(this, {
-            childList: true,
-            characterData: false,
-            subtree: false,
-        });
-
+        // update size if window was resized
         if ((window as any).ResizeObserver != null) {
             this.resizeObserver = new (window as any).ResizeObserver((entries) => {
                 this.updateSize();
@@ -220,17 +250,30 @@ export default class GraphEditor extends HTMLElement {
         if (!this.isConnected) {
             return;
         }
-        // this.initialize();
+
+        // bind resize observer to parent node
+        if (this.resizeObserver != null) {
+            this.resizeObserver.disconnect();
+            this.resizeObserver.observe(this.parentElement);
+        }
+
+        // initial render after connect
         this.completeRender();
         this.zoomToBoundingBox(false);
-
-        if (this.resizeObserver != null) {
-            this.resizeObserver.observe(this.getSvg().node());
-        }
     }
 
+    /**
+     * Get all observed attributes of this webcomponent.
+     */
     static get observedAttributes() { return ['nodes', 'edges', 'classes', 'mode', 'zoom']; }
 
+    /**
+     * Callback when an attribute changed in html dom.
+     *
+     * @param name name of the attribute that changed
+     * @param oldValue old value
+     * @param newValue new value
+     */
     attributeChangedCallback(name, oldValue, newValue: string) {
         if (name === 'nodes') {
             newValue = newValue.replace(/'/g, '"');
@@ -254,13 +297,15 @@ export default class GraphEditor extends HTMLElement {
         if (name === 'mode') {
             this.setMode(newValue.toLowerCase());
         }
-        this.initialize();
         this.completeRender();
         this.zoomToBoundingBox(false);
     }
 
     /**
      * Set nodes and redraw graph.
+     *
+     * The node list should **not** be updated outside the graph without calling `setNodes` again!
+     * Use `addNode` and `removeNode` to update the list instead.
      *
      * @param nodes new nodeList
      * @param redraw if graph should be redrawn
@@ -334,6 +379,9 @@ export default class GraphEditor extends HTMLElement {
     /**
      * Set edges and redraw graph.
      *
+     * The edge list should **not** be updated outside the graph without calling `setEdges` again!
+     * Use `addEdge` and `removeEdge` to update the list instead.
+     *
      * @param edges new edgeList
      * @param redraw if the graph should be redrawn
      */
@@ -365,6 +413,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param edgeId the id of the edge
      */
+    // tslint:disable-next-line:no-shadowed-variable
     public getEdge(edgeId: number|string): Edge {
         return this.objectCache.getEdge(edgeId);
     }
@@ -515,56 +564,87 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
-     * Initialize the shadow dom with a drawing svg.
+     * Determine the svg element to be used to render the graph.
+     *
+     * @param slot the slot that changed
      */
-    private initialize() {
-        if (!this.initialized) {
-            this.initialized = true;
-
-            const svg = select(this.root).append('svg')
-                .attr('class', 'graph-editor')
-                .attr('width', '100%')
-                .attr('height', '100%');
-            svg.append('defs');
-
-            this.xScale = scaleLinear()
-                .domain([10, 0])
-                .range([0, 10]);
-            this.yScale = scaleLinear()
-                .domain([10, 0])
-                .range([0, 10]);
-
-            // setup graph groups //////////////////////////////////////////////
-
-            const graph = svg.append('g')
-                .attr('class', 'zoom-group');
-
-            this.zoom = zoom().on('zoom', (d) => {
-                graph.attr('transform', event.transform);
-            });
-
-            graph.append('g')
-                .attr('class', 'edges');
-
-            graph.append('g')
-                .attr('class', 'nodes');
-
-            this.updateSize();
+    private graphSlotChanged(slot: HTMLSlotElement) {
+        let svg;
+        if (this.svg != null && !this.svg.empty()) {
+            const oldSvg = this.svg.node();
+            svg = slot.assignedElements().find(el => el === oldSvg);
+        }
+        if (svg == null) {
+            svg = slot.assignedElements().find(el => el.tagName === 'svg');
+        }
+        if (svg == null) {
+            // TODO use fallback svg here
+            console.error('No svg provided for the "graph" slot!');
+            return;
+        }
+        if (this.svg == null || this.svg.empty() || svg !== this.svg.node()) {
+            // the svg changed!
+            this.initialize(svg);
         }
     }
 
     /**
-     * Get the svg containing the graph as a d3 selection.
+     * Initialize the provided svg.
+     *
+     * Setup group for zooming and groups for nodes and edges.
+     * Add a missing `defs` tag.
      */
-    private getSvg() {
-        return select(this.root).select('svg.graph-editor');
+    private initialize(svg) {
+        const oldSvg = this.svg;
+        const newSvg = select<SVGSVGElement, unknown>(svg);
+
+        newSvg.classed('graph-editor', true)
+            .attr('width', '100%')
+            .attr('height', '100%');
+
+        // add defs tag if missing
+        if (newSvg.select('defs').empty()) {
+            newSvg.append('defs');
+        }
+
+        // setup graph groups //////////////////////////////////////////////
+        let graph = newSvg.select('defs ~ g');
+        if (graph.empty()) {
+            graph = newSvg.append('g');
+        }
+        graph.classed('zoom-group', true);
+
+        const newZoom = zoom().on('zoom', (d) => {
+            graph.attr('transform', event.transform);
+        });
+
+        if (graph.select('g.edges').empty()) {
+            graph.append('g')
+                .attr('class', 'edges');
+        }
+
+        if (graph.select('g.nodes').empty()) {
+            graph.append('g')
+                .attr('class', 'nodes');
+        }
+
+        // TODO cleanup old svg?
+        if (oldSvg != null && !oldSvg.empty()) {
+            console.warn('Switching to new SVG, old SVG needs to be disposed manually!');
+        }
+
+        this.svg = newSvg;
+        this.zoom = newZoom;
+
+        this.updateTemplates();
+        this.updateSize();
     }
 
     /**
      * Calculate and store the size of the svg.
      */
     private updateSize() {
-        const svg = this.getSvg();
+        const svg = this.svg;
         this.contentMaxHeight = parseInt(svg.style('height').replace('px', ''), 10);
         this.contentMaxWidth = parseInt(svg.style('width').replace('px', ''), 10);
 
@@ -590,7 +670,7 @@ export default class GraphEditor extends HTMLElement {
             return;
         }
 
-        const svg = this.getSvg();
+        const svg = this.svg;
 
         // reset zoom
         svg.call(this.zoom.transform, zoomIdentity);
@@ -612,66 +692,65 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
-     * Get templates in this dom-node and render them into defs node of svg or style tags.
+     * Update the template cache from the provided svg or the current svg.
      *
-     * @param nodeTemplateList list of node templates to use instead of html templates
-     * @param styleTemplateList list of style templates to use instead of html templates (not wrapped in style tag!)
+     * This method will add missing `default` and `default-marker` templates before updating the template cache.
      */
-    public updateTemplates = (nodeTemplateList?: { id: string, innerHTML: string, [prop: string]: any }[],
-        styleTemplateList?: { id?: string, innerHTML: string, [prop: string]: any }[],
-        markerTemplateList?: { id: string, innerHTML: string, [prop: string]: any }[]) => {
-        const templates = select(this).selectAll('template');
-        const stylehtml = styleTemplateList != null ? styleTemplateList : [];
-        const nodehtml = nodeTemplateList != null ? nodeTemplateList : [];
-        const markerhtml = markerTemplateList != null ? markerTemplateList : [];
-
-        if (styleTemplateList == null) {
-            const styleTemplates = templates.filter(function () {
-                return (this as Element).getAttribute('template-type') === 'style';
-            });
-            styleTemplates.each(function () {
-                // extract style attribute from template
-                select((this as any).content).selectAll('style').each(function () {
-                    stylehtml.push(this as any);
-                });
-            });
+    public updateTemplates(svg?: Selection<SVGSVGElement, any, any, any>) {
+        if (svg != null) {
+            this.addDefaultTemplates(svg);
+            this.templateCache.updateTemplateCache(svg);
+        } else {
+            this.addDefaultTemplates(this.svg);
+            this.templateCache.updateTemplateCache(this.svg);
         }
-        const styles = select(this.root).selectAll('style')
-            .data(stylehtml)
-            .join('style')
-            .html((d) => d.innerHTML);
+    }
 
-        if (nodeTemplateList == null) {
-            const nodeTemplates = templates.filter(function () {
-                return (this as Element).getAttribute('template-type') === 'node';
-            });
-            nodeTemplates.each(function () {
-                nodehtml.push(this as any);
-            });
+    /**
+     * Add missing default templates to the `defs` tag.
+     *
+     * This method will be automatically called if the svg changes.
+     * If templates are changed call this method and make a `completeRender(true)`
+     * to render the graph with the new templates.
+     *
+     * @param svg the svg to update
+     */
+    public addDefaultTemplates(svg: Selection<SVGSVGElement, any, any, any>) {
+        const defaultNodeTemplate = svg.select('defs > g[data-template-type="node"]#default');
+        if (defaultNodeTemplate == null || defaultNodeTemplate.empty()) {
+            svg.select('defs').append('g')
+                .attr('id', 'default')
+                .attr('data-template-type', 'node')
+              .append('circle')
+                .attr('cx', 0)
+                .attr('cy', 0)
+                .attr('r', 10)
+                .attr('data-link-handles', 'minimal');
         }
-
-        this.objectCache.updateNodeTemplateCache(nodehtml);
-
-        if (markerTemplateList == null) {
-            const markerTemplates = templates.filter(function () {
-                return (this as Element).getAttribute('template-type') === 'marker';
-            });
-            markerTemplates.each(function () {
-                markerhtml.push(this as any);
-            });
+        const defaultMarkerTemplate = svg.select('defs > g[data-template-type="marker"]#default-marker');
+        if (defaultMarkerTemplate == null || defaultMarkerTemplate.empty()) {
+            svg.select('defs').append('g')
+                .attr('id', 'default-marker')
+                .attr('data-template-type', 'marker')
+              .append('circle')
+                .attr('fill', 'black')
+                .attr('cx', 0)
+                .attr('cy', 0)
+                .attr('r', 3);
         }
-
-        this.objectCache.updateMarkerTemplateCache(markerhtml);
     }
 
     /**
      * Render all changes of the data to the graph.
+     *
+     * @param forceUpdateTemplates set to true if a template was changed,
+     *      forces an entire re render by deleting all nodes and edges before adding them again
      */
-    public completeRender(updateTemplates: boolean = false) {
+    public completeRender(forceUpdateTemplates: boolean = false) {
         if (!this.initialized || !this.isConnected) {
             return;
         }
-        const svg = this.getSvg();
+        const svg = this.svg;
 
         if (this._zoomMode === 'manual' || this._zoomMode === 'both') {
             if (!this.zoomActive) {
@@ -688,18 +767,17 @@ export default class GraphEditor extends HTMLElement {
         const graph = svg.select('g.zoom-group');
 
         // update nodes ////////////////////////////////////////////////////////
-        if (updateTemplates) {
+        if (forceUpdateTemplates) {
             graph.select('.nodes').selectAll('g.node').remove();
         }
 
         const nodeSelection = graph.select('.nodes')
-            .selectAll<any, Node>('g.node')
+            .selectAll<SVGGElement, Node>('g.node')
             .data<Node>(this._nodes, (d: Node) => d.id.toString())
             .join(
                 enter => enter.append('g')
                     .classed('node', true)
                     .attr('id', (d) => d.id)
-                    .call(this.createNodes.bind(this))
             )
             .call(this.updateNodes.bind(this))
             .call(this.updateNodePositions.bind(this))
@@ -708,9 +786,9 @@ export default class GraphEditor extends HTMLElement {
             .on('click', (d) => { this.onNodeClick.bind(this)(d); });
 
         if (this.isInteractive) {
-            nodeSelection.call(drag().on('drag', (d) => {
-                (d as Node).x = event.x;
-                (d as Node).y = event.y;
+            nodeSelection.call(drag<SVGGElement, Node>().on('drag', (d) => {
+                d.x = event.x;
+                d.y = event.y;
                 this.onNodePositionChange.bind(this)(d);
                 this.updateGraphPositions.bind(this)();
             }) as any);
@@ -719,27 +797,29 @@ export default class GraphEditor extends HTMLElement {
         }
 
         // update edges ////////////////////////////////////////////////////////
-        if (updateTemplates) {
+        if (forceUpdateTemplates) {
             graph.select('.edges').selectAll('g.edge-group:not(.dragged)').remove();
         }
         const self = this;
-        const edgeGroupSelection = graph.select('.edges')
-            .selectAll('g.edge-group:not(.dragged)')
-            .data(this._edges, edgeId)
+        graph.select('.edges')
+            .selectAll<SVGGElement, Edge>('g.edge-group:not(.dragged)')
+            .data<Edge>(this._edges, edgeId)
             .join(
                 enter => enter.append('g')
                     .attr('id', (d) => edgeId(d))
                     .classed('edge-group', true)
-                    .each(function () {
+                    .each(function (d) {
                         const edgeGroup = select(this);
                         edgeGroup.append('path')
                             .classed('edge', true)
                             .attr('fill', 'none');
 
-                        edgeGroup.append('circle')
+                        edgeGroup.append<SVGGElement>('g')
                             .classed('link-handle', true)
-                            .attr('fill', 'black')
-                            .attr('r', 3);
+                            .each(function () {
+                                const templateId = self.templateCache.getMarkerTemplateId('default-marker');
+                                self.updateContentTemplate(select(this), templateId, 'marker');
+                            });
                     })
             )
             .classed('ghost', (d) => {
@@ -754,124 +834,58 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
-     * Updates and reflows all text elements in nodes.
+     * Updates and reflows all text elements in nodes and edges.
      *
      * @param force force text rewrap even when text has not changed
-     * (useful if node classes can change text attributes like size)
+     *      (useful if node classes can change text attributes like size)
      */
     public updateTextElements(force: boolean = false) {
-        const svg = this.getSvg();
+        const svg = this.svg;
         const graph = svg.select('g.zoom-group');
 
         const self = this;
 
-        const nodeSelection = graph.select('.nodes')
-            .selectAll<any, Node>('g.node')
-            .data<Node>(this._nodes, (d: Node) => d.id.toString());
-        this.updateNodeText(nodeSelection, force);
+        graph.select('.nodes')
+            .selectAll<SVGGElement, Node>('g.node')
+            .data<Node>(this._nodes, (d: Node) => d.id.toString())
+            .call(this.updateNodeText.bind(this), force);
 
-        const edgeGroupSelection = graph.select('.edges')
-            .selectAll('g.edge-group:not(.dragged)')
-            .data(this._edges, edgeId).each(function (d) {
+        graph.select('.edges')
+            .selectAll<SVGGElement, Edge>('g.edge-group:not(.dragged)')
+            .data<Edge>(this._edges, edgeId).each(function (d) {
                 self.updateEdgeText(select(this), d, force);
             });
     }
 
-
     /**
-     * Add nodes to graph.
+     * Update the content template of a `SVGGElement` to the new template id.
      *
-     * @param nodeSelection d3 selection of nodes to add with bound data
+     * If the `SVGGElement` already uses the template the content is not touched.
+     *
+     * @param element the lement to update the content
+     * @param templateId the new template ID
+     * @param templateType the template type to use
      */
-    private createNodes(nodeSelection) {
-        nodeSelection
-            .attr('data-template', (d) => this.objectCache.getNodeTemplateId(d.type))
-            .html((d) => {
-                return this.objectCache.getNodeTemplate(d.type);
-            })
-            .call(nodes => {
-                // fix browsers guessing that <image> tags in template should be <img> tags
-                // this will stay as long as templates don't support svg directly
-                nodes.selectAll('img').each(function () {
-                    let outerHtml = this.outerHTML;
-                    outerHtml = outerHtml.replace(/^<img /, '<image ');
-                    this.outerHTML = outerHtml;
-                });
-            })
-            .call(this.updateLinkHandles.bind(this));
-    }
-
-    /**
-     * Check nodes of nodeSelection if used templates don't have
-     * calculated link handle positions.
-     *
-     * If true the link handle positions ere calculated using the first child
-     * or the first element with the class 'outline'.
-     *
-     * @param nodeSelection d3 selection of nodes
-     */
-    private updateLinkHandles(nodeSelection) {
-        const self = this;
-        nodeSelection.each(function (d) {
-            if (self.objectCache.getNodeTemplateLinkHandles(d.type) != null) {
-                return;
-            }
-            let backgroundSelection = select(this).select('.outline');
-            if (backgroundSelection.empty()) {
-                backgroundSelection = select(this).select(':first-child');
-            }
-            if (backgroundSelection.empty()) {
-                self.objectCache.setNodeTemplateLinkHandles(d.type, [{
-                    id: 1,
-                    x: 0,
-                    y: 0,
-                }]);
-                return;
-            }
-            let linkHandles: string|LinkHandle[] = backgroundSelection.attr('data-link-handles');
-            if (linkHandles == null) {
-                linkHandles = 'all';
-            } else {
-                if ((linkHandles as string).startsWith('[')) {
-                    try {
-                        linkHandles = JSON.parse(linkHandles as string) as LinkHandle[];
-                        linkHandles.forEach((element, index) => element.id = index);
-                        linkHandles.forEach(calculateNormal);
-                        self.objectCache.setNodeTemplateLinkHandles(d.type, linkHandles);
-                        return;
-                    } catch (error) {
-                        linkHandles = 'all';
-                    }
-                }
-                linkHandles = (linkHandles as string).toLowerCase();
-            }
-            if ((backgroundSelection.node() as Element).tagName === 'circle') {
-                const radius = parseFloat(backgroundSelection.attr('r'));
-                const handles: LinkHandle[] = handlesForCircle(radius, linkHandles);
-                self.objectCache.setNodeTemplateLinkHandles(d.type, handles);
-            } else if ((backgroundSelection.node() as Element).tagName === 'rect') {
-                const x = parseFloat(backgroundSelection.attr('x'));
-                const y = parseFloat(backgroundSelection.attr('y'));
-                const width = parseFloat(backgroundSelection.attr('width'));
-                const height = parseFloat(backgroundSelection.attr('height'));
-                if (!isNaN(x + y + width + height)) {
-                    const handles: LinkHandle[] = handlesForRectangle(x, y, width, height, linkHandles);
-                    self.objectCache.setNodeTemplateLinkHandles(d.type, handles);
-                }
-            } else if ((backgroundSelection.node() as Element).tagName === 'polygon') {
-                const points: Point[] = [];
-                for (const point of backgroundSelection.property('points')) {
-                    points.push(point);
-                }
-                const handles: LinkHandle[] = handlesForPolygon(points, linkHandles);
-                self.objectCache.setNodeTemplateLinkHandles(d.type, handles);
-            } else if ((backgroundSelection.node() as Element).tagName === 'path') {
-                const handles: LinkHandle[] = handlesForPath(backgroundSelection.node() as SVGPathElement, linkHandles);
-                self.objectCache.setNodeTemplateLinkHandles(d.type, handles);
-            } else {
-                self.objectCache.setNodeTemplateLinkHandles(d.type, []);
-            }
+    private updateContentTemplate(element: Selection<SVGGElement, unknown, any, unknown>, templateId: string, templateType: string) {
+        const oldTemplateID = element.attr('data-template');
+        if (oldTemplateID != null && oldTemplateID === templateId) {
+            return; // already using right template
+        }
+        element.selectAll().remove(); // clear old content
+        let newTemplate: Selection<SVGGElement, unknown, any, unknown>;
+        if (templateType === 'node') {
+            newTemplate = this.templateCache.getNodeTemplate(templateId);
+        } else if (templateType === 'marker') {
+            newTemplate = this.templateCache.getMarkerTemplate(templateId);
+        } else {
+            console.warn('Tried to use unsupported template type: ' + templateType);
+        }
+        // copy template content into element
+        newTemplate.selectAll<SVGGeometryElement, unknown>('*').each(function () {
+            element.node().appendChild(this.cloneNode(true));
         });
+        // set template id used by the element to new id
+        element.attr('data-template', templateId);
     }
 
     /**
@@ -879,53 +893,54 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param nodeSelection d3 selection of nodes to update with bound data
      */
-    private updateNodes(nodeSelection) {
+    private updateNodes(nodeSelection: Selection<SVGGElement, Node, any, unknown>) {
         if (nodeSelection == null) {
-            const svg = this.getSvg();
+            const svg = this.svg;
 
             const graph = svg.select('g.zoom-group');
             nodeSelection = graph.select('.nodes')
-                .selectAll<any, Node>('g.node')
+                .selectAll<SVGGElement, Node>('g.node')
                 .data<Node>(this._nodes, (d: Node) => d.id.toString());
         }
 
         // alias for this for use in closures
         const self = this;
 
+        // update templates
         nodeSelection.each(function (d) {
-            const node = select(this);
-            const templateType = node.attr('data-template');
-            if (templateType !== self.objectCache.getNodeTemplateId(d.type)) {
-                node.selectAll().remove();
-                self.createNodes(node);
-            }
+            const templateId = self.templateCache.getNodeTemplateId(d.type);
+            self.updateContentTemplate(select(this), templateId, 'node');
         });
 
         // update link handles for node
         nodeSelection.each(function (node) {
-            const handles = self.objectCache.getNodeTemplateLinkHandles(node.type);
+            const handles = self.templateCache.getNodeTemplateLinkHandles(node.type);
             if (handles == null) {
                 return;
             }
-            const handleSelection = select(this).selectAll<any, LinkHandle>('circle.link-handle')
+            const handleSelection = select(this).selectAll<SVGGElement, LinkHandle>('g.link-handle')
                 .data<LinkHandle>(handles as any, (handle: LinkHandle) => handle.id.toString())
                 .join(
-                    enter => enter.append('circle')
+                    enter => enter.append('g')
                         .classed('link-handle', true)
-                )
-                .attr('fill', 'black')
-                .attr('cx', (d) => d.x)
-                .attr('cy', (d) => d.y)
-                .attr('r', 3);
+                        .attr('transform', (d) => {
+                            const x = d.x != null ? d.x : 0;
+                            const y = d.y != null ? d.y : 0;
+                            return `translate(${x},${y})`;
+                        })
+                ).each(function (d) {
+                    const templateId = self.templateCache.getMarkerTemplateId('default-marker');
+                    self.updateContentTemplate(select(this), templateId, 'marker');
+                });
 
             // allow edge drag from link handles
             if (self.isInteractive) {
                 handleSelection.call(
-                    drag()
+                    drag<SVGGElement, LinkHandle, DraggedEdge>()
                         .subject((handle) => {
                             return self.createDraggedEdge(node);
                         })
-                        .container(() => self.getSvg().select('g.zoom-group').select('g.edges').node() as any)
+                        .container(() => self.svg.select('g.zoom-group').select('g.edges').node() as any)
                         .on('drag', () => {
                             self.updateDraggedEdge();
                             self.updateDraggedEdgeGroups();
@@ -952,11 +967,11 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param nodeSelection d3 selection of nodes to update with bound data
      */
-    private updateNodeText(nodeSelection: any, force: boolean= false) {
+    private updateNodeText(nodeSelection: Selection<SVGGElement, Node, any, unknown>, force: boolean= false) {
         const self = this;
         nodeSelection.each(function (d) {
             const singleNodeSelection = select(this);
-            const textSelection = singleNodeSelection.selectAll('.text').datum(function () {
+            const textSelection = singleNodeSelection.selectAll<SVGTextElement, unknown>('text.text').datum(function () {
                 return (this as Element).getAttribute('data-content');
             });
             textSelection.each(function (attr) {
@@ -966,7 +981,7 @@ export default class GraphEditor extends HTMLElement {
                 }
                 // make sure it is a string
                 newText = newText.toString();
-                wrapText(this as SVGTextElement, newText, force);
+                wrapText(this, newText, force);
             });
         });
     }
@@ -976,7 +991,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param nodeSelection d3 selection of nodes to update with bound data
      */
-    private updateNodeDynamicProperties(nodeSelection: any) {
+    private updateNodeDynamicProperties(nodeSelection: Selection<SVGGElement, Node, any, unknown>) {
         const self = this;
         const updatableAttributes = ['fill', 'stroke'];
         nodeSelection.each(function (d) {
@@ -1036,7 +1051,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param nodeSelection d3 selection of nodes to update with bound data
      */
-    private updateNodeClasses(nodeSelection) {
+    private updateNodeClasses(nodeSelection: Selection<SVGGElement, Node, any, unknown>) {
         if (this.classesToRemove != null) {
             this.classesToRemove.forEach((className) => {
                 nodeSelection.classed(className, (d) => {
@@ -1062,7 +1077,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param nodeSelection d3 selection of nodes to update with bound data
      */
-    private updateNodePositions(nodeSelection) {
+    private updateNodePositions(nodeSelection: Selection<SVGGElement, Node, any, unknown>) {
         nodeSelection.attr('transform', (d) => {
             const x = d.x != null ? d.x : 0;
             const y = d.y != null ? d.y : 0;
@@ -1075,20 +1090,21 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param edgeGroupSelection d3 selection of edgeGroups
      */
-    private updateEdgeGroups(edgeGroupSelection) {
+    private updateEdgeGroups(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>) {
         if (edgeGroupSelection == null) {
-            const svg = this.getSvg();
+            const svg = this.svg;
 
             const graph = svg.select('g.zoom-group');
 
             edgeGroupSelection = graph.select('.edges')
-                .selectAll('g.edge-group:not(.dragged)')
-                .data(this._edges, edgeId);
+                .selectAll<SVGGElement, Edge>('g.edge-group:not(.dragged)')
+                .data<Edge>(this._edges, edgeId);
         }
         const self = this;
-        edgeGroupSelection.each(function (d) {
-            self.updateEdgeGroup(select(this), d);
-        }, this)
+        edgeGroupSelection
+            .each(function (d) {
+                self.updateEdgeGroup(select(this), d);
+            })
             .call(this.updateEdgeGroupClasses.bind(this))
             .call(this.updateEdgeHighligts.bind(this));
     }
@@ -1098,12 +1114,12 @@ export default class GraphEditor extends HTMLElement {
      * Update draggededge groups.
      */
     private updateDraggedEdgeGroups() {
-        const svg = this.getSvg();
+        const svg = this.svg;
 
         const graph = svg.select('g.zoom-group');
-        const edgeGroupSelection = graph.select('.edges')
-            .selectAll('g.edge-group.dragged')
-            .data(this.draggedEdges, edgeId)
+        graph.select('.edges')
+            .selectAll<SVGGElement, DraggedEdge>('g.edge-group.dragged')
+            .data<DraggedEdge>(this.draggedEdges, edgeId)
             .join(
                 enter => enter.append('g')
                     .attr('id', (d) => edgeId(d))
@@ -1125,7 +1141,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param edgeGroupSelection d3 selection
      */
-    private updateEdgeGroupClasses(edgeGroupSelection) {
+    private updateEdgeGroupClasses(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>) {
         if (this.classesToRemove != null) {
             this.classesToRemove.forEach((className) => {
                 edgeGroupSelection.classed(className, (d) => {
@@ -1151,14 +1167,9 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param edgeGroupSelection d3 selection
      */
-    private updateEdgePositions(edgeGroupSelection) {
-        if (edgeGroupSelection == null) {
-            const svg = this.getSvg();
-
-            const graph = svg.select('g.zoom-group');
-        }
+    private updateEdgePositions(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>) {
         const self = this;
-        edgeGroupSelection.select('path.edge')
+        edgeGroupSelection.select<SVGPathElement>('path.edge')
             .call(this.updateEdgePath.bind(this));
         edgeGroupSelection.each(function (d) {
             self.updateEdgeTextPositions(select(this), d);
@@ -1169,14 +1180,16 @@ export default class GraphEditor extends HTMLElement {
         }).each(function (d) {
             self.updateEndMarkerPosition(select(this), d);
         }).each(function () {
+            // update link handle position
             const edgeGroup = select(this);
-            const path = edgeGroup.select('path.edge');
-            const length = (path.node() as SVGPathElement).getTotalLength();
+            const path = edgeGroup.select<SVGPathElement>('path.edge');
+            const length = path.node().getTotalLength();
             const linkMarkerOffset = 10;
             const linkHandlePos = (path.node() as SVGPathElement).getPointAtLength(length - linkMarkerOffset);
-            edgeGroup.select('circle.link-handle')
-                .attr('cx', linkHandlePos.x)
-                .attr('cy', linkHandlePos.y)
+            edgeGroup.select<SVGGElement>('g.link-handle')
+                .attr('transform', () => {
+                    return `translate(${linkHandlePos.x},${linkHandlePos.y})`;
+                })
                 .raise();
         });
     }
@@ -1187,36 +1200,38 @@ export default class GraphEditor extends HTMLElement {
      * @param edgeGroupSelection d3 selection of single edge group
      * @param d edge datum
      */
-    private updateEdgeGroup(edgeGroupSelection, d) {
-        const pathSelection = edgeGroupSelection.select('path.edge:not(.dragged)').datum(d);
+    private updateEdgeGroup(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, d: Edge) {
+        const pathSelection = edgeGroupSelection.select<SVGPathElement>('path.edge:not(.dragged)').datum(d);
         pathSelection.attr('stroke', 'black');
         this.updateEndMarker(edgeGroupSelection, d);
-        const markerSelection = edgeGroupSelection.selectAll('g.marker:not(.marker-end)')
+        const self = this;
+        edgeGroupSelection.selectAll<SVGGElement, Marker>('g.marker:not(.marker-end)')
             .data(d.markers != null ? d.markers : [])
             .join(
                 enter => enter.append('g')
                     .classed('marker', true)
-                    .call(this.createMarker.bind(this))
             )
             .call(this.updateMarker.bind(this));
 
         this.updateEdgeText(edgeGroupSelection, d);
 
         if (this.isInteractive) {
-            edgeGroupSelection.select('circle.link-handle').call(drag()
-                .subject(() => {
-                    return this.createDraggedEdgeFromExistingEdge(d);
-                })
-                .container(() => this.getSvg().select('g.zoom-group').select('g.edges').node() as any)
-                .on('start', () => this.completeRender())
-                .on('drag', () => {
-                    this.updateDraggedEdge();
-                    this.updateDraggedEdgeGroups();
-                })
-                .on('end', this.dropDraggedEdge.bind(this))
-            );
+            edgeGroupSelection.select<SVGGElement>('g.link-handle')
+                .datum<Edge>(d)
+                .call(drag<SVGGElement, Edge, DraggedEdge>()
+                    .subject((edge) => {
+                        return this.createDraggedEdgeFromExistingEdge(edge);
+                    })
+                    .container(() => this.svg.select('g.zoom-group').select('g.edges').node() as any)
+                    .on('start', () => this.completeRender())
+                    .on('drag', () => {
+                        this.updateDraggedEdge();
+                        this.updateDraggedEdgeGroups();
+                    })
+                    .on('end', this.dropDraggedEdge.bind(this))
+                );
         } else {
-            edgeGroupSelection.select('circle.link-handle').on('.drag', null);
+            edgeGroupSelection.select('g.link-handle').on('.drag', null);
         }
     }
 
@@ -1227,7 +1242,7 @@ export default class GraphEditor extends HTMLElement {
      * @param d edge datum
      * @param force force text to re-wrap
      */
-    private updateEdgeText(edgeGroupSelection: any, d: any, force: boolean= false) {
+    private updateEdgeText(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, d: Edge, force: boolean= false) {
         const self = this;
         const textSelection = edgeGroupSelection.selectAll('text')
             .data(d.texts != null ? d.texts : [])
@@ -1236,17 +1251,17 @@ export default class GraphEditor extends HTMLElement {
                     .attr('x', 0)
                     .attr('y', 0)
             )
-            .attr('class', (d) => d.class)
+            .attr('class', (t) => t.class)
             .classed('text', true)
-            .attr('width', (d) => d.width)
-            .attr('height', (d) => d.height)
-            .attr('data-click', (d) => d.clickEventKey)
+            .attr('width', (t) => t.width)
+            .attr('height', (t) => t.height)
+            .attr('data-click', (t) => t.clickEventKey)
             .each(function (text) {
                 let newText = '';
                 if (text.value != null) {
                     newText = text.value;
                 } else {
-                    newText = self.recursiveAttributeGet(d, text.attribute);
+                    newText = self.recursiveAttributeGet(d, text.attributePath);
                 }
                 if (newText == null) {
                     newText = '';
@@ -1275,7 +1290,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param edgeSelection d3 selection of edges to update with bound data
      */
-    private updateEdgePath(edgeSelection) {
+    private updateEdgePath(edgeSelection: Selection<SVGPathElement, Edge, any, unknown>) {
         const self = this;
         edgeSelection.each(function (d) {
             const singleEdgeSelection = select(this);
@@ -1314,34 +1329,17 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
-     * Create a new edge marker in edgeGroup.
-     *
-     * @param markerSelection d3 selection
-     */
-    private createMarker = (markerSelection) => {
-        markerSelection
-            .attr('data-template', (d) => d.template)
-            .html((d) => {
-                return this.objectCache.getMarkerTemplate(d.template);
-            });
-    }
-
-    /**
      * Update existing edge marker.
      *
      * @param markerSelection d3 selection
      */
-    private updateMarker(markerSelection) {
+    private updateMarker(markerSelection: Selection<SVGGElement, Marker, any, unknown>) {
         const self = this;
         markerSelection
             .attr('data-click', (d) => d.clickEventKey)
-            .each(function (d) {
-                const marker = select(this);
-                const templateType = marker.attr('data-template');
-                if (templateType !== d.template) {
-                    marker.selectAll().remove();
-                    self.createMarker(marker);
-                }
+            .each(function (marker) {
+                const templateId = self.templateCache.getMarkerTemplateId(marker.template);
+                self.updateContentTemplate(select(this), templateId, 'marker');
             });
     }
 
@@ -1352,32 +1350,23 @@ export default class GraphEditor extends HTMLElement {
      * @param edgeGroupSelection d3 selection of single edge group
      * @param d edge datum
      */
-    private updateEndMarker(edgeGroupSelection, d: DraggedEdge) {
+    private updateEndMarker(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, d: Edge) {
         if (d.markerEnd == null) {
             // delete
             edgeGroupSelection.select('g.marker.marker-end').remove();
             return;
         }
-        let markerSelection = edgeGroupSelection.select('g.marker.marker-end');
+        let markerSelection: Selection<SVGGElement, Marker, any, unknown>;
+        markerSelection = edgeGroupSelection.select<SVGGElement>('g.marker.marker-end')
+            .datum<Marker>(d.markerEnd);
         if (markerSelection.empty()) {
             // create
             markerSelection = edgeGroupSelection.append('g')
                 .classed('marker', true)
-                .classed('marker-end', true);
-            markerSelection.attr('data-template', d.markerEnd.template)
-                .html(() => {
-                    return this.objectCache.getMarkerTemplate(d.markerEnd.template);
-                });
+                .classed('marker-end', true)
+                .datum<Marker>(d.markerEnd);
         }
-        const templateType = markerSelection.attr('data-template');
-        if (templateType !== d.markerEnd.template) {
-            // change template
-            markerSelection.selectAll().remove();
-            markerSelection.attr('data-template', d.markerEnd.template)
-                .html(() => {
-                    return this.objectCache.getMarkerTemplate(d.markerEnd.template);
-                });
-        }
+        this.updateMarker(markerSelection);
     }
 
     /**
@@ -1386,19 +1375,21 @@ export default class GraphEditor extends HTMLElement {
      * @param edgeGroupSelection d3 selection of single edge group
      * @param d edge datum
      */
-    private updateEndMarkerPosition(edgeGroupSelection, d: DraggedEdge) {
+    private updateEndMarkerPosition(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, d: Edge) {
         if (d.markerEnd == null) {
             return;
         }
-        const markerSelection = edgeGroupSelection.select('g.marker.marker-end');
+        const markerSelection: Selection<SVGGElement, Marker, any, unknown> = edgeGroupSelection
+            .select<SVGGElement>('g.marker.marker-end')
+            .datum(d.markerEnd);
 
         // calculate position size and rotation
-        const path = edgeGroupSelection.select('path.edge');
-        const length = (path.node() as SVGPathElement).getTotalLength();
+        const path = edgeGroupSelection.select<SVGPathElement>('path.edge');
+        const length = path.node().getTotalLength();
         const strokeWidth: number = parseFloat(path.style('stroke-width').replace(/px/, ''));
 
-        const pathEndpoint = (path.node() as SVGPathElement).getPointAtLength(length);
-        const pointBeforePathEnd = (path.node() as SVGPathElement).getPointAtLength(length - 1e-3);
+        const pathEndpoint = path.node().getPointAtLength(length);
+        const pointBeforePathEnd = path.node().getPointAtLength(length - 1e-3);
 
         const edgeNormal = normalizeVector({
             dx: length > 1e-3 ? pathEndpoint.x - pointBeforePathEnd.x : 1,
@@ -1505,13 +1496,13 @@ export default class GraphEditor extends HTMLElement {
      * @param edgeGroupSelection d3 selection of single edge group
      * @param d edge datum
      */
-    private updateEdgeTextPositions(edgeGroupSelection, d) {
-        const path = edgeGroupSelection.select('path.edge');
-        const length = (path.node() as SVGPathElement).getTotalLength();
-        const textSelection = edgeGroupSelection.selectAll('text').data(d.texts != null ? d.texts : []);
+    private updateEdgeTextPositions(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, d: Edge) {
+        const path = edgeGroupSelection.select<SVGPathElement>('path.edge');
+        const length = path.node().getTotalLength();
+        const textSelection = edgeGroupSelection.selectAll<SVGTextElement, TextComponent>('text')
+            .data<TextComponent>(d.texts != null ? d.texts : []);
 
         // calculate the node bounding boxes for collision detection
-        const svg = this.getSvg();
         let sourceBB = {x: 0, y: 0, width: 0, height: 0};
         let targetBB = {x: 0, y: 0, width: 0, height: 0};
         try {
@@ -1534,8 +1525,8 @@ export default class GraphEditor extends HTMLElement {
             };
         } catch (error) {
             // use line endpoints as fallback
-            const sourceEndpoint = (path.node() as SVGPathElement).getPointAtLength(0);
-            const targetEndpoint = (path.node() as SVGPathElement).getPointAtLength(0);
+            const sourceEndpoint = path.node().getPointAtLength(0);
+            const targetEndpoint = path.node().getPointAtLength(0);
             sourceBB.x = sourceEndpoint.x;
             sourceBB.y = sourceEndpoint.y;
             targetBB.x = targetEndpoint.x;
@@ -1543,28 +1534,30 @@ export default class GraphEditor extends HTMLElement {
         }
 
         // update text selections
-        textSelection.each(function (d) {
+        textSelection.each(function (t) {
             const text = select(this);
-            let positionOnLine = d.positionOnLine;
+            let positionOnLine = t.positionOnLine as number|string;
             if (positionOnLine === 'end') {
                 positionOnLine = 1;
             }
             if (positionOnLine === 'start') {
                 positionOnLine = 0;
             }
-            positionOnLine = parseFloat(positionOnLine);
-            if (isNaN(positionOnLine)) {
+            if (typeof(positionOnLine) === 'string') {
+                positionOnLine = parseFloat(positionOnLine as string);
+            }
+            if (isNaN(positionOnLine as number)) {
                 positionOnLine = 0;
             }
-            const pathPoint = (path.node() as SVGPathElement).getPointAtLength(length * positionOnLine);
+            const pathPoint = (path.node() as SVGPathElement).getPointAtLength(length * (positionOnLine as number));
 
             // factor in offset coordinates of text component
             const referencePoint = {
-                x: pathPoint.x + (d.offsetX != null ? d.offsetX : 0),
-                y: pathPoint.y + (d.offsetY != null ? d.offsetY : 0),
+                x: pathPoint.x + (t.offsetX != null ? t.offsetX : 0),
+                y: pathPoint.y + (t.offsetY != null ? t.offsetY : 0),
             };
 
-            // calculate center of nearest node (line distance not euklidean distance)
+            // calculate center of nearest node (line distance, not euklidean distance)
             const nodeBB = (positionOnLine > 0.5) ? targetBB : sourceBB;
             const nodeCenter = {
                 x: nodeBB.x + (nodeBB.width / 2),
@@ -1614,8 +1607,8 @@ export default class GraphEditor extends HTMLElement {
             if (angle > 0 && angle < 180) {
                 // bottom of the text (possibly) overlaps
                 let delta = (nodeBB.y) - (referencePoint.y + bbox.height - lineHeightCorrection);
-                if (d.padding) {
-                    delta -= d.padding;
+                if (t.padding) {
+                    delta -= t.padding;
                 }
                 if (delta < 0) {
                     deltaY = delta;
@@ -1625,8 +1618,8 @@ export default class GraphEditor extends HTMLElement {
             if (angle > 180 && angle < 360) {
                 // top of the text (possibly) overlaps
                 let delta = (nodeBB.y + nodeBB.height) - (referencePoint.y - lineHeightCorrection);
-                if (d.padding) {
-                    delta += d.padding;
+                if (t.padding) {
+                    delta += t.padding;
                 }
                 if (delta > 0) {
                      deltaY = delta;
@@ -1635,8 +1628,8 @@ export default class GraphEditor extends HTMLElement {
             if (angle > 90 && angle < 270) {
                 // left side of text (possibly) overlaps
                 let delta = (nodeBB.x + nodeBB.width) - (referencePoint.x - (bbox.width * (1 - textAnchorCorrection)));
-                if (d.padding) {
-                    delta += d.padding;
+                if (t.padding) {
+                    delta += t.padding;
                 }
                 if (delta > 0) { // only update target if text actually overlaps
                     deltaX = delta;
@@ -1645,8 +1638,8 @@ export default class GraphEditor extends HTMLElement {
             if (angle > 270 || angle < 90) {
                 // right side of text (possibly) overlaps
                 let delta = (nodeBB.x) - (referencePoint.x + (bbox.width * textAnchorCorrection));
-                if (d.padding) {
-                    delta -= d.padding;
+                if (t.padding) {
+                    delta -= t.padding;
                 }
                 if (delta < 0) { // only update target if text actually overlaps
                     deltaX = delta;
@@ -1676,7 +1669,7 @@ export default class GraphEditor extends HTMLElement {
      * Update all node positions and edge paths.
      */
     private updateGraphPositions() {
-        const svg = this.getSvg();
+        const svg = this.svg;
 
         const graph = svg.select('g.zoom-group');
         graph.select('.nodes')
@@ -1806,9 +1799,9 @@ export default class GraphEditor extends HTMLElement {
             const edge = this.objectCache.getEdge(event.subject.createdFrom);
             if (event.subject.target !== edge.target.toString()) {
                 // only remove original edge if target of dropped edge is different then original target
-                const index = this._edges.findIndex(edge => edgeId(edge) === event.subject.createdFrom);
-                if (this.onEdgeRemove(this._edges[index], EventSource.USER_INTERACTION)) {
-                    this._edges.splice(index, 1);
+                const i = this._edges.findIndex(e => edgeId(e) === event.subject.createdFrom);
+                if (this.onEdgeRemove(this._edges[i], EventSource.USER_INTERACTION)) {
+                    this._edges.splice(i, 1);
                     updateEdgeCache = true;
                 }
             }
@@ -2193,7 +2186,7 @@ export default class GraphEditor extends HTMLElement {
      */
     private updateNodeHighligts(nodeSelection?) {
         if (nodeSelection == null) {
-            const svg = this.getSvg();
+            const svg = this.svg;
 
             const graph = svg.select('g.zoom-group');
             nodeSelection = graph.select('.nodes')
@@ -2226,7 +2219,7 @@ export default class GraphEditor extends HTMLElement {
      */
     private updateEdgeHighligts(edgeSelection?) {
         if (edgeSelection == null) {
-            const svg = this.getSvg();
+            const svg = this.svg;
 
             const graph = svg.select('g.zoom-group');
             edgeSelection = graph.select('.edges')

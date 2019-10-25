@@ -16,13 +16,19 @@
                 mode="layout"
                 onclick="() => console.log('HI')"
                 zoom="both">
-            <template template-type="style">
+            <style slot="style">
+                svg {width:100%}
+            </style>
+            <svg slot="graph">
                 <style>
+                    svg {width:100%}
                     .ghost {opacity: 0.5;}
                     .node {fill: aqua;}
-                    .link-handle {display: none; fill: black; opacity: 0.1; transition:r 0.25s ease-out;}
+                    .link-handle {display: none; fill: black; opacity: 0.1;}
+                    .link-handle>* {transition:transform 0.25s ease-out;}
                     .edge-group .link-handle {display: initial}
-                    .link-handle:hover {opacity: 0.7; r: 5;}
+                    .link-handle:hover {opacity: 0.7;}
+                    .link-handle:hover>* {transform: scale(1.5);}
                     .text {fill: black; font-size: 6pt; text-overflow: ellipsis; word-break: break-word}
                     .text.title {font-size: initial; text-overflow: clip; word-break: break-word;}
                     .node.hovered {fill: red;}
@@ -39,31 +45,31 @@
                     .grpc .edge {stroke: blueviolet;}
                     .mqtt .edge {stroke: lightsalmon;}
                 </style>
-            </template>
-            <template id="REST" template-type="node">
-                <rect width="100" height="60" x="-50" y="-30" data-link-handles="edges">
-                </rect>
-                <text class="title text" data-content="title" data-click="title" x="-40" y="-10" width="80"></text>
-                <text class="text" data-content="description" x="-40" y="5" width="80" height="30"></text>
-            </template>
-            <template id="gRPC" template-type="node">
-                <rect width="100" height="40" x="-50" y="-20" data-link-handles="edges">
-                </rect>
-                <text class="title text" data-content="title" data-click="title" x="-40" y="-5"></text>
-                <text class="text" data-content="type" x="-40" y="15"></text>
-            </template>
-            <template id="mqtt" template-type="node">
-                <path class="outline" d="M -40 -15 L 40 -15 L 45 0 L 40 15 L -40 15 L -45 0 z" style="fill:lime;stroke:purple;stroke-width:1"></path>
-                <a data-href="link">
-                    <text class="text" data-content="link" x="-40", y="0"></text>
-                </a>
-                <title data-content="title"></title>
-                <desc data-content="description"></desc>
-                <image x="15" y="-13" width="26" height="26" data-href="image"></image>
-            </template>
-            <template id="arrow" template-type="marker">
-                <path d="M -9 -5 L 1 0 L -9 5 z" />
-            </template>
+                <defs class="templates">
+                    <g id="REST" data-template-type="node">
+                        <rect width="100" height="60" x="-50" y="-30" data-link-handles="edges"></rect>
+                        <text class="title text" data-content="title" data-click="title" x="-40" y="-10" width="80"></text>
+                        <text class="text" data-content="description" x="-40" y="5" width="80" height="30"></text>
+                    </g>
+                    <g id="gRPC" data-template-type="node">
+                        <rect width="100" height="40" x="-50" y="-20" data-link-handles="edges"></rect>
+                        <text class="title text" data-content="title" data-click="title" x="-40" y="-5"></text>
+                        <text class="text" data-content="type" x="-40" y="15"></text>
+                    </g>
+                    <g id="mqtt" data-template-type="node">
+                        <path class="outline" d="M -40 -15 L 40 -15 L 45 0 L 40 15 L -40 15 L -45 0 z" style="fill:lime;stroke:purple;stroke-width:1"></path>
+                        <a data-href="link">
+                            <text class="text" data-content="link" x="-40", y="0"></text>
+                        </a>
+                        <title data-content="title"></title>
+                        <desc data-content="description"></desc>
+                        <image x="15" y="-13" width="26" height="26" data-href="image"></image>
+                    </g>
+                    <g id="arrow" data-template-type="marker">
+                        <path d="M -9 -5 L 1 0 L -9 5 z" />
+                    </g>
+                </defs>
+            </svg>
         </network-graph>
 
         <script>

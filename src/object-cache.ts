@@ -17,42 +17,26 @@
 
 import { Node } from './node';
 import { Edge, edgeId, DraggedEdge, Point } from './edge';
-import { DEFAULT_NODE_TEMPLATE } from './templates';
 import { LinkHandle, calculateNormal } from './link-handle';
+import { TemplateCache } from './templating';
 
 export class GraphObjectCache {
 
-    private nodeTemplates: Map<string, string>;
-    private nodeTemplateLinkHandles: Map<string, LinkHandle[]>;
-    private markerTemplates: Map<string, string>;
+    private templateCache: TemplateCache;
+
     private nodes: Map<string, Node>;
     private nodeBBoxes: Map<string, DOMRect>;
     private edges: Map<string, Edge>;
     private edgesBySource: Map<string, Set<Edge>>;
     private edgesByTarget: Map<string, Set<Edge>>;
 
-    constructor() {
-        this.nodeTemplates = new Map<string, string>();
-        this.nodeTemplateLinkHandles = new Map<string, LinkHandle[]>();
-        this.markerTemplates = new Map<string, string>();
+    constructor(templateCache: TemplateCache) {
+        this.templateCache = templateCache;
         this.nodes = new Map<string, Node>();
         this.nodeBBoxes = new Map<string, DOMRect>();
         this.edges = new Map<string, Edge>();
         this.edgesBySource = new Map<string, Set<Edge>>();
         this.edgesByTarget = new Map<string, Set<Edge>>();
-    }
-
-    updateNodeTemplateCache(templates: {id: string, innerHTML: string, [prop: string]: any}[]) {
-        const templateMap = new Map();
-        templates.forEach((template) => templateMap.set(template.id, template.innerHTML));
-        this.nodeTemplates = templateMap;
-        this.nodeTemplateLinkHandles = new Map();
-    }
-
-    updateMarkerTemplateCache(templates: {id: string, innerHTML: string, [prop: string]: any}[]) {
-        const templateMap = new Map();
-        templates.forEach((template) => templateMap.set(template.id, template.innerHTML));
-        this.markerTemplates = templateMap;
     }
 
     updateNodeCache(nodes: Node[]) {
@@ -84,46 +68,6 @@ export class GraphObjectCache {
         this.edges = edgeMap;
         this.edgesBySource = bySourceMap;
         this.edgesByTarget = byTargetMap;
-    }
-
-    getMarkerTemplate(markerType: string) {
-        if (markerType == null) {
-            console.log('Marker type was null!');
-            return;
-        }
-        return this.markerTemplates.get(markerType);
-    }
-
-    getNodeTemplateId(nodeType: string) {
-        if (nodeType == null || !this.nodeTemplates.has(nodeType)) {
-            return 'default';
-        } else {
-            return nodeType;
-        }
-    }
-
-    getNodeTemplate(nodeType: string) {
-        if (nodeType == null) {
-            nodeType = 'default';
-        }
-        let template = this.nodeTemplates.get(nodeType);
-        if (template == null) {
-            template = this.nodeTemplates.get('default');
-        }
-        if (template == null) {
-            template = DEFAULT_NODE_TEMPLATE;
-        }
-        return template;
-    }
-
-    setNodeTemplateLinkHandles(nodeType: string, linkHandles: LinkHandle[]) {
-        nodeType = this.getNodeTemplateId(nodeType);
-        this.nodeTemplateLinkHandles.set(nodeType, linkHandles);
-    }
-
-    getNodeTemplateLinkHandles(nodeType: string): LinkHandle[] {
-        nodeType = this.getNodeTemplateId(nodeType);
-        return this.nodeTemplateLinkHandles.get(nodeType);
     }
 
     getNode(id: number|string) {
@@ -163,7 +107,7 @@ export class GraphObjectCache {
         let source = this.getNode(edge.source);
         let sourceHandles = edge.sourceHandle != null ? [edge.sourceHandle] : [{id: 0, x: 0, y: 0, normal: {dx: 0, dy: 0}}];
         if (source != null) {
-            sourceHandles = this.getNodeTemplateLinkHandles(source.type);
+            sourceHandles = this.templateCache.getNodeTemplateLinkHandles(source.type);
         } else {
             console.warn('Attempting to render Edge without valid source.', edge);
             source = {id: 'UNDEFINED', x: 0, y: 0};
@@ -171,7 +115,7 @@ export class GraphObjectCache {
         let target = edge.target != null ? this.getNode(edge.target) : null;
         let targetHandles = edge.targetHandle != null ? [edge.targetHandle] : [{id: 0, x: 0, y: 0, normal: {dx: 0, dy: 0}}];
         if (target != null) {
-            targetHandles = this.getNodeTemplateLinkHandles(target.type);
+            targetHandles = this.templateCache.getNodeTemplateLinkHandles(target.type);
         } else {
             if (edge.currentTarget != null) {
                 target = edge.currentTarget;
