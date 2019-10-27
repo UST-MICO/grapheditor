@@ -19,6 +19,7 @@ Component Attributes
 
    List of possible css classnames to set for edges or nodes. Same syntax as ``class`` attribute. (Can also be a json list.)
 
+.. _view-mode-attribute:
 .. describe:: mode
 
    The interaction mode of the graph.
@@ -45,9 +46,9 @@ Example Usage
 .. code-block:: html
 
     <network-graph
-            nodes="[{'id': 1, 'title': 'hello world', 'type': 'REST', 'x': 0, 'y': 0}, {'id': 2, 'title': 'HI2', 'type': 'gRPC', 'x': 150, 'y': 100}]"
+            nodes="[{'id': 1, 'title': 'hello world', 'type': 'simple-node', 'x': 0, 'y': 0}, {'id': 2, 'title': 'HI2', 'type': 'simple-node', 'x': 150, 'y': 100}]"
             edges="[{'source': 1, 'target': 2}]"
-            classes="node-type-a node-type-b"
+            classes="bg-red bg-blue"
             mode="layout"
             zoom="both">
     </network-graph>
@@ -58,14 +59,48 @@ Example Usage
 Component Styling
 -----------------
 
-It is possible to inject styles and :js:class:`Node` templates into the component via ``template`` tags.
+It is possible to inject styles, :js:class:`Node` and :js:class:`Marker` templates into the component.
+This is achieved by using the `slots <https://developer.mozilla.org/en-US/docs/Web/Web_Components/Using_templates_and_slots>`_ mechanic.
 
-Style templates need to have the attribute ``template-type="style"`` and contain one ``<style>`` tag.
+To use custom styles with the component place a ``<style slot="style">`` tag inside the ``<network-graph>`` tag.
+Styles can also be placed in a ``<style>`` tag inside the ``<svg slot="graph">`` used to render the graph.
+Placing all graph related styles in the svg is recommended as it allows to simply save the current graph as a self contained svg.
+There is also very limited support for completely dynamic styles with :ref:`dynamic content <grapheditor:dynamic content>`.
 
-:js:class:`Node` templates need to have the attribute ``template-type="node"`` and should have a unique id that corresponds to a specific :js:class:`Node` type.
+It is possible to set the svg content of Nodes and Markers using templates.
+The templates are simply a svg group with the ``data-template-type`` inside the first ``<defs>`` tag of the provided svg (``<g data-template-type="node|marker">``).
+
+:js:class:`Node` templates need to have the attribute ``data-template-type="node"`` and must have a unique id that corresponds to a specific :js:class:`Node` type.
+:js:class:`Marker` templates need to have the attribute ``data-template-type="marker"`` and must also have a unique id.
+
+.. code-block:: html
+
+    <network-graph>
+        <style slot="style">/* general styles go here */</style>
+        <svg slot="graphs">
+            <style>/* graph styles go here */</style>
+            <defs><!-- templates go here --></defs>
+        </svg>
+    </network-graph>
+
+It is also possible to change the default layering (nodes rendering above edges) in the provided svg:
+
+.. code-block:: html
+
+    <network-graph>
+        <svg slot="graphs">
+            <g class="zoom-group"> <!-- the zoom-groop is used for the pan and zoom transormations -->
+                <g class="nodes"></g> <!-- the first group will be rendered below the following groups-->
+                <g class="edges"></g>
+            </g>
+        </svg>
+    </network-graph>
+
 
 Styling Nodes
 ^^^^^^^^^^^^^
+
+The structure of the svg around a single node looks like this:
 
 .. code-block:: html
 
@@ -73,20 +108,30 @@ Styling Nodes
     <g class="nodes">
 
         <!-- container for single node -->
-        <g class="node hovered" id="1" data-template="REST" transform="translate(0,0)">
+        <g class="node hovered" id="1" data-template="default" transform="translate(0,0)">
             <!-- template content -->
 
             <!-- link handles -->
-            <circle class="link-handle" fill="black" cx="0" cy="-30" r="3"></circle>
-            <circle class="link-handle" fill="black" cx="50" cy="0" r="3"></circle>
-            <circle class="link-handle" fill="black" cx="0" cy="30" r="3"></circle>
-            <circle class="link-handle" fill="black" cx="-50" cy="0" r="3"></circle>
+            <g class="link-handle" transform="translate(0,-30)" data-template="default-marker">
+                <circle fill="black" cx="0" cy="0" r="3"></circle>
+            </g>
+            <g class="link-handle" transform="translate(50,0)" data-template="default-marker">
+                <circle fill="black" cx="0" cy="0" r="3"></circle>
+            </g>
+            <g class="link-handle" transform="translate(0,30)" data-template="default-marker">
+                <circle fill="black" cx="0" cy="0" r="3"></circle>
+            </g>
+            <g class="link-handle" transform="translate(-50,0)" data-template="default-marker">
+                <circle fill="black" cx="0" cy="0" r="3"></circle>
+            </g>
         </g>
 
     </g>
 
 
 All classes are set on the top level group (``<g class="node"></g>``) tag.
+The top level group *always* has the ``node`` class.
+To change the classlist of a node dynamically set the :js:attr:`GraphEditor.setNodeClass` (:ref:`details <grapheditor:styling nodes and edges with custom css classes>`).
 
 List of special node classes
 """"""""""""""""""""""""""""
@@ -135,7 +180,7 @@ Dynamic content
 To have the content of the node template change according to the node data use the following atrributes.
 
 ``data-content``
-    Sets the text for this tag. Useful for ``<title>`` and ``<desc>`` tags. See :ref:`text-injection` for text wrapping.
+    Sets the text for this tag. Useful for ``<title>`` and ``<desc>`` tags. See :ref:`text injection <grapheditor:text injection>` for text wrapping.
 
 ``data-fill``
     Sets the ``fill`` attribute of the svg node.
@@ -152,7 +197,7 @@ Link handles
 """"""""""""
 
 :js:class:`Link handles <LinkHandle>` get calculated per node template.
-The calculation uses the first element in the dom with the class ``outline`` or the first element in the dom.
+The calculation uses the first element in the group with the class ``outline`` or just the first element in the group.
 Tha calculation can be influenced with the ``data-link-handles`` attribute set at the dom element.
 
 The following svg elements are supported for link handle calculation:
@@ -169,6 +214,9 @@ The following svg elements are supported for link handle calculation:
 ``path``
     ``data-link-handles`` can either be ``all``, ``minimal`` or a number
 
+``any``
+    ``data-link-handles`` can either be ``all``, ``edges``, ``corners`` or ``minimal``
+
 If ``data-link-handles`` is set to ``edges`` the midpoint between two corners will be added to the link handles.
 If ``data-link-handles`` is set to ``corners`` the corners will be added to the link handles.
 Setting ``all`` implies ``edges`` and ``corners``.
@@ -178,6 +226,8 @@ For path objects the link handles are spaced evenly on the path (``all`` = 8 han
 Styling Edges
 ^^^^^^^^^^^^^
 
+The structure of the svg around a single edge looks like this:
+
 .. code-block:: html
 
     <!-- container for all edges -->
@@ -186,15 +236,26 @@ Styling Edges
         <!-- container for single edge with markers -->
         <g class="edge-group " id="s1,t2" >
             <path class="edge" fill="none" stroke="black" d="M50,0L51,0C53,0,56,0,63,16,33,80,66,86,83C93,100,96,100,98,100L100,100"></path>
+
+            <!-- edge markers -->
             <g class="marker" data-template="arrow" transform="translate(100,100)scale(0.5)rotate(0)">
                 <!-- marker template content -->
             </g>
-            <circle class="link-handle" fill="black" r="3" cx="92" cy="94"></circle>
+
+            <!-- text components -->
+            <text x="54" y="-32" class="text" width="30" data-click="TextClick" data-wrapped="true">Hello…</text>
+
+            <!-- link handle to drag edge -->
+            <g class="link-handle" transform="translate(92,94)" data-template="default-marker">
+                <circle fill="black" r="3" cx="0" cy="0"></circle>
+            </g>
         </g>
 
     </g>
 
 All classes are set on the top level group (``<g class="edge-group"></g>``) tag.
+The top level group *always* has the ``edge`` class.
+To change the classlist of a edge dynamically set the :js:attr:`GraphEditor.setEdgeClass` (:ref:`details <grapheditor:styling nodes and edges with custom css classes>`).
 
 List of special edge classes
 """"""""""""""""""""""""""""
@@ -260,7 +321,7 @@ Customising where edges attach to nodes
 
 :js:class:`Edges <Edge>` will snap to the nearest :js:class:`LinkHandle`.
 :js:class:`Link handles <LinkHandle>` are :ref:`calculated per node template <grapheditor:link handles>`.
-To customize the position where the edge attaches to nodes set the :js:func:`calculateLinkHandlesForEdge <GraphEditor.calculateLinkHandlesForEdge>` callback.
+To customize the position where the edge attaches to nodes set the :js:attr:`calculateLinkHandlesForEdge <GraphEditor.calculateLinkHandlesForEdge>` callback.
 
 
 Example Styling Usage
@@ -269,12 +330,20 @@ Example Styling Usage
 .. code-block:: html
 
     <network-graph>
-        <template template-type="style">
+        <style slot="style">
+            svg {width:100%; height: 100%}
+        </style>
+        <svg slot="graph">
             <style>
                 .node {fill: aqua;}
-                .link-handle {display: none; fill: black; opacity: 0.1; transition:r 0.25s ease-out;}
+                .link-handle {display: none; fill: black; opacity: 0.1;}
                 .edge-group .link-handle {display: initial}
-                .link-handle:hover {opacity: 0.7; r: 5;}
+                .link-handle:hover {opacity: 0.7;}
+                // the css transform overwrites the svg transform completely
+                // and link handles are placed with a translate transformation
+                // but the content of the link handle group can be scaled
+                .link-handle>* {transition:transform 0.25s ease-out;}
+                .link-handle:hover>* {transform: scale(1.5);}
                 .text {fill: black;}
                 .node.hovered {fill: red;}
                 .node.selected {fill: green; content:attr(class)}
@@ -283,15 +352,17 @@ Example Styling Usage
                 .highlight-outgoing .marker {fill: red;}
                 .highlight-incoming .marker {fill: green;}
             </style>
-        </template>
-        <template id="node" template-type="node">
-            <rect width="100" height="60" x="-50" y="-30"></rect>
-            <text class="title text" data-content="title" data-click="title" x="-40" y="-10"></text>
-            <text class="text" data-content="type" x="-40" y="10" width="80"></text>
-        </template>
-        <template id="arrow" template-type="marker">
-            <path d="M -9 -5 L 1 0 L -9 5 z" />
-        </template>
+            <defs>
+                <g id="simple-node" data-template-type="node">
+                    <rect width="100" height="60" x="-50" y="-30"></rect>
+                    <text class="title text" data-content="title" data-click="title" x="-40" y="-10"></text>
+                    <text class="text" data-content="type" x="-40" y="10" width="80"></text>
+                </g>
+                <g id="arrow" data-template-type="marker">
+                    <path d="M -9 -5 L 1 0 L -9 5 z" />
+                </g>
+            </defs>
+        </svg>
     </network-graph>
 
 
@@ -299,7 +370,8 @@ Styling nodes and edges with custom css classes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 It is possible to style nodes and edges with custom css classes.
-The network-graph component needs to know about all possible :ref:`classes <classes-attribute>`.
+The network-graph component needs to know about all possible classes.
+The list of possible classes can be set in the :ref:`classes attribute <classes-attribute>`.
 To controll which class is set for a node or an edge set the functions :js:func:`setNodeClass <GraphEditor.setNodeClass>` or :js:func:`setEdgeClass <GraphEditor.setEdgeClass>`.
 
 .. code-block:: html
@@ -595,10 +667,14 @@ For custom buttons in :js:class:`Edges <Edge>` use markers with the :js:attr:`cl
 .. code-block:: html
 
     <network-graph>
-        <template id="node" template-type="node">
-            <rect width="100" height="60" x="-50" y="-30"></rect>
-            <text class="text" data-click="remove" x="-40" y="-10">remove</text>
-        </template>
+        <svg slot="graph">
+            <defs>
+                <g id="simple-node" template-type="node">
+                    <rect width="100" height="60" x="-50" y="-30"></rect>
+                    <text class="text" data-click="remove" x="-40" y="-10">remove</text>
+                </g>
+            </defs>
+        </svg>
     </network-graph>
     <script>
         var graph = document.querySelector('network-graph');

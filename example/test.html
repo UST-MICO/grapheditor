@@ -10,18 +10,16 @@
     </head>
     <body>
         <!--script src="./_bundles/grapheditor-webcomponent.js"></script-->
-        <network-graph nodes="[{'id': 1, 'title': 'hello world', 'type': 'REST', 'x': 0, 'y': 0}, {'id': 2, 'title': 'HI2', 'type': 'gRPC', 'x': 150, 'y': 100}]"
+        <network-graph nodes="[{'id': 1, 'title': 'hello world', 'type': 'simple-node', 'x': 0, 'y': 0}, {'id': 2, 'title': 'HI2', 'type': 'small-node', 'x': 150, 'y': 100}]"
                 edges="[{'source': 1, 'target': 2}]"
-                classes="rest grpc mqtt"
+                classes="simple-node small-node fancy-node"
                 mode="layout"
-                onclick="() => console.log('HI')"
                 zoom="both">
             <style slot="style">
-                svg {width:100%}
+                svg {width:100%; height: 100%}
             </style>
             <svg slot="graph">
                 <style>
-                    svg {width:100%}
                     .ghost {opacity: 0.5;}
                     .node {fill: aqua;}
                     .link-handle {display: none; fill: black; opacity: 0.1;}
@@ -38,26 +36,26 @@
                     .highlight-incoming .edge {stroke: green;}
                     .highlight-outgoing .marker {fill: red;}
                     .highlight-incoming .marker {fill: green;}
-                    .rest {fill: green;}
-                    .grpc {fill: blueviolet;}
-                    .mqtt {fill: lightsalmon;}
-                    .rest .edge {stroke: green;}
-                    .grpc .edge {stroke: blueviolet;}
-                    .mqtt .edge {stroke: lightsalmon;}
+                    .simple-node {fill: green;}
+                    .small-node {fill: blueviolet;}
+                    .fancy-node {fill: lightsalmon;}
+                    .simple-node .edge {stroke: green;}
+                    .small-node .edge {stroke: blueviolet;}
+                    .fancy-node .edge {stroke: lightsalmon;}
                 </style>
                 <defs class="templates">
-                    <g id="REST" data-template-type="node">
+                    <g id="simple-node" data-template-type="node">
                         <rect width="100" height="60" x="-50" y="-30" data-link-handles="edges"></rect>
                         <text class="title text" data-content="title" data-click="title" x="-40" y="-10" width="80"></text>
                         <text class="text" data-content="description" x="-40" y="5" width="80" height="30"></text>
                     </g>
-                    <g id="gRPC" data-template-type="node">
+                    <g id="small-node" data-template-type="node">
                         <rect width="100" height="40" x="-50" y="-20" data-link-handles="edges"></rect>
-                        <text class="title text" data-content="title" data-click="title" x="-40" y="-5"></text>
-                        <text class="text" data-content="type" x="-40" y="15"></text>
+                        <text class="title text" data-content="title" data-click="title" x="-40" y="-3" width="80"></text>
+                        <text class="text" data-content="type" x="-40" y="12" width="80"></text>
                     </g>
-                    <g id="mqtt" data-template-type="node">
-                        <path class="outline" d="M -40 -15 L 40 -15 L 45 0 L 40 15 L -40 15 L -45 0 z" style="fill:lime;stroke:purple;stroke-width:1"></path>
+                    <g id="fancy-node" data-template-type="node">
+                        <polygon class="outline" points="-40,-15 40,-15 45,0 40,15 -40,15 -45,0" style="fill:lime;stroke:purple;stroke-width:1"></polygon>
                         <a data-href="link">
                             <text class="text" data-content="link" x="-40", y="0"></text>
                         </a>
@@ -76,13 +74,7 @@
             var graph = document.querySelector('network-graph');
 
             graph.setNodeClass = (className, node) => {
-                if (className === 'rest' && node.type === 'REST') {
-                    return true;
-                }
-                if (className === 'grpc' && node.type === 'gRPC') {
-                    return true;
-                }
-                if (className === 'mqtt' && node.type === 'mqtt') {
+                if (className === node.type) {
                     return true;
                 }
                 return false;
@@ -92,13 +84,7 @@
                 if (targetNode == null) {
                     return false;
                 }
-                if (className === 'rest' && targetNode.type === 'REST') {
-                    return true;
-                }
-                if (className === 'grpc' && targetNode.type === 'gRPC') {
-                    return true;
-                }
-                if (className === 'mqtt' && targetNode.type === 'mqtt') {
+                if (className === targetNode.type) {
                     return true;
                 }
                 return false;
@@ -130,12 +116,12 @@
             graph.onDraggedEdgeTargetChange = (edge, source, target) => {
                 if (target == null || target == undefined) {
                     // leave edge in last state
-                } else if (target.type === 'gRPC') {
+                } else if (target.type === 'small-node') {
                     edge.markers = [
                         {template: 'arrow', positionOnLine: 1, scale: 0.5, rotate: {relativeAngle: 0}},
                     ];
                     edge.markerEnd = {template: 'arrow', positionOnLine: 1, lineOffset:4, scale: 0.5, rotate: {relativeAngle: 0}};
-                } else if (target.type === 'REST') {
+                } else if (target.type === 'simple-node') {
                     edge.markers = [];
                     edge.markerEnd = {template: 'arrow', positionOnLine: 1, lineOffset:4, scale: 0.5, rotate: {relativeAngle: 0}};
                 }
@@ -143,7 +129,7 @@
             }
 
             graph.onDropDraggedEdge = (edge, source, target) => {
-                if (target.type === 'gRPC') {
+                if (target.type === 'small-node') {
                     edge.markers = [
                         {template: 'arrow', positionOnLine: 1, scale: 0.5, rotate: {relativeAngle: 0}},
                     ];
@@ -154,9 +140,9 @@
 
             if (true) {
                 graph.nodeList = [
-                    {id: 1, title: 'hello world 2 with a very long text', type: 'REST', description: 'This is a really long text that is wrapped in multiple lines.', x: 0, y: 0},
-                    {id: 2, title: 'HI 3', type: 'gRPC', x: 150, y: 100},
-                    {id: 3, title: 'New', type: 'gRPC', x: 270, y: 50},
+                    {id: 1, title: 'hello world 2 with a very long text', type: 'simple-node', description: 'This is a really long text that is wrapped in multiple lines.', x: 0, y: 0},
+                    {id: 2, title: 'HI 3', type: 'small-node', x: 150, y: 100},
+                    {id: 3, title: 'New', type: 'small-node', x: 270, y: 50},
                 ];
                 graph.edgeList = [
                     {source: 1, target: 2, texts: [{
@@ -168,7 +154,7 @@
                     {source: 2, target: 3},
                 ]
 
-                graph.addNode({id: 4, title: 'NEU', type: 'mqtt', x: 130, y: -50, description: 'New node', image: 'https://d3js.org/logo.svg', link: 'https://d3js.org'});
+                graph.addNode({id: 4, title: 'NEU', type: 'fancy-node', x: 130, y: -50, description: 'New node', image: 'https://d3js.org/logo.svg', link: 'https://d3js.org'});
                 graph.addEdge({source: 4, target: 1, markers: [
                     {template: 'arrow', positionOnLine: 1, scale: 0.5, rotate: {relativeAngle: 0}, clickEventKey: 'HelloWorld'},
                     {template: 'arrow', positionOnLine: 0.3, scale: 0.5, scaleRelative: true, rotate: {normal: {dx: -1, dy: 0}, relativeAngle: 0}},
