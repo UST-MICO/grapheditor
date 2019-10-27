@@ -6,3 +6,5 @@ lib-esm
 /node
 .vscode
 Pipfile.lock
+.mypy_cache
+docs/changelog.md

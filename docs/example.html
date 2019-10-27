@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>Test</title>
+        <style>
+            html {height: 100%}
+            body {height: 100%}
+        </style>
+    </head>
+    <body>
+        <script src="https://cdn.jsdelivr.net/npm/@ustutt/grapheditor-webcomponent@latest/_bundles/grapheditor-webcomponent.js"></script>
+        <!-- for local developement <script src="../_bundles/grapheditor-webcomponent.js"></script>-->
+        <network-graph classes="red blue" mode="layout" zoom="both">
+            <style slot="style">
+                svg {width:100%; height: 100%}
+            </style>
+            <svg slot="graph">
+                <style>
+                    .node {fill: lightgray;}
+                    .link-handle {display: none; fill: black; opacity: 0.1; transition:opacity 0.25s ease-out;}
+                    .edge-group .link-handle {display: initial}
+                    .link-handle:hover {opacity: 0.7;}
+                    .hovered .link-handle {display: initial;}
+                    .text {fill: black; text-overflow: ellipsis;}
+                </style>
+                <defs>
+                    <g id="default" data-template-type="node">
+                        <rect x="-20" y="-8" width="40" height="16"></rect>
+                        <text class="text" data-content="title" x="-18" y="5" width="36"></text>
+                    </g>
+                </defs>
+            </svg>
+        </network-graph>
+
+        <script>
+            var graph = document.querySelector('network-graph');
+
+            graph.addNode({
+                id: 1,
+                title: 'RED',
+                type: 'red',
+                x: 0,
+                y: 0,
+            }, true);
+
+            graph.addNode({
+                id: 2,
+                title: 'BLUE',
+                type: 'blue',
+                x: 100,
+                y: 0,
+            }, true);
+        </script>
+    </body>
+</html>
