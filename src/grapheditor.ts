@@ -586,6 +586,8 @@ export default class GraphEditor extends HTMLElement {
             // the svg changed!
             this.initialize(svg);
         }
+        this.completeRender();
+        this.zoomToBoundingBox(false);
     }
 
     /**
@@ -881,8 +883,8 @@ export default class GraphEditor extends HTMLElement {
             console.warn('Tried to use unsupported template type: ' + templateType);
         }
         // copy template content into element
-        newTemplate.selectAll<SVGGeometryElement, unknown>('*').each(function () {
-            element.node().appendChild(this.cloneNode(true));
+        newTemplate.node().childNodes.forEach((node) => {
+            element.node().appendChild(node.cloneNode(true));
         });
         // set template id used by the element to new id
         element.attr('data-template', templateId);
@@ -940,7 +942,7 @@ export default class GraphEditor extends HTMLElement {
                         .subject((handle) => {
                             return self.createDraggedEdge(node);
                         })
-                        .container(() => self.svg.select('g.zoom-group').select('g.edges').node() as any)
+                        .container(() => self.svg.select('g.zoom-group').select<SVGGElement>('g.edges').node())
                         .on('drag', () => {
                             self.updateDraggedEdge();
                             self.updateDraggedEdgeGroups();
@@ -1761,7 +1763,7 @@ export default class GraphEditor extends HTMLElement {
         event.subject.target = null;
         event.subject.currentTarget.x = event.x;
         event.subject.currentTarget.y = event.y;
-        const possibleTarget = this.root.elementFromPoint(event.sourceEvent.clientX, event.sourceEvent.clientY);
+        const possibleTarget = document.elementFromPoint(event.sourceEvent.clientX, event.sourceEvent.clientY);
         if (possibleTarget != null) {
             let target = select(possibleTarget);
             while (!target.empty()) {
