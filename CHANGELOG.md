@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Added
 
+
+## [0.2.0] - 2019-10-27
+
+### Added
+
 - Use slots instead of html templates to load custom styles and templates into grapheditor
 - Templating now uses standard svg groups in the `defs` section of the provided svg.
 - Add ability to template link handles with marker templates
@@ -18,9 +23,9 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 - `attributePath` text components not working correctly
 
-### Incompatible changes (see readthedocs documentation for upgrade instructions)
+### Incompatible changes
 
-- Removed templating using html templates
+- Removed templating using html templates (old template content can be reused)
 - All link handles are now rendered using marker templates
 - Changed `template-type` attribute of templates to `data-template-type`
 - The `network-graph` tag can no longer be empty it must at least contain a `svg` tag for the `graph` slot
@@ -116,6 +121,7 @@ First beta version.
 - Documentation
 
 [Unreleased]: https://github.com/UST-MICO/grapheditor/compare/v0.1.3...HEAD
+[0.2.0]: https://github.com/UST-MICO/grapheditor/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/UST-MICO/grapheditor/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/UST-MICO/grapheditor/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/UST-MICO/grapheditor/compare/v0.1.0...v0.1.1

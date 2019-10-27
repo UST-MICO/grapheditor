@@ -1,8 +1,8 @@
 {
   "name": "@ustutt/grapheditor-webcomponent",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "Webcomponent for displaying and editing graphs.",
-  "author": "MICO Authors",
+  "author": "Fabian Bühler",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
   "directories": {
@@ -17,7 +17,9 @@
   "keywords": [
     "webcomponent",
     "d3",
-    "graph"
+    "graph",
+    "editor",
+    "svg"
   ],
   "license": "Apache-2.0",
   "bugs": {
