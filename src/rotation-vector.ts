@@ -21,6 +21,18 @@ export interface RotationVector {
 }
 
 /**
+ * Calculate the absolute length of the given vector.
+ *
+ * @param vector vector to calculate length of
+ */
+export function calculateLength(vector: RotationVector): number {
+    const x = vector.dx;
+    const y = vector.dy;
+    return Math.sqrt(x * x + y * y);
+}
+
+
+/**
  * Normalize an existing vector to length 1.
  *
  * @param vector vector to normalize
@@ -48,4 +60,25 @@ export function calculateAngle(vector: RotationVector): number {
     vector = normalizeVector(vector);
     const angle = Math.atan2(vector.dy, vector.dx);
     return angle * 180 / Math.PI;
+}
+
+
+/**
+ * Calculate a rotation vector from an angle in degree and a length.
+ *
+ * @param angle in degree
+ * @param length length of the vector (defaults to 1)
+ */
+export function angleToVector(angle: number, length?: number): RotationVector {
+    if (length == null || isNaN(length)) {
+        length = 1;
+    }
+    if (angle == null || isNaN(angle)) {
+        angle = 0;
+    }
+    angle = (angle * Math.PI) / 180;
+    return {
+        dx: Math.cos(angle) * length,
+        dy: Math.sin(angle) * length,
+    };
 }

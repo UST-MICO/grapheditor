@@ -275,6 +275,12 @@ List of special edge classes
 ``marker``
     Class for all edge markers.
 
+``marker-special``
+    Special class for marker at the start or end of the edge.
+
+``marker-start``
+    Special class for marker at the start of the edge.
+
 ``marker-end``
     Special class for marker at the end of the edge.
 
@@ -291,8 +297,11 @@ Edge markers
 """"""""""""
 
 :js:class:`Edges <Edge>` can have a list of :js:class:`Markers <Marker>` that use marker templates for display.
-For an arrowhead at the end of the edge use the special edge-end-marker :js:attr:`markerEnd <Edge.markerEnd>` together with a :js:attr:`lineOffset <Marker.lineOffset>` in the marker.
-The :js:attr:`lineOffset <Marker.lineOffset>` controls how much the marker should extend beyond the end of the edge.
+For an arrowhead at the start or end of the edge use the special edge-end-markers :js:attr:`markerEnd <Edge.markerEnd>` and :js:attr:`markerStart <Edge.markerStart>`.
+The attachement point of the edge line to the marker can be adjusted by setting the ``data-line-attachement-point`` attribute in the marker template (:ref:`example <grapheditor:example styling usage>`).
+If the attribute is a single number it describes how far from the center of the template the edge attaches.
+If the attribute is two numbers (seperated by a single space) the it describes a specific point in the template where the edge attaches to.
+The deprecated :js:attr:`lineOffset <Marker.lineOffset>` behaves like a single number in the attribute.
 
 To update markers of dragged edges it is possible to set the function :js:func:`onCreateDraggedEdge <GraphEditor.onCreateDraggedEdge>`, :js:func:`onDraggedEdgeTargetChange <GraphEditor.onDraggedEdgeTargetChange>` and :js:func:`onDropDraggedEdge <GraphEditor.onDropDraggedEdge>`.
 
@@ -358,8 +367,8 @@ Example Styling Usage
                     <text class="title text" data-content="title" data-click="title" x="-40" y="-10"></text>
                     <text class="text" data-content="type" x="-40" y="10" width="80"></text>
                 </g>
-                <g id="arrow" data-template-type="marker">
-                    <path d="M -9 -5 L 1 0 L -9 5 z" />
+                <g id="arrow" data-template-type="marker" data-line-attachement-point="-9 0">
+                    <path d="M -9 -4 L 0 0 L -9 4 z" />
                 </g>
             </defs>
         </svg>

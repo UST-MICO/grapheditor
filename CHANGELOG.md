@@ -9,6 +9,13 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Added
 
+- Added `Edge.markerStart`
+- Added `data-line-attachement-point` to marker templates to specify where an edge attaches to the marker if the marker is an end marker
+
+### Deprecated
+
+- Deprecated `Marker.lineOffset`. use `data-line-attachement-point` in marker template instead.
+
 
 ## [0.2.0] - 2019-10-27
 

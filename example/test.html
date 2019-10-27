@@ -63,8 +63,8 @@
                         <desc data-content="description"></desc>
                         <image x="15" y="-13" width="26" height="26" data-href="image"></image>
                     </g>
-                    <g id="arrow" data-template-type="marker">
-                        <path d="M -9 -5 L 1 0 L -9 5 z" />
+                    <g id="arrow" data-template-type="marker" data-line-attachement-point="-9 0">
+                        <path d="M -9 -4 L 0 0 L -9 4 z" />
                     </g>
                 </defs>
             </svg>
@@ -108,7 +108,8 @@
 
             graph.onCreateDraggedEdge = (edge) => {
                 if (edge.createdFrom == null || edge.createdFrom == undefined) {
-                    edge.markerEnd = {template: 'arrow', positionOnLine: 1, lineOffset:4, scale: 0.5, rotate: {relativeAngle: 0}};
+                    edge.markerEnd = {template: 'default-marker', positionOnLine: 1, scale: 1.5, rotate: {relativeAngle: 0}};
+                    edge.markerStart = {template: 'default-marker', positionOnLine: 0, scale: 1.5, rotate: {relativeAngle: 0}};
                 }
                 return edge
             }
@@ -120,10 +121,10 @@
                     edge.markers = [
                         {template: 'arrow', positionOnLine: 1, scale: 0.5, rotate: {relativeAngle: 0}},
                     ];
-                    edge.markerEnd = {template: 'arrow', positionOnLine: 1, lineOffset:4, scale: 0.5, rotate: {relativeAngle: 0}};
+                    edge.markerEnd = {template: 'default-marker', positionOnLine: 1, scale: 1.5, rotate: {relativeAngle: 0}};
                 } else if (target.type === 'simple-node') {
                     edge.markers = [];
-                    edge.markerEnd = {template: 'arrow', positionOnLine: 1, lineOffset:4, scale: 0.5, rotate: {relativeAngle: 0}};
+                    edge.markerEnd = {template: 'default-marker', positionOnLine: 1, scale: 1.5, rotate: {relativeAngle: 0}};
                 }
                 return edge
             }
@@ -133,7 +134,8 @@
                     edge.markers = [
                         {template: 'arrow', positionOnLine: 1, scale: 0.5, rotate: {relativeAngle: 0}},
                     ];
-                    edge.markerEnd = {template: 'arrow', positionOnLine: 1, lineOffset:4, scale: 0.5, rotate: {relativeAngle: 0}};
+                    edge.markerEnd = {template: 'default-marker', positionOnLine: 1, scale: 1.5, rotate: {relativeAngle: 0}};
+                    edge.markerStart = {template: 'default-marker', positionOnLine: 0, scale: 1.5, rotate: {relativeAngle: 0}};
                 }
                 return edge
             }

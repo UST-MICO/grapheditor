@@ -18,18 +18,21 @@
 import { LinkHandle, calculateNormal, handlesForCircle, handlesForRectangle, handlesForPolygon, handlesForPath } from './link-handle';
 import { Selection, select } from 'd3-selection';
 import { Point } from './edge';
+import { LineAttachementInfo } from './marker';
 
 export class TemplateCache {
 
     private nodeTemplates: Map<string, Selection<SVGGElement, unknown, any, unknown>>;
     private nodeTemplateLinkHandles: Map<string, LinkHandle[]>;
     private markerTemplates: Map<string, Selection<SVGGElement, unknown, any, unknown>>;
+    private markerTemplateLineAttachements: Map<string, LineAttachementInfo>;
     private templateBBoxes: Map<string, DOMRect>;
 
     constructor() {
         this.nodeTemplates = new Map<string, Selection<SVGGElement, unknown, any, unknown>>();
         this.nodeTemplateLinkHandles = new Map<string, LinkHandle[]>();
         this.markerTemplates = new Map<string, Selection<SVGGElement, unknown, any, unknown>>();
+        this.markerTemplateLineAttachements = new Map<string, LineAttachementInfo>();
         this.templateBBoxes = new Map<string, DOMRect>();
     }
 
@@ -42,6 +45,7 @@ export class TemplateCache {
         const nodeTemplates = new Map<string, Selection<SVGGElement, unknown, any, unknown>>();
         const nodeTemplateLinkHandles = new Map<string, LinkHandle[]>();
         const markerTemplates = new Map<string, Selection<SVGGElement, unknown, any, unknown>>();
+        const markerTemplateLineAttachements = new Map<string, LineAttachementInfo>();
         const templateBBoxes = new Map<string, DOMRect>();
         const templates = svg.select('defs').selectAll<SVGGElement, unknown>('g[data-template-type]');
         const idSet = new Set<string>();
@@ -79,6 +83,8 @@ export class TemplateCache {
             }
             if (template.attr('data-template-type').toLowerCase() === 'marker') {
                 markerTemplates.set(id, template);
+                const attachementInfo = new LineAttachementInfo(template.attr('data-line-attachement-point'));
+                markerTemplateLineAttachements.set(id, attachementInfo);
             }
             // cleanup temp
             if (temp != null) {
@@ -90,6 +96,7 @@ export class TemplateCache {
         this.nodeTemplates = nodeTemplates;
         this.nodeTemplateLinkHandles = nodeTemplateLinkHandles;
         this.markerTemplates = markerTemplates;
+        this.markerTemplateLineAttachements = markerTemplateLineAttachements;
     }
 
     getTemplateBBox(id: string) {
@@ -125,11 +132,11 @@ export class TemplateCache {
     }
 
     getMarkerTemplate(markerType: string) {
-        if (markerType == null || markerType === '') {
-            console.warn('Cannot retrieve marker template for type ' + markerType + '!');
-            return;
-        }
-        return this.markerTemplates.get(markerType);
+        return this.markerTemplates.get(this.getMarkerTemplateId(markerType));
+    }
+
+    getMarkerAttachementPointInfo(markerType: string) {
+        return this.markerTemplateLineAttachements.get(this.getMarkerTemplateId(markerType));
     }
 
 }
