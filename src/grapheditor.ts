@@ -16,7 +16,6 @@
  */
 
 import { select, event, Selection } from 'd3-selection';
-import { scaleLinear } from 'd3-scale';
 import { zoom, zoomIdentity, zoomTransform, ZoomBehavior } from 'd3-zoom';
 import { drag } from 'd3-drag';
 import { line, curveBasis } from 'd3-shape';
@@ -55,8 +54,6 @@ export default class GraphEditor extends HTMLElement {
     private svg: Selection<SVGSVGElement, any, any, any>;
 
     private root: ShadowRoot;
-    private xScale;
-    private yScale;
     private zoom: ZoomBehavior<any, any>;
     private zoomActive: boolean = false;
     private edgeGenerator;
@@ -219,13 +216,6 @@ export default class GraphEditor extends HTMLElement {
         this.objectCache = new GraphObjectCache(this.templateCache);
         this.edgeGenerator = line<{ x: number; y: number; }>().x((d) => d.x)
             .y((d) => d.y).curve(curveBasis);
-
-        this.xScale = scaleLinear()
-            .domain([10, 0])
-            .range([0, 10]);
-        this.yScale = scaleLinear()
-            .domain([10, 0])
-            .range([0, 10]);
 
         this.root = this.attachShadow({ mode: 'open' });
 
@@ -649,9 +639,6 @@ export default class GraphEditor extends HTMLElement {
         const svg = this.svg;
         this.contentMaxHeight = parseInt(svg.style('height').replace('px', ''), 10);
         this.contentMaxWidth = parseInt(svg.style('width').replace('px', ''), 10);
-
-        this.yScale.range([0, Math.max(this.contentMaxHeight, this.contentMinHeight)]);
-        this.xScale.range([0, Math.max(this.contentMaxWidth, this.contentMinWidth)]);
     }
 
     /**
