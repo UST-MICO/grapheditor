@@ -34,6 +34,10 @@ export interface LinkHandle {
      * Usually away from the node center.
      */
     normal?: RotationVector;
+    /** The template to use for the link handle. */
+    template?: string;
+    /** True iff the link handle uses a dynamic template. */
+    isDynamicTemplate?: boolean;
 }
 
 /**

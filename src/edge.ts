@@ -65,6 +65,8 @@ export interface Edge {
     targetHandle?: LinkHandle;
     /** Edge type. Can be used for styling. */
     type?: any;
+    /** The id of the dynamic edge template to use for this edge. */
+    dynamicTemplate?: string;
     /** List of markers to draw for this edge. */
     markers?: Marker[];
     /** Markers to draw at the start of this edge. */

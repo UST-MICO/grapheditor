@@ -18,7 +18,9 @@
 import { LinkHandle, calculateNormal, handlesForCircle, handlesForRectangle, handlesForPolygon, handlesForPath } from './link-handle';
 import { Selection, select } from 'd3-selection';
 import { Point } from './edge';
-import { LineAttachementInfo } from './marker';
+import { LineAttachementInfo, Marker } from './marker';
+import { DynamicTemplate } from './dynamic-templates/dynamic-template';
+import { Node } from './node';
 
 export class TemplateCache {
 
@@ -139,6 +141,64 @@ export class TemplateCache {
         return this.markerTemplateLineAttachements.get(this.getMarkerTemplateId(markerType));
     }
 
+}
+
+/**
+ * Template registry for dynamic templates.
+ *
+ * The current instance can be retrieved from the GraphEditor object.
+ */
+export class DynymicTemplateRegistry {
+
+    private templates: Map<string, DynamicTemplate<Node|Marker>>;
+
+    constructor() {
+        this.templates = new Map<string, DynamicTemplate<Node|Marker>>();
+    }
+
+    /**
+     * Clears all dynamic templates.
+     */
+    public clearAllTemplates() {
+        this.templates = new Map<string, DynamicTemplate<Node|Marker>>();
+    }
+
+    /**
+     * Add a new dynamic template to the registry.
+     *
+     * The registry does not ensure type safety for templates on get!
+     *
+     * @param templateId the id of the new template
+     * @param template the new dynamic template (`null` will remove the template with `templateId`)
+     */
+    public addDynamicTemplate(templateId: string, template: DynamicTemplate<Node|Marker>) {
+        if (template == null) {
+            this.removeDynamicTemplate(templateId);
+            return;
+        }
+        if (this.templates.has(templateId)) {
+            console.warn(`Template id ${templateId} was already in use!`);
+        }
+        this.templates.set(templateId, template);
+    }
+
+    /**
+     * Get a dynamic template from the registry.
+     *
+     * @param templateId the template id
+     */
+    public getDynamicTemplate<T extends DynamicTemplate<Node|Marker>>(templateId: string): T {
+        return this.templates.get(templateId) as T;
+    }
+
+    /**
+     * Remove a dynamic template from the registry.
+     *
+     * @param templateId the template id
+     */
+    public removeDynamicTemplate(templateId: string) {
+        this.templates.delete(templateId);
+    }
 }
 
 /**

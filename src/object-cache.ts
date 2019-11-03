@@ -18,11 +18,13 @@
 import { Node } from './node';
 import { Edge, edgeId, DraggedEdge, Point } from './edge';
 import { LinkHandle, calculateNormal } from './link-handle';
-import { TemplateCache } from './templating';
+import { TemplateCache, DynymicTemplateRegistry } from './templating';
+import { DynamicNodeTemplate } from './dynamic-templates/dynamic-template';
 
 export class GraphObjectCache {
 
     private templateCache: TemplateCache;
+    private dynamicTemplateRegistry: DynymicTemplateRegistry;
 
     private nodes: Map<string, Node>;
     private nodeBBoxes: Map<string, DOMRect>;
@@ -30,8 +32,9 @@ export class GraphObjectCache {
     private edgesBySource: Map<string, Set<Edge>>;
     private edgesByTarget: Map<string, Set<Edge>>;
 
-    constructor(templateCache: TemplateCache) {
+    constructor(templateCache: TemplateCache, dynamicTemplateRegistry: DynymicTemplateRegistry) {
         this.templateCache = templateCache;
+        this.dynamicTemplateRegistry = dynamicTemplateRegistry;
         this.nodes = new Map<string, Node>();
         this.nodeBBoxes = new Map<string, DOMRect>();
         this.edges = new Map<string, Edge>();
@@ -102,12 +105,18 @@ export class GraphObjectCache {
         return edges;
     }
 
+    // TODO refactor link handle calculation out of object cache!
     // tslint:disable-next-line:max-line-length
     getEdgeLinkHandles(edge: Edge|DraggedEdge, _calculateHandlesToUse?: (edge: Edge|DraggedEdge, sourceHandles: LinkHandle[], source: Node, targetHandles: LinkHandle[], target: Node|Point) => {sourceHandles: LinkHandle[], targetHandles: LinkHandle[]}) {
         let source = this.getNode(edge.source);
         let sourceHandles = edge.sourceHandle != null ? [edge.sourceHandle] : [{id: 0, x: 0, y: 0, normal: {dx: 0, dy: 0}}];
         if (source != null) {
-            sourceHandles = this.templateCache.getNodeTemplateLinkHandles(source.type);
+            if (source.dynamicTemplate != null && source.dynamicTemplate !== '') {
+                const dynTemplate = this.dynamicTemplateRegistry.getDynamicTemplate<DynamicNodeTemplate>(source.dynamicTemplate);
+                sourceHandles = dynTemplate.getLinkHandles(source, null); // TODO remove null pointer!!!
+            } else {
+                sourceHandles = this.templateCache.getNodeTemplateLinkHandles(source.type);
+            }
         } else {
             console.warn('Attempting to render Edge without valid source.', edge);
             source = {id: 'UNDEFINED', x: 0, y: 0};
@@ -115,7 +124,12 @@ export class GraphObjectCache {
         let target = edge.target != null ? this.getNode(edge.target) : null;
         let targetHandles = edge.targetHandle != null ? [edge.targetHandle] : [{id: 0, x: 0, y: 0, normal: {dx: 0, dy: 0}}];
         if (target != null) {
-            targetHandles = this.templateCache.getNodeTemplateLinkHandles(target.type);
+            if (target.dynamicTemplate != null && target.dynamicTemplate !== '') {
+                const dynTemplate = this.dynamicTemplateRegistry.getDynamicTemplate<DynamicNodeTemplate>(target.dynamicTemplate);
+                targetHandles = dynTemplate.getLinkHandles(target, null); // TODO remove null pointer!!!
+            } else {
+                targetHandles = this.templateCache.getNodeTemplateLinkHandles(target.type);
+            }
         } else {
             if (edge.currentTarget != null) {
                 target = edge.currentTarget;
