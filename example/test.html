@@ -73,6 +73,36 @@
         <script>
             var graph = document.querySelector('network-graph');
 
+            graph.dynamicTemplateReg.addDynamicTemplate('dynamic-box', {
+                renderInitialTemplate(g) {
+                    g.append('rect');
+                    g.append('text').classed('text', true).attr('data-content', 'title');
+                },
+                updateTemplate(g) {
+                    const width = g.datum().width;
+                    const height = g.datum().height;
+                    g.select('rect')
+                        .attr('x', -width / 2)
+                        .attr('y', -height / 2)
+                        .attr('width', width)
+                        .attr('height', height);
+                    g.select('text')
+                        .attr('x', (-width / 2) + 5)
+                        .attr('y', (-height / 2) + 8)
+                        .attr('width', Math.max(width - 10, 1));
+                },
+                getLinkHandles(node) {
+                    const width = node.width;
+                    const height = node.height;
+                    return [
+                        {id: 0, x: -width / 2, y: 0, normal: {dx: -1, dy: 0}},
+                        {id: 1, x: 0, y: -height / 2, normal: {dx: 0, dy: -1}},
+                        {id: 2, x: width / 2, y: 0, normal: {dx: 1, dy: 0}},
+                        {id: 1, x: 0, y: height / 2, normal: {dx: 0, dy: 1}},
+                    ];
+                }
+            });
+
             graph.setNodeClass = (className, node) => {
                 if (className === node.type) {
                     return true;
@@ -173,6 +203,8 @@
                 // graph.addEdge({source: -1, target: -2});
 
                 graph.removeNode(3);
+
+                graph.addNode({id: 5, title: 'DYNAMIC', type: 'dynamic-node', x: 0, y: -80, dynamicTemplate: 'dynamic-box', width: 60, height: 10});
 
                 graph.completeRender();
                 graph.zoomToBoundingBox();

@@ -27,6 +27,8 @@ interface RotationData {
 export interface Marker {
     /** the marker template id to use for this marker. */
     template: string;
+    /** True iff the link handle uses a dynamic template. */
+    isDynamicTemplate?: boolean;
     /** The relative position of the marker on the edge (between 0 and 1, defaults to 1). */
     positionOnLine?: number|string;
     /** @deprecated The length used for end/start markers to offset the line position. */

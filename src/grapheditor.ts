@@ -26,8 +26,9 @@ import { LinkHandle } from './link-handle';
 import { GraphObjectCache } from './object-cache';
 import { wrapText } from './textwrap';
 import { calculateAngle, normalizeVector, RotationVector } from './rotation-vector';
-import { TemplateCache } from './templating';
+import { TemplateCache, DynymicTemplateRegistry } from './templating';
 import { Marker, LineAttachementInfo } from './marker';
+import { DynamicTemplate, DynamicNodeTemplate, DynamicMarkerTemplate } from './dynamic-templates/dynamic-template';
 
 const SHADOW_DOM_TEMPLATE = `
 <slot name="style"></slot>
@@ -74,6 +75,7 @@ export default class GraphEditor extends HTMLElement {
     private _zoomMode: string = 'both'; // ['none', 'manual', 'automatic', 'both']
 
     private templateCache: TemplateCache;
+    private dynamicTemplateReg: DynymicTemplateRegistry;
     private objectCache: GraphObjectCache;
 
     private interactionStateData: {
@@ -181,6 +183,16 @@ export default class GraphEditor extends HTMLElement {
         this.objectCache.updateEdgeCache(edges);
     }
 
+    /**
+     * Get the dynamic template registry of this graph.
+     *
+     * The dynamic template registry does not get cleared automatically when the other
+     * templates get updated!
+     */
+    get dynamicTemplateRegistry() {
+        return this.dynamicTemplateRegistry;
+    }
+
     get mode() {
         return this._mode;
     }
@@ -213,7 +225,8 @@ export default class GraphEditor extends HTMLElement {
         this._edges = [];
         this.draggedEdges = [];
         this.templateCache = new TemplateCache();
-        this.objectCache = new GraphObjectCache(this.templateCache);
+        this.dynamicTemplateReg = new DynymicTemplateRegistry();
+        this.objectCache = new GraphObjectCache(this.templateCache, this.dynamicTemplateReg);
         this.edgeGenerator = line<{ x: number; y: number; }>().x((d) => d.x)
             .y((d) => d.y).curve(curveBasis);
 
@@ -807,7 +820,7 @@ export default class GraphEditor extends HTMLElement {
                             .classed('link-handle', true)
                             .each(function () {
                                 const templateId = self.templateCache.getMarkerTemplateId('default-marker');
-                                self.updateContentTemplate(select(this), templateId, 'marker');
+                                self.updateContentTemplate<LinkHandle>(select(this), templateId, 'marker');
                             });
                     })
             )
@@ -854,13 +867,62 @@ export default class GraphEditor extends HTMLElement {
      * @param element the lement to update the content
      * @param templateId the new template ID
      * @param templateType the template type to use
+     * @param dynamic `true` iff the template is a dynamic template (default: `false`)
      */
-    private updateContentTemplate(element: Selection<SVGGElement, unknown, any, unknown>, templateId: string, templateType: string) {
+    // tslint:disable-next-line:max-line-length
+    private updateContentTemplate<T extends Node|Marker|LinkHandle>(element: Selection<SVGGElement, T, any, unknown>, templateId: string, templateType: string, dynamic: boolean= false, parent?: Node|Edge) {
         const oldTemplateID = element.attr('data-template');
-        if (oldTemplateID != null && oldTemplateID === templateId) {
+        const oldDynamic = element.attr('data-dynamic-template') === 'true';
+        if (oldTemplateID != null && oldTemplateID === templateId && dynamic === oldDynamic) {
             return; // already using right template
         }
         element.selectAll().remove(); // clear old content
+        if (dynamic) {
+            // dynamic template
+            if (templateType === 'node') {
+                const dynTemplate: DynamicTemplate<Node> = this.dynamicTemplateReg.getDynamicTemplate(templateId);
+                const g = element as Selection<SVGGElement, Node, any, unknown>;
+                if (dynTemplate != null) {
+                    dynTemplate.renderInitialTemplate(g, this, null);
+                } else {
+                    this.updateStaticContentTemplate<Node>(g, templateId, templateType);
+                }
+            } else if (templateType === 'marker') {
+                const dynTemplate: DynamicMarkerTemplate = this.dynamicTemplateReg.getDynamicTemplate(templateId);
+                const g = element as Selection<SVGGElement, Marker, any, unknown>;
+                if (dynTemplate != null) {
+                    dynTemplate.renderInitialTemplate(g, this, {parent: parent});
+                } else {
+                    this.updateStaticContentTemplate<Marker>(g, templateId, templateType);
+                }
+            } else {
+                console.warn('Tried to use unsupported template type: ' + templateType);
+            }
+        } else {
+            // static templates
+            const g = element as Selection<SVGGElement, Node|Marker|LinkHandle, any, unknown>;
+            this.updateStaticContentTemplate(g, templateId, templateType);
+        }
+        // set template id used by the element to new id
+        element.attr('data-template', templateId);
+        if (dynamic) {
+            element.attr('data-dynamic-template', 'true');
+        } else {
+            element.attr('data-dynamic-template', null);
+        }
+    }
+
+    /**
+     * Update the static content template of a `SVGGElement` to the new template id.
+     *
+     * If the `SVGGElement` already uses the template the content is not touched.
+     *
+     * @param element the lement to update the content
+     * @param templateId the new template ID
+     * @param templateType the template type to use
+     */
+    // tslint:disable-next-line:max-line-length
+    private updateStaticContentTemplate<T extends Node|Marker|LinkHandle>(element: Selection<SVGGElement, T, any, unknown>, templateId: string, templateType: string) {
         let newTemplate: Selection<SVGGElement, unknown, any, unknown>;
         if (templateType === 'node') {
             newTemplate = this.templateCache.getNodeTemplate(templateId);
@@ -873,8 +935,6 @@ export default class GraphEditor extends HTMLElement {
         newTemplate.node().childNodes.forEach((node) => {
             element.node().appendChild(node.cloneNode(true));
         });
-        // set template id used by the element to new id
-        element.attr('data-template', templateId);
     }
 
     /**
@@ -897,17 +957,33 @@ export default class GraphEditor extends HTMLElement {
 
         // update templates
         nodeSelection.each(function (d) {
-            const templateId = self.templateCache.getNodeTemplateId(d.type);
-            self.updateContentTemplate(select(this), templateId, 'node');
+            const g: Selection<SVGGElement, Node, any, unknown> = select(this).datum(d);
+            if (d.dynamicTemplate != null && d.dynamicTemplate !== '') {
+                self.updateContentTemplate<Node>(g, d.dynamicTemplate, 'node', true);
+            } else {
+                const templateId = self.templateCache.getNodeTemplateId(d.type);
+                self.updateContentTemplate<Node>(g, templateId, 'node');
+            }
         });
 
-        // update link handles for node
+        // update dynamic templates and link handles for node
         nodeSelection.each(function (node) {
-            const handles = self.templateCache.getNodeTemplateLinkHandles(node.type);
+            const g: Selection<SVGGElement, Node, any, unknown> = select(this).datum(node);
+            let handles: LinkHandle[] = [];
+            if (node.dynamicTemplate != null && node.dynamicTemplate !== '') {
+                // update dynamic template
+                const dynTemplate = self.dynamicTemplateReg.getDynamicTemplate<DynamicNodeTemplate>(node.dynamicTemplate);
+                if (dynTemplate != null) {
+                    dynTemplate.updateTemplate(g, self, null);
+                    handles = dynTemplate.getLinkHandles(node, self);
+                }
+            } else {
+                handles = self.templateCache.getNodeTemplateLinkHandles(node.type);
+            }
             if (handles == null) {
                 return;
             }
-            const handleSelection = select(this).selectAll<SVGGElement, LinkHandle>('g.link-handle')
+            const handleSelection = g.selectAll<SVGGElement, LinkHandle>('g.link-handle')
                 .data<LinkHandle>(handles as any, (handle: LinkHandle) => handle.id.toString())
                 .join(
                     enter => enter.append('g')
@@ -918,8 +994,16 @@ export default class GraphEditor extends HTMLElement {
                             return `translate(${x},${y})`;
                         })
                 ).each(function (d) {
-                    const templateId = self.templateCache.getMarkerTemplateId('default-marker');
-                    self.updateContentTemplate(select(this), templateId, 'marker');
+                    // tslint:disable-next-line:no-shadowed-variable
+                    const g = select(this).datum(d);
+                    const templateId = self.templateCache.getMarkerTemplateId(d.template);
+                    self.updateContentTemplate<LinkHandle>(g, templateId, 'marker', d.isDynamicTemplate, node);
+                    if (d.isDynamicTemplate) {
+                        const dynTemplate = self.dynamicTemplateReg.getDynamicTemplate<DynamicMarkerTemplate>(templateId);
+                        if (dynTemplate != null) {
+                            dynTemplate.updateTemplate(g, self, {parent: node});
+                        }
+                    }
                 });
 
             // allow edge drag from link handles
@@ -1008,29 +1092,37 @@ export default class GraphEditor extends HTMLElement {
     /**
      * Recursively retrieve an attribute.
      *
-     * This only supports '.' access of attributes.
+     * The attribute path is a string split at the '.' character.
+     * The attribute path is processed recursively by applying `obj = obj[attr[0]]`.
+     * If a path segment is '()' then `obj = obj()` is applied instead.
      *
      * @param obj the object to get the attribute from
      * @param attr the attribute or attribute path to get
      */
     private recursiveAttributeGet(obj: any, attr: string) {
-        let result;
-        if (attr != null) {
-            if (attr.includes('.')) {
-                // recursive decend along path
-                const path = attr.split('.');
-                let temp = obj;
-                path.forEach(segment => {
-                    if (temp != null && temp.hasOwnProperty(segment)) {
-                        temp = temp[segment];
-                    } else {
-                        temp = null;
-                    }
-                });
-                result = temp;
-            } else {
-                result = obj[attr];
+        let result = null;
+        try {
+            if (attr != null) {
+                if (attr.includes('.')) {
+                    // recursive decend along path
+                    const path = attr.split('.');
+                    let temp = obj;
+                    path.forEach(segment => {
+                        if (segment === '()') {
+                            temp = temp();
+                        } else if (temp != null && temp.hasOwnProperty(segment)) {
+                            temp = temp[segment];
+                        } else {
+                            temp = null;
+                        }
+                    });
+                    result = temp;
+                } else {
+                    result = obj[attr];
+                }
             }
+        } catch (error) { // TODO at debug output
+            return null;
         }
         return result;
     }
@@ -1193,14 +1285,13 @@ export default class GraphEditor extends HTMLElement {
         const pathSelection = edgeGroupSelection.select<SVGPathElement>('path.edge:not(.dragged)').datum(d);
         pathSelection.attr('stroke', 'black');
         this.updateEndMarkers(edgeGroupSelection, d);
-        const self = this;
         edgeGroupSelection.selectAll<SVGGElement, Marker>('g.marker:not(.marker-special)')
             .data(d.markers != null ? d.markers : [])
             .join(
                 enter => enter.append('g')
                     .classed('marker', true)
             )
-            .call(this.updateMarker.bind(this));
+            .call(this.updateMarker.bind(this), d);
 
         this.updateEdgeText(edgeGroupSelection, d);
 
@@ -1367,14 +1458,22 @@ export default class GraphEditor extends HTMLElement {
      * Update existing edge marker.
      *
      * @param markerSelection d3 selection
+     * @param edge the edge datum this marker belongs to
      */
-    private updateMarker(markerSelection: Selection<SVGGElement, Marker, any, unknown>) {
+    private updateMarker(markerSelection: Selection<SVGGElement, Marker, any, unknown>, edge: Edge) {
         const self = this;
         markerSelection
             .attr('data-click', (d) => d.clickEventKey)
             .each(function (marker) {
                 const templateId = self.templateCache.getMarkerTemplateId(marker.template);
-                self.updateContentTemplate(select(this), templateId, 'marker');
+                self.updateContentTemplate<Marker>(select(this), templateId, 'marker');
+                if (marker.isDynamicTemplate) {
+                    const g = select(this).datum(marker);
+                    const dynTemplate = self.dynamicTemplateReg.getDynamicTemplate<DynamicMarkerTemplate>(templateId);
+                    if (dynTemplate != null) {
+                        dynTemplate.updateTemplate(g, self, {parent: edge});
+                    }
+                }
             });
     }
 
@@ -1386,8 +1485,8 @@ export default class GraphEditor extends HTMLElement {
      * @param d edge datum
      */
     private updateEndMarkers(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, d: Edge) {
-        this.updateEndMarker(edgeGroupSelection, d.markerStart, 'marker-start');
-        this.updateEndMarker(edgeGroupSelection, d.markerEnd, 'marker-end');
+        this.updateEndMarker(edgeGroupSelection, d.markerStart, 'marker-start', d);
+        this.updateEndMarker(edgeGroupSelection, d.markerEnd, 'marker-end', d);
     }
 
     /**
@@ -1396,8 +1495,10 @@ export default class GraphEditor extends HTMLElement {
      * @param edgeGroupSelection d3 selection of single edge group
      * @param marker the special end marker
      * @param markerClass the css class to select for
+     * @param edge the edge datum this marker belongs to
      */
-    private updateEndMarker(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, marker: Marker, markerClass: string) {
+    // tslint:disable-next-line:max-line-length
+    private updateEndMarker(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, marker: Marker, markerClass: string, edge: Edge) {
         if (marker == null) {
             // delete
             edgeGroupSelection.select('g.marker.marker-end').remove();
@@ -1414,7 +1515,7 @@ export default class GraphEditor extends HTMLElement {
                 .classed('marker-special', true)
                 .datum<Marker>(marker);
         }
-        this.updateMarker(markerEndSelection);
+        this.updateMarker(markerEndSelection, edge);
     }
 
     /**
