@@ -30,7 +30,8 @@ export class DynamicBoxTemplate implements DynamicNodeTemplate {
             .attr('width', Math.max(width - 10, 1));
     }
 
-    getLinkHandles(node: Node, grapheditor) {
+    getLinkHandles(g: Selection<SVGGElement, Node, any, unknown>, grapheditor) {
+        const node = g.datum();
         const width = node.width;
         const height = node.height;
         return handlesForRectangle(-width / 2, -height / 2, width, height, this.linkHandleOptions);
