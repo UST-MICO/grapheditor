@@ -66,7 +66,7 @@ export interface DynamicNodeTemplate extends DynamicTemplate<Node> {
      * @param node the node object
      * @param grapheditor the grapheditor managing this graph
      */
-    getLinkHandles(Node, grapheditor: GraphEditor): LinkHandle[];
+    getLinkHandles(g: Selection<SVGGElement, Node, any, unknown>, grapheditor: GraphEditor): LinkHandle[];
 }
 
 /**

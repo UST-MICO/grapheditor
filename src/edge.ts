@@ -56,12 +56,28 @@ export interface TextComponent {
  * Interface for edges between nodes.
  */
 export interface Edge {
+    /**
+     * An optional explicit edge id.
+     *
+     * The edge id is normally computed by the `edgeId` function.
+     * If this attribute is set it gets returned by `edgeId` instead of the computed id.
+     */
     id?: number|string;
     /** The id of the source node of this edge. */
     source: number|string;
     /** The id of the target node of this edge. */
     target: number|string;
+    /**
+     * The link handle of the source node the edge is attached to.
+     *
+     * This attribute is set automatically by the grapheditor.
+     */
     sourceHandle?: LinkHandle;
+    /**
+     * The link handle of the target node the edge is attached to.
+     *
+     * This attribute is set automatically by the grapheditor.
+     */
     targetHandle?: LinkHandle;
     /** Edge type. Can be used for styling. */
     type?: any;
@@ -82,6 +98,11 @@ export interface Edge {
  * Extra attributes for edges dragged bay a user.
  */
 export interface DraggedEdge extends Edge {
+    /**
+     * Explicit id of the dragged edge.
+     *
+     * A dragged edge may have no current target and must to specify an explicit id!
+     */
     id: string;
     /** If edge was created from an existing edge this is the id of the existing edge. */
     createdFrom?: number|string;

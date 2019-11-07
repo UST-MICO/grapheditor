@@ -16,15 +16,9 @@
  */
 
 import { Node } from './node';
-import { Edge, edgeId, DraggedEdge, Point } from './edge';
-import { LinkHandle, calculateNormal } from './link-handle';
-import { TemplateCache, DynymicTemplateRegistry } from './templating';
-import { DynamicNodeTemplate } from './dynamic-templates/dynamic-template';
+import { Edge, edgeId } from './edge';
 
 export class GraphObjectCache {
-
-    private templateCache: TemplateCache;
-    private dynamicTemplateRegistry: DynymicTemplateRegistry;
 
     private nodes: Map<string, Node>;
     private nodeBBoxes: Map<string, DOMRect>;
@@ -32,9 +26,7 @@ export class GraphObjectCache {
     private edgesBySource: Map<string, Set<Edge>>;
     private edgesByTarget: Map<string, Set<Edge>>;
 
-    constructor(templateCache: TemplateCache, dynamicTemplateRegistry: DynymicTemplateRegistry) {
-        this.templateCache = templateCache;
-        this.dynamicTemplateRegistry = dynamicTemplateRegistry;
+    constructor() {
         this.nodes = new Map<string, Node>();
         this.nodeBBoxes = new Map<string, DOMRect>();
         this.edges = new Map<string, Edge>();
@@ -105,89 +97,4 @@ export class GraphObjectCache {
         return edges;
     }
 
-    // TODO refactor link handle calculation out of object cache!
-    // tslint:disable-next-line:max-line-length
-    getEdgeLinkHandles(edge: Edge|DraggedEdge, _calculateHandlesToUse?: (edge: Edge|DraggedEdge, sourceHandles: LinkHandle[], source: Node, targetHandles: LinkHandle[], target: Node|Point) => {sourceHandles: LinkHandle[], targetHandles: LinkHandle[]}) {
-        let source = this.getNode(edge.source);
-        let sourceHandles = edge.sourceHandle != null ? [edge.sourceHandle] : [{id: 0, x: 0, y: 0, normal: {dx: 0, dy: 0}}];
-        if (source != null) {
-            if (source.dynamicTemplate != null && source.dynamicTemplate !== '') {
-                const dynTemplate = this.dynamicTemplateRegistry.getDynamicTemplate<DynamicNodeTemplate>(source.dynamicTemplate);
-                sourceHandles = dynTemplate.getLinkHandles(source, null); // TODO remove null pointer!!!
-            } else {
-                sourceHandles = this.templateCache.getNodeTemplateLinkHandles(source.type);
-            }
-        } else {
-            console.warn('Attempting to render Edge without valid source.', edge);
-            source = {id: 'UNDEFINED', x: 0, y: 0};
-        }
-        let target = edge.target != null ? this.getNode(edge.target) : null;
-        let targetHandles = edge.targetHandle != null ? [edge.targetHandle] : [{id: 0, x: 0, y: 0, normal: {dx: 0, dy: 0}}];
-        if (target != null) {
-            if (target.dynamicTemplate != null && target.dynamicTemplate !== '') {
-                const dynTemplate = this.dynamicTemplateRegistry.getDynamicTemplate<DynamicNodeTemplate>(target.dynamicTemplate);
-                targetHandles = dynTemplate.getLinkHandles(target, null); // TODO remove null pointer!!!
-            } else {
-                targetHandles = this.templateCache.getNodeTemplateLinkHandles(target.type);
-            }
-        } else {
-            if (edge.currentTarget != null) {
-                target = edge.currentTarget;
-            } else {
-                console.warn('Attempting to render Edge without valid target.', edge);
-                target = {id: 'UNDEFINED', x: 1, y: 1};
-            }
-        }
-        if (_calculateHandlesToUse != null) {
-            // replace template link handle lists with user calculated lists
-            const calculatedHandles = _calculateHandlesToUse(edge, sourceHandles, source, targetHandles, target);
-            if (calculatedHandles != null && calculatedHandles.sourceHandles != null && calculatedHandles.sourceHandles.length > 0) {
-                sourceHandles = calculatedHandles.sourceHandles;
-            }
-            if (calculatedHandles != null && calculatedHandles.targetHandles != null && calculatedHandles.targetHandles.length > 0) {
-                targetHandles = calculatedHandles.targetHandles;
-            }
-        }
-        const result = this.calculateNearestHandles(sourceHandles, source, targetHandles, target);
-        return {
-            sourceHandle: result.sourceHandle,
-            sourceCoordinates: {x: (source.x + result.sourceHandle.x), y: (source.y + result.sourceHandle.y)},
-            targetHandle: result.targetHandle,
-            targetCoordinates: {x: (target.x + result.targetHandle.x), y: (target.y + result.targetHandle.y)},
-        };
-    }
-
-    private calculateNearestHandles(sourceHandles: LinkHandle[], source: Node, targetHandles: LinkHandle[],
-                                    target: {x: number, y: number}) {
-        let currentSourceHandle: LinkHandle = {id: 0, x: 0, y: 0, normal: {dx: 1, dy: 1}};
-        if (sourceHandles != null && sourceHandles.length > 0) {
-            currentSourceHandle = sourceHandles[0];
-        } else {
-            calculateNormal(currentSourceHandle);
-        }
-        let currentTargetHandle: LinkHandle = {id: 0, x: 0, y: 0, normal: {dx: 1, dy: 1}};
-        if (targetHandles != null && targetHandles.length > 0) {
-            currentTargetHandle = targetHandles[0];
-        } else {
-            calculateNormal(currentTargetHandle);
-        }
-        let currentDist = Math.pow((source.x + currentSourceHandle.x) - target.x, 2) +
-                          Math.pow((source.y + currentSourceHandle.y) - target.y, 2);
-        targetHandles.forEach((targetHandle) => {
-            for (let i = 0; i < sourceHandles.length; i++) {
-                const handle = sourceHandles[i];
-                const dist = Math.pow((source.x + handle.x) - (target.x + targetHandle.x), 2) +
-                             Math.pow((source.y + handle.y) - (target.y + targetHandle.y), 2);
-                if (dist <= currentDist) {
-                    currentSourceHandle = handle;
-                    currentTargetHandle = targetHandle;
-                    currentDist = dist;
-                }
-            }
-        });
-        return {
-            sourceHandle: currentSourceHandle,
-            targetHandle: currentTargetHandle,
-        };
-    }
 }

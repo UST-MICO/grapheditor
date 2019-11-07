@@ -91,7 +91,8 @@
                         .attr('y', (-height / 2) + 8)
                         .attr('width', Math.max(width - 10, 1));
                 },
-                getLinkHandles(node) {
+                getLinkHandles(g) {
+                    const node = g.datum();
                     const width = node.width;
                     const height = node.height;
                     return [
@@ -128,8 +129,8 @@
                 targetHandles.forEach(handle => {
                     result.targetHandles.push({
                         id: handle.id,
-                        x: handle.x + handle.normal.dx*3,
-                        y: handle.y + handle.normal.dy*3,
+                        x: handle.x + (handle.normal ? handle.normal.dx*3 : 0),
+                        y: handle.y + (handle.normal ? handle.normal.dy*3 : 0),
                         normal: handle.normal,
                     })
                 })

@@ -29,6 +29,7 @@ import { calculateAngle, normalizeVector, RotationVector } from './rotation-vect
 import { TemplateCache, DynymicTemplateRegistry } from './templating';
 import { Marker, LineAttachementInfo } from './marker';
 import { DynamicTemplate, DynamicNodeTemplate, DynamicMarkerTemplate } from './dynamic-templates/dynamic-template';
+import { getNodeLinkHandles, applyUserLinkHandleCalculationCallback, calculateNearestHandles } from './link-handle-helper';
 
 const SHADOW_DOM_TEMPLATE = `
 <slot name="style"></slot>
@@ -226,7 +227,7 @@ export default class GraphEditor extends HTMLElement {
         this.draggedEdges = [];
         this.templateCache = new TemplateCache();
         this.dynamicTemplateReg = new DynymicTemplateRegistry();
-        this.objectCache = new GraphObjectCache(this.templateCache, this.dynamicTemplateReg);
+        this.objectCache = new GraphObjectCache();
         this.edgeGenerator = line<{ x: number; y: number; }>().x((d) => d.x)
             .y((d) => d.y).curve(curveBasis);
 
@@ -779,7 +780,7 @@ export default class GraphEditor extends HTMLElement {
             .join(
                 enter => enter.append('g')
                     .classed('node', true)
-                    .attr('id', (d) => d.id)
+                    .attr('id', (d) => `node-${d.id}`)
             )
             .call(this.updateNodes.bind(this))
             .call(this.updateNodePositions.bind(this))
@@ -808,7 +809,7 @@ export default class GraphEditor extends HTMLElement {
             .data<Edge>(this._edges, edgeId)
             .join(
                 enter => enter.append('g')
-                    .attr('id', (d) => edgeId(d))
+                    .attr('id', (d) => `edge-${edgeId(d)}`)
                     .classed('edge-group', true)
                     .each(function (d) {
                         const edgeGroup = select(this);
@@ -883,7 +884,11 @@ export default class GraphEditor extends HTMLElement {
                 const dynTemplate: DynamicTemplate<Node> = this.dynamicTemplateReg.getDynamicTemplate(templateId);
                 const g = element as Selection<SVGGElement, Node, any, unknown>;
                 if (dynTemplate != null) {
-                    dynTemplate.renderInitialTemplate(g, this, null);
+                    try {
+                        dynTemplate.renderInitialTemplate(g, this, null);
+                    } catch (error) {
+                        console.error(`An error occured while rendering the dynamic template for node ${g.datum().id}!`, error);
+                    }
                 } else {
                     this.updateStaticContentTemplate<Node>(g, templateId, templateType);
                 }
@@ -891,7 +896,11 @@ export default class GraphEditor extends HTMLElement {
                 const dynTemplate: DynamicMarkerTemplate = this.dynamicTemplateReg.getDynamicTemplate(templateId);
                 const g = element as Selection<SVGGElement, Marker, any, unknown>;
                 if (dynTemplate != null) {
-                    dynTemplate.renderInitialTemplate(g, this, {parent: parent});
+                    try {
+                        dynTemplate.renderInitialTemplate(g, this, {parent: parent});
+                    } catch (error) {
+                        console.error(`An error occured while rendering the dynamic marker template!`, {parent: parent}, error);
+                    }
                 } else {
                     this.updateStaticContentTemplate<Marker>(g, templateId, templateType);
                 }
@@ -938,6 +947,19 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
+     * Get a single node selection with bound datum.
+     *
+     * @param nodeId the id of the node to select
+     */
+    private getSingleNodeSelection(nodeId: string|number): Selection<SVGGElement, Node, any, unknown> {
+        const node = this.objectCache.getNode(nodeId);
+        if (node != null) {
+            return this.svg.select<SVGGElement>('.nodes').select<SVGGElement>(`g.node#node-${nodeId}`).datum(node);
+        }
+        return null;
+    }
+
+    /**
      * Update existing nodes.
      *
      * @param nodeSelection d3 selection of nodes to update with bound data
@@ -974,11 +996,17 @@ export default class GraphEditor extends HTMLElement {
                 // update dynamic template
                 const dynTemplate = self.dynamicTemplateReg.getDynamicTemplate<DynamicNodeTemplate>(node.dynamicTemplate);
                 if (dynTemplate != null) {
-                    dynTemplate.updateTemplate(g, self, null);
-                    handles = dynTemplate.getLinkHandles(node, self);
+                    try {
+                        dynTemplate.updateTemplate(g, self, null);
+                    } catch (error) {
+                        console.error(`An error occured while updating the dynamic template for node ${node.id}!`, error);
+                    }
                 }
-            } else {
-                handles = self.templateCache.getNodeTemplateLinkHandles(node.type);
+            }
+            try {
+                handles = getNodeLinkHandles(g, self.templateCache, self.dynamicTemplateReg, self);
+            } catch (error) {
+                console.error(`An error occured while calculating the link handles for node ${node.id}!`, error);
             }
             if (handles == null) {
                 return;
@@ -993,7 +1021,7 @@ export default class GraphEditor extends HTMLElement {
                             const y = d.y != null ? d.y : 0;
                             return `translate(${x},${y})`;
                         })
-                ).each(function (d) {
+                ).each(function (d: LinkHandle) {
                     // tslint:disable-next-line:no-shadowed-variable
                     const g = select(this).datum(d);
                     const templateId = self.templateCache.getMarkerTemplateId(d.template);
@@ -1001,7 +1029,12 @@ export default class GraphEditor extends HTMLElement {
                     if (d.isDynamicTemplate) {
                         const dynTemplate = self.dynamicTemplateReg.getDynamicTemplate<DynamicMarkerTemplate>(templateId);
                         if (dynTemplate != null) {
-                            dynTemplate.updateTemplate(g, self, {parent: node});
+                            try {
+                                dynTemplate.updateTemplate(g, self, {parent: node});
+                            } catch (error) {
+                                // tslint:disable-next-line:max-line-length
+                                console.error(`An error occured while updating the dynamic link handle template in node ${node.id}!`, error);
+                            }
                         }
                     }
                 });
@@ -1203,7 +1236,7 @@ export default class GraphEditor extends HTMLElement {
             .data<DraggedEdge>(this.draggedEdges, edgeId)
             .join(
                 enter => enter.append('g')
-                    .attr('id', (d) => edgeId(d))
+                    .attr('id', (d) => `edge-${edgeId(d)}`)
                     .classed('edge-group', true)
                     .classed('dragged', true)
                     .each(function () {
@@ -1251,6 +1284,7 @@ export default class GraphEditor extends HTMLElement {
     private updateEdgePositions(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>) {
         const self = this;
         edgeGroupSelection.select<SVGPathElement>('path.edge')
+            .call(this.updateEdgeLinkHandles.bind(this))
             .call(this.updateEdgePath.bind(this));
         edgeGroupSelection.each(function (d) {
             self.updateEdgeTextPositions(select(this), d);
@@ -1397,59 +1431,156 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
+     * Calculate the link handles for each edge and store them into the edge.
+     *
+     * @param edgeSelection d3 selection of edges to update with bound data
+     */
+    private updateEdgeLinkHandles(edgeSelection: Selection<SVGPathElement, Edge | DraggedEdge, any, unknown>) {
+        edgeSelection.each(edge => {
+
+            const sourceNodeSelection = this.getSingleNodeSelection(edge.source);
+            const targetNodeSelection = (edge.target != null) ? this.getSingleNodeSelection(edge.target) : null;
+            let initialSourceHandles, initialTargetHandles;
+            try {
+                initialSourceHandles = getNodeLinkHandles(sourceNodeSelection, this.templateCache, this.dynamicTemplateReg, this);
+            } catch (error) {
+                console.error(`An error occured while calculating the link handles for node ${edge.source}!`, error);
+            }
+            try {
+                initialTargetHandles = getNodeLinkHandles(targetNodeSelection, this.templateCache, this.dynamicTemplateReg, this);
+            } catch (error) {
+                console.error(`An error occured while calculating the link handles for node ${edge.target}!`, error);
+            }
+
+            let sourceNode: Node, targetNode: Node | Point;
+            if (sourceNodeSelection != null && !sourceNodeSelection.empty()) {
+                sourceNode = sourceNodeSelection.datum();
+            } else {
+                console.warn('Attempting to render edge without a valid source!');
+            }
+            if (targetNodeSelection != null && !targetNodeSelection.empty()) {
+                targetNode = targetNodeSelection.datum();
+            } else if (edge.currentTarget != null) {
+                targetNode = edge.currentTarget as Point;
+            } else {
+                console.warn('Attempting to render edge without a valid target!');
+            }
+
+            const newHandles = applyUserLinkHandleCalculationCallback(
+                edge,
+                initialSourceHandles,
+                sourceNode,
+                initialTargetHandles,
+                targetNode,
+                this.calculateLinkHandlesForEdge
+            );
+
+            const nearestHandles = calculateNearestHandles(newHandles.sourceHandles, sourceNode, newHandles.targetHandles, targetNode);
+            edge.sourceHandle = nearestHandles.sourceHandle;
+            edge.targetHandle = nearestHandles.targetHandle;
+        });
+    }
+
+    /**
      * Update existing edge path.
      *
      * @param edgeSelection d3 selection of edges to update with bound data
      */
     private updateEdgePath(edgeSelection: Selection<SVGPathElement, Edge, any, unknown>) {
         const self = this;
-        edgeSelection.each(function (d) {
-            const singleEdgeSelection = select(this);
-            const strokeWidth: number = parseFloat(singleEdgeSelection.style('stroke-width').replace(/px/, ''));
-            singleEdgeSelection.attr('d', () => {
-                const handles = self.objectCache.getEdgeLinkHandles(d, self.calculateLinkHandlesForEdge);
+        edgeSelection.each(function (edge) {
+            const singleEdgeSelection = select(this).datum(edge);
+            const strokeWidth: number = parseFloat(edgeSelection.style('stroke-width').replace(/px/, ''));
+            edgeSelection.attr('d', (d) => {
+                let sourceCoordinates: Point = d.source != null ? self.objectCache.getNode(d.source) : null;
+                let targetCoordinates: Point = d.target != null ? self.objectCache.getNode(d.target) : null;
+
+                if (sourceCoordinates == null) {
+                    sourceCoordinates = { x: 0, y: 0 };
+                }
+                if (targetCoordinates == null) {
+                    if (d.currentTarget != null) {
+                        targetCoordinates = d.currentTarget;
+                    } else {
+                        targetCoordinates = { x: 0, y: 1 };
+                    }
+                }
+
+                // apply link handle offsets
+                if (d.sourceHandle != null) {
+                    sourceCoordinates = {
+                        x: sourceCoordinates.x + d.sourceHandle.x,
+                        y: sourceCoordinates.y + d.sourceHandle.y,
+                    };
+                }
+                if (d.targetHandle != null) {
+                    targetCoordinates = {
+                        x: targetCoordinates.x + d.targetHandle.x,
+                        y: targetCoordinates.y + d.targetHandle.y,
+                    };
+                }
+
+                let sourceHandleNormal: RotationVector;
+                let targetHandleNormal: RotationVector;
+
+                // rotation vector between edge start and end
+                let baseNormal: RotationVector = {
+                    dx: sourceCoordinates.x - targetCoordinates.x,
+                    dy: sourceCoordinates.y - targetCoordinates.y,
+                };
+                if (baseNormal.dx === 0 && baseNormal.dy === 0) {
+                    baseNormal.dx = 1;
+                }
+                baseNormal = normalizeVector(baseNormal);
+
+                if (d.sourceHandle != null && d.sourceHandle.normal != null) {
+                    sourceHandleNormal = d.sourceHandle.normal;
+                } else {
+                    sourceHandleNormal = baseNormal;
+                }
+                if (d.targetHandle != null && d.targetHandle.normal != null) {
+                    targetHandleNormal = d.targetHandle.normal;
+                } else {
+                    targetHandleNormal = { dx: -baseNormal.dx, dy: -baseNormal.dy };
+                }
+
+                // calculate path
                 const points: { x: number, y: number, [prop: string]: any }[] = [];
 
                 // Calculate line attachement point for startMarker
-                let startAttachementPointVector: RotationVector = {dx: 0, dy: 0};
-                if (handles.sourceHandle.normal != null && d.markerStart != null &&
-                    (handles.sourceHandle.normal.dx !== 0 || handles.sourceHandle.normal.dy !== 0)) {
-                    // tslint:disable-next-line:max-line-length
-                    startAttachementPointVector = self.calculateLineAttachementVector(handles.sourceHandle.normal, d.markerStart, strokeWidth);
+                let startAttachementPointVector: RotationVector = { dx: 0, dy: 0 };
+                if (d.markerStart != null) {
+                    startAttachementPointVector = self.calculateLineAttachementVector(sourceHandleNormal, d.markerStart, strokeWidth);
                 }
 
                 points.push({
-                    x: handles.sourceCoordinates.x - startAttachementPointVector.dx,
-                    y: handles.sourceCoordinates.y - startAttachementPointVector.dy,
+                    x: sourceCoordinates.x - startAttachementPointVector.dx,
+                    y: sourceCoordinates.y - startAttachementPointVector.dy,
                 });
-                if (handles.sourceHandle.normal != null) {
-                    points.push({
-                        x: handles.sourceCoordinates.x - startAttachementPointVector.dx + (handles.sourceHandle.normal.dx * 10),
-                        y: handles.sourceCoordinates.y - startAttachementPointVector.dy + (handles.sourceHandle.normal.dy * 10),
-                    });
-                }
+                points.push({
+                    x: sourceCoordinates.x - startAttachementPointVector.dx + (sourceHandleNormal.dx * 10),
+                    y: sourceCoordinates.y - startAttachementPointVector.dy + (sourceHandleNormal.dy * 10),
+                });
 
                 // Calculate line attachement point for endMarker
-                let endAttachementPointVector: RotationVector = {dx: 0, dy: 0};
-                if (handles.targetHandle.normal != null && d.markerEnd != null &&
-                    (handles.targetHandle.normal.dx !== 0 || handles.targetHandle.normal.dy !== 0)) {
-                    endAttachementPointVector = self.calculateLineAttachementVector(handles.targetHandle.normal, d.markerEnd, strokeWidth);
+                let endAttachementPointVector: RotationVector = { dx: 0, dy: 0 };
+                if (d.markerEnd != null) {
+                    endAttachementPointVector = self.calculateLineAttachementVector(targetHandleNormal, d.markerEnd, strokeWidth);
                 }
 
-                if (handles.targetHandle.normal != null) {
+                if (d.target != null) {
                     points.push({
-                        x: handles.targetCoordinates.x - endAttachementPointVector.dx + (handles.targetHandle.normal.dx * 10),
-                        y: handles.targetCoordinates.y - endAttachementPointVector.dy + (handles.targetHandle.normal.dy * 10),
+                        x: targetCoordinates.x - endAttachementPointVector.dx + (targetHandleNormal.dx * 10),
+                        y: targetCoordinates.y - endAttachementPointVector.dy + (targetHandleNormal.dy * 10),
                     });
                     points.push({
-                        x: handles.targetCoordinates.x - endAttachementPointVector.dx,
-                        y: handles.targetCoordinates.y - endAttachementPointVector.dy,
+                        x: targetCoordinates.x - endAttachementPointVector.dx,
+                        y: targetCoordinates.y - endAttachementPointVector.dy,
                     });
                 } else {
-                    points.push(handles.targetCoordinates);
+                    points.push(targetCoordinates);
                 }
                 return self.edgeGenerator(points);
-
             });
         });
     }
@@ -1471,7 +1602,11 @@ export default class GraphEditor extends HTMLElement {
                     const g = select(this).datum(marker);
                     const dynTemplate = self.dynamicTemplateReg.getDynamicTemplate<DynamicMarkerTemplate>(templateId);
                     if (dynTemplate != null) {
-                        dynTemplate.updateTemplate(g, self, {parent: edge});
+                        try {
+                            dynTemplate.updateTemplate(g, self, {parent: edge});
+                        } catch (error) {
+                            console.error(`An error occured while updating the dynamic marker template in edge ${edgeId(edge)}!`, error);
+                        }
                     }
                 }
             });
@@ -1931,7 +2066,7 @@ export default class GraphEditor extends HTMLElement {
             let target = select(possibleTarget);
             while (!target.empty()) {
                 if (target.classed('node')) {
-                    const id = target.attr('id');
+                    const id = target.attr('id').replace(/^node-/, '');
                     if (event.subject.source.toString() === id) {
                         break;
                     }
