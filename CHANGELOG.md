@@ -11,12 +11,22 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 - Added `Edge.markerStart`
 - Added `data-line-attachement-point` to marker templates to specify where an edge attaches to the marker if the marker is an end marker
-- Added dynamic templates for Nodes, Markers and LinkHandles
+- Added dynamic templates for Nodes, Markers,TextComponents and LinkHandles
 - Added dynamic template registry
+- Added static template registry
+- Consolidated positioning for all objects placed along an edge (markers and text components)
+- Added rotation to text components
 
 ### Deprecated
 
-- Deprecated `Marker.lineOffset`. use `data-line-attachement-point` in marker template instead.
+- Deprecated `Marker.rotate`. Use `Marker.absoluteRotation` and `Marker.relativeRotation` instead.
+
+
+### Incompatible changes
+
+- Removed `Marker.lineOffset`. Use `data-line-attachement-point` in marker template instead.
+- Removed `TextComponent.class`. Use custom dynamic templates instead.
+- All text components are wrapped in a `<g>` element. This will break some css styles!
 
 
 ## [0.2.0] - 2019-10-27

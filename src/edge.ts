@@ -17,6 +17,7 @@
 
 import { LinkHandle } from './link-handle';
 import { Marker } from './marker';
+import { RotationData } from './rotation-vector';
 
 /**
  * A single point.
@@ -27,11 +28,40 @@ export interface Point {
 }
 
 /**
+ * Interface describing the position of a marker, text component or link handle placed along an edge path.
+ */
+export interface PathPositionRotationAndScale extends RotationData {
+    /** The relative position of the marker on the edge (between 0 and 1). (Default `0`=='start') */
+    positionOnLine?: number|'start'|'end';
+    /** A factor to scale the marker. */
+    scale?: number;
+    /** If true the scaling factor is applied relative to the stroke width. */
+    scaleRelative?: boolean;
+    /** If true the relative rotation is applied as if the path always goes from left to right. */
+    ignorePathDirectionForRotation?: boolean;
+}
+
+/**
+ * Normalize the positionOnLine argument to a number. (Default: `0`)
+ * @param positionOnLine
+ */
+export function normalizePositionOnLine(positionOnLine: number|'start'|'end') {
+    if (positionOnLine == null || positionOnLine === 'start') {
+        return 0;
+    }
+    if (positionOnLine === 'end') {
+        return 1;
+    }
+    if (isNaN(positionOnLine)) {
+        return 0;
+    }
+    return positionOnLine;
+}
+
+/**
  * Interface for text components that are part of an edge.
  */
-export interface TextComponent {
-    /** The relative position of the marker on the edge (between 0 and 1). */
-    positionOnLine: number;
+export interface TextComponent extends PathPositionRotationAndScale {
     /** The actual text content. */
     value?: string;
     /** The path to the attribute containing the text. */
@@ -42,14 +72,14 @@ export interface TextComponent {
     width: number;
     /** The height used for wrapping multiline text. */
     height?: number;
-    /** The complete class attribute. */
-    class?: string;
     /** The padding is used to avoid collisions. */
     padding?: number;
     /** Offset from the reference point in x direction. */
     offsetX?: number;
     /** Offset from the reference point in y direction. */
     offsetY?: number;
+    /** The template to use for this text component. (Default: `'default-textcomponent'`) */
+    template?: string;
 }
 
 /**

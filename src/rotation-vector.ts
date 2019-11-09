@@ -20,6 +20,17 @@ export interface RotationVector {
     dy: number;
 }
 
+export interface RotationData {
+    /**
+     * Absolute rotation angle in degree.
+     *
+     * Absolute rotation overwrites any relative rotation.
+     */
+    absoluteRotation?: number;
+    /** Relative rotation angle in degree. */
+    relativeRotation?: number;
+}
+
 /**
  * Calculate the absolute length of the given vector.
  *

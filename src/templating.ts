@@ -17,12 +17,17 @@
 
 import { LinkHandle, calculateNormal, handlesForCircle, handlesForRectangle, handlesForPolygon, handlesForPath } from './link-handle';
 import { Selection, select } from 'd3-selection';
-import { Point } from './edge';
+import { Point, TextComponent } from './edge';
 import { LineAttachementInfo, Marker } from './marker';
 import { DynamicTemplate } from './dynamic-templates/dynamic-template';
 import { Node } from './node';
 
-export class TemplateCache {
+/**
+ * Template registry for static templates.
+ *
+ * The current instance can be retrieved from the GraphEditor object.
+ */
+export class StaticTemplateRegistry {
 
     private nodeTemplates: Map<string, Selection<SVGGElement, unknown, any, unknown>>;
     private nodeTemplateLinkHandles: Map<string, LinkHandle[]>;
@@ -40,6 +45,8 @@ export class TemplateCache {
 
     /**
      * Update template cache from the given svg.
+     *
+     * This method searches for templates in the first `<defs>` element of the given svg.
      *
      * @param svg the svg to search for templates
      */
@@ -101,10 +108,22 @@ export class TemplateCache {
         this.markerTemplateLineAttachements = markerTemplateLineAttachements;
     }
 
+    /**
+     * Get the bounding box of a static template (without link handles!).
+     *
+     * @param id the template id
+     */
     getTemplateBBox(id: string) {
         return this.templateBBoxes.get(id);
     }
 
+    /**
+     * Get the template id for the given node type.
+     *
+     * If the type is null or has no registered template the id `'default'` is returned instead.
+     *
+     * @param nodeType the type of the node
+     */
     getNodeTemplateId(nodeType: string) {
         if (nodeType == null || !this.nodeTemplates.has(nodeType)) {
             return 'default';
@@ -113,10 +132,22 @@ export class TemplateCache {
         }
     }
 
+    /**
+     * Get the static template for the given node type.
+     *
+     * This method uses `getNodeTemplateId`.
+     * @param id the template id (normally the node type)
+     */
     getNodeTemplate(id: string) {
         return this.nodeTemplates.get(this.getNodeTemplateId(id));
     }
 
+    /**
+     * Get the link handles for the given node type.
+     *
+     * This method uses `getNodeTemplateId`.
+     * @param id the template id (normally the node type)
+     */
     getNodeTemplateLinkHandles(id: string): LinkHandle[] {
         const handles = this.nodeTemplateLinkHandles.get(this.getNodeTemplateId(id));
         if (handles == null) {
@@ -125,6 +156,13 @@ export class TemplateCache {
         return handles;
     }
 
+    /**
+     * Get the template id for the given marker type.
+     *
+     * If the type is null or has no registered template the id `'default-marker'` is returned instead.
+     *
+     * @param nodeType the type of the marker
+     */
     getMarkerTemplateId(markerType: string) {
         if (markerType == null || !this.markerTemplates.has(markerType)) {
             return 'default-marker';
@@ -133,10 +171,22 @@ export class TemplateCache {
         }
     }
 
+    /**
+     * Get the static template for the given marker type.
+     *
+     * This method uses `getMarkerTemplateId`.
+     * @param id the template id (normally the marker type)
+     */
     getMarkerTemplate(markerType: string) {
         return this.markerTemplates.get(this.getMarkerTemplateId(markerType));
     }
 
+    /**
+     * Get the line attachement point for the given marker type.
+     *
+     * This method uses `getMarkerTemplateId`.
+     * @param id the template id (normally the marker type)
+     */
     getMarkerAttachementPointInfo(markerType: string) {
         return this.markerTemplateLineAttachements.get(this.getMarkerTemplateId(markerType));
     }
@@ -150,17 +200,17 @@ export class TemplateCache {
  */
 export class DynymicTemplateRegistry {
 
-    private templates: Map<string, DynamicTemplate<Node|Marker>>;
+    private templates: Map<string, DynamicTemplate<Node|Marker|LinkHandle|TextComponent>>;
 
     constructor() {
-        this.templates = new Map<string, DynamicTemplate<Node|Marker>>();
+        this.templates = new Map<string, DynamicTemplate<Node|Marker|LinkHandle|TextComponent>>();
     }
 
     /**
      * Clears all dynamic templates.
      */
     public clearAllTemplates() {
-        this.templates = new Map<string, DynamicTemplate<Node|Marker>>();
+        this.templates = new Map<string, DynamicTemplate<Node|Marker|LinkHandle|TextComponent>>();
     }
 
     /**
@@ -171,7 +221,7 @@ export class DynymicTemplateRegistry {
      * @param templateId the id of the new template
      * @param template the new dynamic template (`null` will remove the template with `templateId`)
      */
-    public addDynamicTemplate(templateId: string, template: DynamicTemplate<Node|Marker>) {
+    public addDynamicTemplate(templateId: string, template: DynamicTemplate<Node|Marker|LinkHandle|TextComponent>) {
         if (template == null) {
             this.removeDynamicTemplate(templateId);
             return;
@@ -185,9 +235,11 @@ export class DynymicTemplateRegistry {
     /**
      * Get a dynamic template from the registry.
      *
+     * The registry does not ensure type safety for templates on get!
+     *
      * @param templateId the template id
      */
-    public getDynamicTemplate<T extends DynamicTemplate<Node|Marker>>(templateId: string): T {
+    public getDynamicTemplate<T extends DynamicTemplate<Node|Marker|LinkHandle|TextComponent>>(templateId: string): T {
         return this.templates.get(templateId) as T;
     }
 

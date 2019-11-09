@@ -73,7 +73,7 @@
         <script>
             var graph = document.querySelector('network-graph');
 
-            graph.dynamicTemplateReg.addDynamicTemplate('dynamic-box', {
+            graph.dynamicTemplateRegistry.addDynamicTemplate('dynamic-box', {
                 renderInitialTemplate(g) {
                     g.append('rect');
                     g.append('text').classed('text', true).attr('data-content', 'title');
@@ -139,8 +139,8 @@
 
             graph.onCreateDraggedEdge = (edge) => {
                 if (edge.createdFrom == null || edge.createdFrom == undefined) {
-                    edge.markerEnd = {template: 'default-marker', positionOnLine: 1, scale: 1.5, rotate: {relativeAngle: 0}};
-                    edge.markerStart = {template: 'default-marker', positionOnLine: 0, scale: 1.5, rotate: {relativeAngle: 0}};
+                    edge.markerEnd = {template: 'arrow', positionOnLine: 1, scale: 0.5, relativeRotation: 0};
+                    edge.markerStart = {template: 'default-marker', positionOnLine: 0, relativeRotation: 0};
                 }
                 return edge
             }
@@ -150,12 +150,12 @@
                     // leave edge in last state
                 } else if (target.type === 'small-node') {
                     edge.markers = [
-                        {template: 'arrow', positionOnLine: 1, scale: 0.5, rotate: {relativeAngle: 0}},
+                        {template: 'arrow', positionOnLine: 1, scale: 0.5, relativeRotation: 0},
                     ];
-                    edge.markerEnd = {template: 'default-marker', positionOnLine: 1, scale: 1.5, rotate: {relativeAngle: 0}};
+                    edge.markerEnd = {template: 'arrow', positionOnLine: 1, scale: 0.5, relativeRotation: 0};
                 } else if (target.type === 'simple-node') {
                     edge.markers = [];
-                    edge.markerEnd = {template: 'default-marker', positionOnLine: 1, scale: 1.5, rotate: {relativeAngle: 0}};
+                    edge.markerEnd = {template: 'arrow', positionOnLine: 1, scale: 0.5, relativeRotation: 0};
                 }
                 return edge
             }
@@ -163,10 +163,10 @@
             graph.onDropDraggedEdge = (edge, source, target) => {
                 if (target.type === 'small-node') {
                     edge.markers = [
-                        {template: 'arrow', positionOnLine: 1, scale: 0.5, rotate: {relativeAngle: 0}},
+                        {template: 'arrow', positionOnLine: 1, scale: 0.5, relativeRotation: 0},
                     ];
-                    edge.markerEnd = {template: 'default-marker', positionOnLine: 1, scale: 1.5, rotate: {relativeAngle: 0}};
-                    edge.markerStart = {template: 'default-marker', positionOnLine: 0, scale: 1.5, rotate: {relativeAngle: 0}};
+                    edge.markerEnd = {template: 'arrow', positionOnLine: 1, scale: 0.5, relativeRotation: 0};
+                    edge.markerStart = {template: 'default-marker', positionOnLine: 0, relativeRotation: 0};
                 }
                 return edge
             }
@@ -189,9 +189,9 @@
 
                 graph.addNode({id: 4, title: 'NEU', type: 'fancy-node', x: 130, y: -50, description: 'New node', image: 'https://d3js.org/logo.svg', link: 'https://d3js.org'});
                 graph.addEdge({source: 4, target: 1, markers: [
-                    {template: 'arrow', positionOnLine: 1, scale: 0.5, rotate: {relativeAngle: 0}, clickEventKey: 'HelloWorld'},
-                    {template: 'arrow', positionOnLine: 0.3, scale: 0.5, scaleRelative: true, rotate: {normal: {dx: -1, dy: 0}, relativeAngle: 0}},
-                    {template: 'arrow', positionOnLine: 0.1, scale: 0.5, rotate: {relativeAngle: 0}},
+                    {template: 'arrow', positionOnLine: 1, scale: 0.5, relativeRotation: 0, clickEventKey: 'HelloWorld'},
+                    {template: 'arrow', positionOnLine: 0.3, scale: 0.5, scaleRelative: true, absoluteRotation: 180, relativeRotation: 0},
+                    {template: 'arrow', positionOnLine: 0.1, scale: 0.5, relativeRotation: 0},
                 ], texts: [{
                     positionOnLine: 0.2,
                     value: 'Hello World!',

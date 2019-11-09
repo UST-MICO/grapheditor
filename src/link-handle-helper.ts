@@ -2,7 +2,7 @@ import { LinkHandle } from './link-handle';
 import { Edge, DraggedEdge, Point, edgeId } from './edge';
 import { Node } from './node';
 import { Selection } from 'd3';
-import { TemplateCache, DynymicTemplateRegistry } from './templating';
+import { StaticTemplateRegistry, DynymicTemplateRegistry } from './templating';
 import { DynamicNodeTemplate } from './dynamic-templates/dynamic-template';
 import GraphEditor from './grapheditor';
 
@@ -16,7 +16,7 @@ import GraphEditor from './grapheditor';
  */
 export function getNodeLinkHandles(
     nodeSelection: Selection<SVGGElement, Node, any, unknown>,
-    templateCache: TemplateCache,
+    templateCache: StaticTemplateRegistry,
     dynamicTemplateRegistry: DynymicTemplateRegistry,
     graphEditor: GraphEditor
 ): LinkHandle[] {

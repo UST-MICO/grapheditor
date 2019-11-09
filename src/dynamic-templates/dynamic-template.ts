@@ -1,15 +1,15 @@
 import { Selection } from 'd3';
 import { Node } from '../node';
-import { Marker } from '../marker';
+import { Marker, LineAttachementInfo } from '../marker';
 import GraphEditor from '../grapheditor';
 import { LinkHandle } from '../link-handle';
-import { Edge } from '../edge';
+import { Edge, TextComponent } from '../edge';
 
-export interface DynamicTemplateContext<T extends Node|LinkHandle|Marker|Edge> {
+export interface DynamicTemplateContext<T extends Node|LinkHandle|Marker|Edge|TextComponent> {
     [prop: string]: any;
 }
 
-export interface DynamicMarkerTemplateContext extends DynamicTemplateContext<Marker|LinkHandle> {
+export interface DynamicChildElementTemplateContext extends DynamicTemplateContext<Marker|LinkHandle|TextComponent> {
     parent: Node|Edge;
 }
 
@@ -22,7 +22,7 @@ export interface DynamicMarkerTemplateContext extends DynamicTemplateContext<Mar
  * already implemented for static templates. Text injection and other things can still
  * be used with dynamic templates by setting the right attributes and classes.
  */
-export interface DynamicTemplate<T extends Node|Marker> {
+export interface DynamicTemplate<T extends Node|Marker|LinkHandle|TextComponent> {
 
     /**
      * The initial render function that renders the (static part of) template structure into the svg group.
@@ -70,7 +70,7 @@ export interface DynamicNodeTemplate extends DynamicTemplate<Node> {
 }
 
 /**
- * Interface for dynamic templates for graph nodes.
+ * Interface for dynamic marker/link-handle templates.
  */
 export interface DynamicMarkerTemplate extends DynamicTemplate<Marker|LinkHandle> {
 
@@ -81,7 +81,7 @@ export interface DynamicMarkerTemplate extends DynamicTemplate<Marker|LinkHandle
      * @param context additional context for rendering
      */
     // tslint:disable-next-line:max-line-length
-    renderInitialTemplate(g: Selection<SVGGElement, Marker|LinkHandle, any, unknown>, grapheditor: GraphEditor, context: DynamicMarkerTemplateContext): void;
+    renderInitialTemplate(g: Selection<SVGGElement, Marker|LinkHandle, any, unknown>, grapheditor: GraphEditor, context: DynamicChildElementTemplateContext): void;
 
     /**
      * @override
@@ -90,5 +90,71 @@ export interface DynamicMarkerTemplate extends DynamicTemplate<Marker|LinkHandle
      * @param context additional context for rendering
      */
     // tslint:disable-next-line:max-line-length
-    updateTemplate(g: Selection<SVGGElement, Marker|LinkHandle, any, unknown>, grapheditor: GraphEditor, context: DynamicMarkerTemplateContext): void;
+    updateTemplate(g: Selection<SVGGElement, Marker|LinkHandle, any, unknown>, grapheditor: GraphEditor, context: DynamicChildElementTemplateContext): void;
+
+    /**
+     * Calculate the LineAttachement info that is used to calculate the actual point
+     * where the edge attaches to the marker if it is an end marker.
+     *
+     * This method can safely return `null` (defaults to no offset).
+     *
+     * @param g the selection of the marker group
+     */
+    getLineAttachementInfo(g: Selection<SVGGElement, Marker, any, unknown>): LineAttachementInfo;
+}
+
+/**
+ * Interface for dynamic text component templates.
+ */
+export interface DynamicTextComponentTemplate extends DynamicTemplate<TextComponent> {
+
+    /**
+     * @override
+     * @param g the group that should be updated
+     * @param grapheditor the grapheditor managing this graph
+     * @param context additional context for rendering
+     */
+    // tslint:disable-next-line:max-line-length
+    renderInitialTemplate(g: Selection<SVGGElement, TextComponent, any, unknown>, grapheditor: GraphEditor, context: DynamicChildElementTemplateContext): void;
+
+    /**
+     * @override
+     * @param g the group that should be updated
+     * @param grapheditor the grapheditor managing this graph
+     * @param context additional context for rendering
+     */
+    // tslint:disable-next-line:max-line-length
+    updateTemplate(g: Selection<SVGGElement, TextComponent, any, unknown>, grapheditor: GraphEditor, context: DynamicChildElementTemplateContext): void;
+
+    /**
+     * Same as the `updateTemplate` function but called after text was wrapped.
+     *
+     * This function can be used to change the template according to the actual text measures.
+     *
+     * @param g the group that should be updated
+     * @param grapheditor the grapheditor managing this graph
+     * @param context additional context for rendering
+     */
+    // tslint:disable-next-line:max-line-length
+    updateAfterTextwrapping(g: Selection<SVGGElement, TextComponent, any, unknown>, grapheditor: GraphEditor, context: DynamicChildElementTemplateContext): void;
+}
+
+export class DefaultTextComponentTemplate implements DynamicTextComponentTemplate {
+
+    // tslint:disable-next-line:max-line-length
+    renderInitialTemplate(g: Selection<SVGGElement, TextComponent, any, unknown>, grapheditor: GraphEditor, context: DynamicChildElementTemplateContext): void {
+        g.append('text');
+    }
+
+    // tslint:disable-next-line:max-line-length
+    updateTemplate(g: Selection<SVGGElement, TextComponent, any, unknown>, grapheditor: GraphEditor, context: DynamicChildElementTemplateContext): void {
+        g.select('text').attr('width', d => d.width);
+    }
+
+    // tslint:disable-next-line:max-line-length
+    updateAfterTextwrapping(g: Selection<SVGGElement, TextComponent, any, unknown>, grapheditor: GraphEditor, context: DynamicChildElementTemplateContext): void {
+        return;
+    }
+
+
 }
