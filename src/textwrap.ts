@@ -35,8 +35,14 @@ import {select} from 'd3-selection';
  */
 export function wrapText(element: SVGTextElement, newText, force: boolean= false) {
     const text = select(element);
-    const x = parseFloat(text.attr('x'));
-    const y = parseFloat(text.attr('y'));
+    let x = parseFloat(text.attr('x'));
+    if (isNaN(x)) {
+        x = 0;
+    }
+    let y = parseFloat(text.attr('y'));
+    if (isNaN(y)) {
+        y = 0;
+    }
     let width = parseFloat(text.attr('width'));
     if (isNaN(width)) {
         width = parseFloat(text.attr('data-width'));
@@ -147,7 +153,7 @@ function calculateMultiline(text, height, x, y, force: boolean= false, linespaci
     return spanSelection.enter().append('tspan')
         .attr('x', x)
         .attr('y', d => d)
-        .attr('data-deltay', d => d-y)
+        .attr('data-deltay', d => d - y)
       .merge(spanSelection);
 }
 
