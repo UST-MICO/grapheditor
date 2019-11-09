@@ -21,14 +21,14 @@ import { drag } from 'd3-drag';
 import { line, curveBasis } from 'd3-shape';
 
 import { Node } from './node';
-import { Edge, DraggedEdge, edgeId, Point, TextComponent } from './edge';
+import { Edge, DraggedEdge, edgeId, Point, TextComponent, PathPositionRotationAndScale, normalizePositionOnLine } from './edge';
 import { LinkHandle } from './link-handle';
 import { GraphObjectCache } from './object-cache';
 import { wrapText } from './textwrap';
-import { calculateAngle, normalizeVector, RotationVector } from './rotation-vector';
-import { TemplateCache, DynymicTemplateRegistry } from './templating';
+import { calculateAngle, normalizeVector, RotationVector, RotationData } from './rotation-vector';
+import { StaticTemplateRegistry, DynymicTemplateRegistry } from './templating';
 import { Marker, LineAttachementInfo } from './marker';
-import { DynamicTemplate, DynamicNodeTemplate, DynamicMarkerTemplate } from './dynamic-templates/dynamic-template';
+import { DynamicNodeTemplate, DynamicMarkerTemplate, DynamicTextComponentTemplate, DefaultTextComponentTemplate } from './dynamic-templates/dynamic-template';
 import { getNodeLinkHandles, applyUserLinkHandleCalculationCallback, calculateNearestHandles } from './link-handle-helper';
 
 const SHADOW_DOM_TEMPLATE = `
@@ -75,8 +75,22 @@ export default class GraphEditor extends HTMLElement {
     private _mode: string = 'display'; // interaction mode ['display', 'layout', 'link', 'select']
     private _zoomMode: string = 'both'; // ['none', 'manual', 'automatic', 'both']
 
-    private templateCache: TemplateCache;
-    private dynamicTemplateReg: DynymicTemplateRegistry;
+    /**
+     * The static template registry.
+     *
+     * The templates will be automatically loaded when the svg changes or `updateTemplates` gets called.
+     */
+    public staticTemplateRegistry: StaticTemplateRegistry;
+    /**
+     * The dynamic template registry of this graph.
+     *
+     * The dynamic template registry does not get cleared automatically when the other
+     * templates get updated!
+     */
+    public dynamicTemplateRegistry: DynymicTemplateRegistry;
+    /**
+     * The object cache responsible for fast access of nodes and edges.
+     */
     private objectCache: GraphObjectCache;
 
     private interactionStateData: {
@@ -184,16 +198,6 @@ export default class GraphEditor extends HTMLElement {
         this.objectCache.updateEdgeCache(edges);
     }
 
-    /**
-     * Get the dynamic template registry of this graph.
-     *
-     * The dynamic template registry does not get cleared automatically when the other
-     * templates get updated!
-     */
-    get dynamicTemplateRegistry() {
-        return this.dynamicTemplateRegistry;
-    }
-
     get mode() {
         return this._mode;
     }
@@ -225,8 +229,8 @@ export default class GraphEditor extends HTMLElement {
         this._nodes = [];
         this._edges = [];
         this.draggedEdges = [];
-        this.templateCache = new TemplateCache();
-        this.dynamicTemplateReg = new DynymicTemplateRegistry();
+        this.staticTemplateRegistry = new StaticTemplateRegistry();
+        this.dynamicTemplateRegistry = new DynymicTemplateRegistry();
         this.objectCache = new GraphObjectCache();
         this.edgeGenerator = line<{ x: number; y: number; }>().x((d) => d.x)
             .y((d) => d.y).curve(curveBasis);
@@ -702,10 +706,13 @@ export default class GraphEditor extends HTMLElement {
     public updateTemplates(svg?: Selection<SVGSVGElement, any, any, any>) {
         if (svg != null) {
             this.addDefaultTemplates(svg);
-            this.templateCache.updateTemplateCache(svg);
+            this.staticTemplateRegistry.updateTemplateCache(svg);
         } else {
             this.addDefaultTemplates(this.svg);
-            this.templateCache.updateTemplateCache(this.svg);
+            this.staticTemplateRegistry.updateTemplateCache(this.svg);
+        }
+        if (this.dynamicTemplateRegistry.getDynamicTemplate('default-textcomponent') == null) {
+            this.dynamicTemplateRegistry.addDynamicTemplate('default-textcomponent', new DefaultTextComponentTemplate());
         }
     }
 
@@ -820,7 +827,7 @@ export default class GraphEditor extends HTMLElement {
                         edgeGroup.append<SVGGElement>('g')
                             .classed('link-handle', true)
                             .each(function () {
-                                const templateId = self.templateCache.getMarkerTemplateId('default-marker');
+                                const templateId = self.staticTemplateRegistry.getMarkerTemplateId('default-marker');
                                 self.updateContentTemplate<LinkHandle>(select(this), templateId, 'marker');
                             });
                     })
@@ -871,7 +878,7 @@ export default class GraphEditor extends HTMLElement {
      * @param dynamic `true` iff the template is a dynamic template (default: `false`)
      */
     // tslint:disable-next-line:max-line-length
-    private updateContentTemplate<T extends Node|Marker|LinkHandle>(element: Selection<SVGGElement, T, any, unknown>, templateId: string, templateType: string, dynamic: boolean= false, parent?: Node|Edge) {
+    private updateContentTemplate<T extends Node|Marker|LinkHandle|TextComponent>(element: Selection<SVGGElement, T, any, unknown>, templateId: string, templateType: string, dynamic: boolean= false, parent?: Node|Edge) {
         const oldTemplateID = element.attr('data-template');
         const oldDynamic = element.attr('data-dynamic-template') === 'true';
         if (oldTemplateID != null && oldTemplateID === templateId && dynamic === oldDynamic) {
@@ -881,7 +888,7 @@ export default class GraphEditor extends HTMLElement {
         if (dynamic) {
             // dynamic template
             if (templateType === 'node') {
-                const dynTemplate: DynamicTemplate<Node> = this.dynamicTemplateReg.getDynamicTemplate(templateId);
+                const dynTemplate = this.dynamicTemplateRegistry.getDynamicTemplate<DynamicNodeTemplate>(templateId);
                 const g = element as Selection<SVGGElement, Node, any, unknown>;
                 if (dynTemplate != null) {
                     try {
@@ -893,7 +900,7 @@ export default class GraphEditor extends HTMLElement {
                     this.updateStaticContentTemplate<Node>(g, templateId, templateType);
                 }
             } else if (templateType === 'marker') {
-                const dynTemplate: DynamicMarkerTemplate = this.dynamicTemplateReg.getDynamicTemplate(templateId);
+                const dynTemplate = this.dynamicTemplateRegistry.getDynamicTemplate<DynamicMarkerTemplate>(templateId);
                 const g = element as Selection<SVGGElement, Marker, any, unknown>;
                 if (dynTemplate != null) {
                     try {
@@ -903,6 +910,21 @@ export default class GraphEditor extends HTMLElement {
                     }
                 } else {
                     this.updateStaticContentTemplate<Marker>(g, templateId, templateType);
+                }
+            } else if (templateType === 'textcomponent') {
+                let dynTemplate = this.dynamicTemplateRegistry.getDynamicTemplate<DynamicTextComponentTemplate>(templateId);
+                if (dynTemplate == null) {
+                    dynTemplate = this.dynamicTemplateRegistry.getDynamicTemplate<DynamicTextComponentTemplate>('default-textcomponent');
+                }
+                const g = element as Selection<SVGGElement, TextComponent, any, unknown>;
+                if (dynTemplate != null) {
+                    try {
+                        dynTemplate.renderInitialTemplate(g, this, {parent: parent});
+                    } catch (error) {
+                        console.error(`An error occured while rendering the dynamic text component template!`, {parent: parent}, error);
+                    }
+                } else {
+                    console.error(`No template found for textcomponent! (templateID: ${templateId})`);
                 }
             } else {
                 console.warn('Tried to use unsupported template type: ' + templateType);
@@ -934,9 +956,9 @@ export default class GraphEditor extends HTMLElement {
     private updateStaticContentTemplate<T extends Node|Marker|LinkHandle>(element: Selection<SVGGElement, T, any, unknown>, templateId: string, templateType: string) {
         let newTemplate: Selection<SVGGElement, unknown, any, unknown>;
         if (templateType === 'node') {
-            newTemplate = this.templateCache.getNodeTemplate(templateId);
+            newTemplate = this.staticTemplateRegistry.getNodeTemplate(templateId);
         } else if (templateType === 'marker') {
-            newTemplate = this.templateCache.getMarkerTemplate(templateId);
+            newTemplate = this.staticTemplateRegistry.getMarkerTemplate(templateId);
         } else {
             console.warn('Tried to use unsupported template type: ' + templateType);
         }
@@ -983,7 +1005,7 @@ export default class GraphEditor extends HTMLElement {
             if (d.dynamicTemplate != null && d.dynamicTemplate !== '') {
                 self.updateContentTemplate<Node>(g, d.dynamicTemplate, 'node', true);
             } else {
-                const templateId = self.templateCache.getNodeTemplateId(d.type);
+                const templateId = self.staticTemplateRegistry.getNodeTemplateId(d.type);
                 self.updateContentTemplate<Node>(g, templateId, 'node');
             }
         });
@@ -994,7 +1016,7 @@ export default class GraphEditor extends HTMLElement {
             let handles: LinkHandle[] = [];
             if (node.dynamicTemplate != null && node.dynamicTemplate !== '') {
                 // update dynamic template
-                const dynTemplate = self.dynamicTemplateReg.getDynamicTemplate<DynamicNodeTemplate>(node.dynamicTemplate);
+                const dynTemplate = self.dynamicTemplateRegistry.getDynamicTemplate<DynamicNodeTemplate>(node.dynamicTemplate);
                 if (dynTemplate != null) {
                     try {
                         dynTemplate.updateTemplate(g, self, null);
@@ -1004,7 +1026,7 @@ export default class GraphEditor extends HTMLElement {
                 }
             }
             try {
-                handles = getNodeLinkHandles(g, self.templateCache, self.dynamicTemplateReg, self);
+                handles = getNodeLinkHandles(g, self.staticTemplateRegistry, self.dynamicTemplateRegistry, self);
             } catch (error) {
                 console.error(`An error occured while calculating the link handles for node ${node.id}!`, error);
             }
@@ -1024,10 +1046,10 @@ export default class GraphEditor extends HTMLElement {
                 ).each(function (d: LinkHandle) {
                     // tslint:disable-next-line:no-shadowed-variable
                     const g = select(this).datum(d);
-                    const templateId = self.templateCache.getMarkerTemplateId(d.template);
+                    const templateId = self.staticTemplateRegistry.getMarkerTemplateId(d.template);
                     self.updateContentTemplate<LinkHandle>(g, templateId, 'marker', d.isDynamicTemplate, node);
                     if (d.isDynamicTemplate) {
-                        const dynTemplate = self.dynamicTemplateReg.getDynamicTemplate<DynamicMarkerTemplate>(templateId);
+                        const dynTemplate = self.dynamicTemplateRegistry.getDynamicTemplate<DynamicMarkerTemplate>(templateId);
                         if (dynTemplate != null) {
                             try {
                                 dynTemplate.updateTemplate(g, self, {parent: node});
@@ -1358,59 +1380,93 @@ export default class GraphEditor extends HTMLElement {
      */
     private updateEdgeText(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, d: Edge, force: boolean= false) {
         const self = this;
-        const textSelection = edgeGroupSelection.selectAll('text')
-            .data(d.texts != null ? d.texts : [])
-            .join(
-                enter => enter.append('text')
-                    .attr('x', 0)
-                    .attr('y', 0)
-            )
-            .attr('class', (t) => t.class)
-            .classed('text', true)
-            .attr('width', (t) => t.width)
-            .attr('height', (t) => t.height)
-            .attr('data-click', (t) => t.clickEventKey)
-            .each(function (text) {
-                let newText = '';
-                if (text.value != null) {
-                    newText = text.value;
-                } else {
-                    newText = self.recursiveAttributeGet(d, text.attributePath);
+        edgeGroupSelection.each(function (edge) {
+            const textSelection = select(this).selectAll<SVGGElement, TextComponent>('g.text-component')
+                .data(edge.texts != null ? edge.texts : [])
+                .join(enter => enter.append('g').classed('text-component', true))
+                .each(function(textComponent) {
+                    const g: Selection<SVGGElement, TextComponent, any, unknown> = select(this).datum<TextComponent>(textComponent);
+                    const templateId = textComponent.template ?? 'default-textcomponent';
+                    self.updateContentTemplate<TextComponent>(g, templateId, 'textcomponent', true, edge);
+                    const dynTemplate = self.dynamicTemplateRegistry.getDynamicTemplate<DynamicTextComponentTemplate>(templateId);
+                    try {
+                        dynTemplate?.updateTemplate(g, self, {parent: edge});
+                    } catch (error) {
+                        // tslint:disable-next-line:max-line-length
+                        console.error(`An error occured updating the text component in edge ${edgeId(edge)} before text wrapping`, textComponent, error);
+                    }
+                })
+                .attr('data-click', (t) => t.clickEventKey);
+
+            textSelection.select('text')
+                .classed('text', true)
+                .attr('width', (t) => t.width)
+                .attr('height', (t) => t.height)
+                .each(function (text) {
+                    let newText = '';
+                    if (text.value != null) {
+                        newText = text.value;
+                    } else {
+                        newText = self.recursiveAttributeGet(d, text.attributePath);
+                    }
+                    if (newText == null) {
+                        newText = '';
+                    }
+                    // make sure it is a string
+                    newText = newText.toString();
+                    wrapText(this as SVGTextElement, newText, force);
+                });
+            textSelection.each(function(textComponent) {
+                const g: Selection<SVGGElement, TextComponent, any, unknown> = select(this).datum<TextComponent>(textComponent);
+                const templateId = textComponent.template ?? 'default-textcomponent';
+                const dynTemplate = self.dynamicTemplateRegistry.getDynamicTemplate<DynamicTextComponentTemplate>(templateId);
+                try {
+                    dynTemplate?.updateAfterTextwrapping(g, self, {parent: edge});
+                } catch (error) {
+                    // tslint:disable-next-line:max-line-length
+                    console.error(`An error occured updating the text component in edge ${edgeId(edge)} after text wrapping`, textComponent, error);
                 }
-                if (newText == null) {
-                    newText = '';
-                }
-                // make sure it is a string
-                newText = newText.toString();
-                wrapText(this as SVGTextElement, newText, force);
             });
-        if (this.isInteractive) {
-            const path = edgeGroupSelection.select('path.edge');
-            const length = (path.node() as SVGPathElement).getTotalLength();
-            textSelection.call(drag().on('drag', (text: TextComponent) => {
-                const referencePoint = (path.node() as SVGPathElement).getPointAtLength(length * text.positionOnLine);
-                text.offsetX = event.x - referencePoint.x;
-                text.offsetY = event.y - referencePoint.y;
-                this.onEdgeTextPositionChange(text, d);
-                this.updateEdgeTextPositions(edgeGroupSelection, d);
-            }) as any);
-        } else {
-            textSelection.on('drag', null);
-        }
+            if (self.isInteractive) {
+                const path = edgeGroupSelection.select('path.edge');
+                const length = (path.node() as SVGPathElement).getTotalLength();
+                textSelection.call(drag().on('drag', (text: TextComponent) => {
+                    const positionOnLine = normalizePositionOnLine(text.positionOnLine);
+                    const referencePoint = (path.node() as SVGPathElement).getPointAtLength(length * positionOnLine);
+                    text.offsetX = event.x - referencePoint.x;
+                    text.offsetY = event.y - referencePoint.y;
+                    self.onEdgeTextPositionChange(text, edge);
+                    self.updateEdgeTextPositions(edgeGroupSelection, edge);
+                }) as any);
+            } else {
+                textSelection.on('drag', null);
+            }
+        });
     }
 
     /**
      * Calculate the attachement vector for a marker.
      *
      * @param startingAngle the line angle for the marker
-     * @param marker the marker
+     * @param marker the selection of a single marker
      * @param strokeWidth the current stroke width
      */
-    private calculateLineAttachementVector(startingAngle: number|RotationVector, marker: Marker, strokeWidth: number) {
+    // tslint:disable-next-line:max-line-length
+    private calculateLineAttachementVector(startingAngle: number|RotationVector, markerSelection: Selection<SVGGElement, Marker, any, unknown>, strokeWidth: number) {
+        if (markerSelection.empty()) {
+            return {dx: 0, dy: 0};
+        }
+        const marker = markerSelection.datum();
         let attachementPointInfo: LineAttachementInfo;
-        attachementPointInfo = this.templateCache.getMarkerAttachementPointInfo(marker.template);
-        if (marker.lineOffset != null) {
-            attachementPointInfo = new LineAttachementInfo(marker.lineOffset);
+        if (marker.isDynamicTemplate) {
+            const dynTemplate = this.dynamicTemplateRegistry.getDynamicTemplate<DynamicMarkerTemplate>(marker.template);
+            try {
+                attachementPointInfo = dynTemplate?.getLineAttachementInfo(markerSelection);
+            } catch (error) {
+                console.error('An error occured while calculating the line attachement info for an edge marker!', marker, error);
+            }
+        } else {
+            attachementPointInfo = this.staticTemplateRegistry.getMarkerAttachementPointInfo(marker.template);
         }
         if (attachementPointInfo != null) {
             let scale = 1;
@@ -1442,12 +1498,14 @@ export default class GraphEditor extends HTMLElement {
             const targetNodeSelection = (edge.target != null) ? this.getSingleNodeSelection(edge.target) : null;
             let initialSourceHandles, initialTargetHandles;
             try {
-                initialSourceHandles = getNodeLinkHandles(sourceNodeSelection, this.templateCache, this.dynamicTemplateReg, this);
+                // tslint:disable-next-line:max-line-length
+                initialSourceHandles = getNodeLinkHandles(sourceNodeSelection, this.staticTemplateRegistry, this.dynamicTemplateRegistry, this);
             } catch (error) {
                 console.error(`An error occured while calculating the link handles for node ${edge.source}!`, error);
             }
             try {
-                initialTargetHandles = getNodeLinkHandles(targetNodeSelection, this.templateCache, this.dynamicTemplateReg, this);
+                // tslint:disable-next-line:max-line-length
+                initialTargetHandles = getNodeLinkHandles(targetNodeSelection, this.staticTemplateRegistry, this.dynamicTemplateRegistry, this);
             } catch (error) {
                 console.error(`An error occured while calculating the link handles for node ${edge.target}!`, error);
             }
@@ -1490,8 +1548,8 @@ export default class GraphEditor extends HTMLElement {
         const self = this;
         edgeSelection.each(function (edge) {
             const singleEdgeSelection = select(this).datum(edge);
-            const strokeWidth: number = parseFloat(edgeSelection.style('stroke-width').replace(/px/, ''));
-            edgeSelection.attr('d', (d) => {
+            const strokeWidth: number = parseFloat(singleEdgeSelection.style('stroke-width').replace(/px/, ''));
+            singleEdgeSelection.attr('d', (d) => {
                 let sourceCoordinates: Point = d.source != null ? self.objectCache.getNode(d.source) : null;
                 let targetCoordinates: Point = d.target != null ? self.objectCache.getNode(d.target) : null;
 
@@ -1550,7 +1608,10 @@ export default class GraphEditor extends HTMLElement {
                 // Calculate line attachement point for startMarker
                 let startAttachementPointVector: RotationVector = { dx: 0, dy: 0 };
                 if (d.markerStart != null) {
-                    startAttachementPointVector = self.calculateLineAttachementVector(sourceHandleNormal, d.markerStart, strokeWidth);
+                    const markerSelection: Selection<SVGGElement, Marker, any, unknown> = select(this.parentNode)
+                        .select<SVGGElement>('g.marker.marker-start')
+                        .datum(d.markerStart);
+                    startAttachementPointVector = self.calculateLineAttachementVector(sourceHandleNormal, markerSelection, strokeWidth);
                 }
 
                 points.push({
@@ -1565,7 +1626,10 @@ export default class GraphEditor extends HTMLElement {
                 // Calculate line attachement point for endMarker
                 let endAttachementPointVector: RotationVector = { dx: 0, dy: 0 };
                 if (d.markerEnd != null) {
-                    endAttachementPointVector = self.calculateLineAttachementVector(targetHandleNormal, d.markerEnd, strokeWidth);
+                    const markerSelection: Selection<SVGGElement, Marker, any, unknown> = select(this.parentNode)
+                        .select<SVGGElement>('g.marker.marker-end')
+                        .datum(d.markerEnd);
+                    endAttachementPointVector = self.calculateLineAttachementVector(targetHandleNormal, markerSelection, strokeWidth);
                 }
 
                 if (d.target != null) {
@@ -1596,11 +1660,11 @@ export default class GraphEditor extends HTMLElement {
         markerSelection
             .attr('data-click', (d) => d.clickEventKey)
             .each(function (marker) {
-                const templateId = self.templateCache.getMarkerTemplateId(marker.template);
+                const templateId = self.staticTemplateRegistry.getMarkerTemplateId(marker.template);
                 self.updateContentTemplate<Marker>(select(this), templateId, 'marker');
                 if (marker.isDynamicTemplate) {
                     const g = select(this).datum(marker);
-                    const dynTemplate = self.dynamicTemplateReg.getDynamicTemplate<DynamicMarkerTemplate>(templateId);
+                    const dynTemplate = self.dynamicTemplateRegistry.getDynamicTemplate<DynamicMarkerTemplate>(templateId);
                     if (dynTemplate != null) {
                         try {
                             dynTemplate.updateTemplate(g, self, {parent: edge});
@@ -1654,33 +1718,76 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
-     * Calculate the transformation attribute for a edge marker.
+     * Calculate a normal vector pointing in the direction of the path at the positonOnLine.
      *
-     * @param point the marker position
-     * @param marker the marker to place
-     * @param strokeWidth the stroke width of the edge
-     * @param normal the normal vector of the edge at the marker position
+     * @param path the path object
+     * @param positionOnLine the relative position on the path (between 0 and 1)
+     * @param point the point at positionOnLine (will be calculated if not supplied)
+     * @param length the length of the path (will be calculated if not supplied)
      */
-    private calculateMarkerTransformation(point: { x: number; y: number; }, marker: Marker, strokeWidth: number, normal: RotationVector) {
+    public calculatePathNormalAtPosition(path: SVGPathElement, positionOnLine: number, point?: DOMPoint, length?: number): RotationVector {
+        if (length == null) {
+            length = path.getTotalLength();
+        }
+        if (point == null) {
+            point = path.getPointAtLength(length * positionOnLine);
+        }
+        const epsilon = positionOnLine > 0.5 ? -1e-5 : 1e-5;
+        const point2 = path.getPointAtLength(length * (positionOnLine + epsilon));
+        return normalizeVector({
+            dx: positionOnLine > 0.5 ? (point.x - point2.x) : (point2.x - point.x),
+            dy: positionOnLine > 0.5 ? (point.y - point2.y) : (point2.y - point.y),
+        });
+    }
+
+    /**
+     * Calculate the transformation attribute for a path object placed on an edge.
+     *
+     * @param point the path object position position
+     * @param pathObject the path object to place
+     * @param strokeWidth the stroke width of the edge
+     * @param normal the normal vector of the edge at the path object position
+     */
+    // tslint:disable-next-line:max-line-length
+    private calculatePathObjectTransformation(point: { x: number; y: number; }, pathObject: PathPositionRotationAndScale, strokeWidth: number, normal: RotationVector) {
         let transform = `translate(${point.x},${point.y})`;
-        if (marker.scale != null) {
-            if (!(!marker.scaleRelative)) {
-                transform += `scale(${marker.scale * strokeWidth})`;
-            } else {
-                transform += `scale(${marker.scale})`;
+        if (pathObject.scale != null) {
+            let scale = pathObject.scale;
+            if (!(!pathObject.scaleRelative)) {
+                scale *= strokeWidth;
+            }
+            if (scale !== 1) {
+                transform += `scale(${scale})`;
             }
         }
-        if (marker.rotate != null) {
-            let angle = 0;
-            if (marker.rotate.normal == null) {
-                angle += calculateAngle(normal);
-            } else {
-                angle += calculateAngle(marker.rotate.normal);
-            }
-            angle += marker.rotate.relativeAngle != null ? marker.rotate.relativeAngle : 0;
+        const angle = this.calculateRotationTransformationAngle(pathObject, normal);
+        if (angle !== 0) {
             transform += `rotate(${angle})`;
         }
         return transform;
+    }
+
+    /**
+     * Calculate the rotation vector from rotation data and a normal vector.
+     *
+     * @param rotationData the rotation data object
+     * @param normal the normal vector used for relative rotation
+     * @param ignorePathDirectionForRotation iff true the normal rotation is limited to half a circle (useful for text components)
+     */
+    // tslint:disable-next-line:max-line-length
+    private calculateRotationTransformationAngle(rotationData: RotationData, normal: RotationVector, ignorePathDirectionForRotation: boolean= false): number {
+        let angle = rotationData.absoluteRotation ?? 0;
+        if (rotationData.relativeRotation != null && rotationData.absoluteRotation == null) {
+            const normalAngle = calculateAngle(normal);
+            angle += normalAngle;
+            if (ignorePathDirectionForRotation) {
+                if (normalAngle > 90 || normalAngle < -90) {
+                    angle += 180;
+                }
+            }
+            angle += rotationData.relativeRotation;
+        }
+        return angle;
     }
 
     /**
@@ -1697,11 +1804,11 @@ export default class GraphEditor extends HTMLElement {
         const strokeWidth: number = parseFloat(path.style('stroke-width').replace(/px/, ''));
 
         if (d.markerStart != null) {
-            this.updateEndMarkerPosition(path, length, 0, 0 + 1e-3, d.markerStart, 'marker-start', strokeWidth, edgeGroupSelection);
+            this.updateEndMarkerPosition(path, length, 0, d.markerStart, 'marker-start', strokeWidth, edgeGroupSelection);
         }
 
         if (d.markerEnd != null) {
-            this.updateEndMarkerPosition(path, length, length, length - 1e-3, d.markerEnd, 'marker-end', strokeWidth, edgeGroupSelection);
+            this.updateEndMarkerPosition(path, length, 1, d.markerEnd, 'marker-end', strokeWidth, edgeGroupSelection);
         }
     }
 
@@ -1710,8 +1817,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param path the path selection
      * @param length the path length
-     * @param posA positionOnLine at the marker
-     * @param posB positionOnLine just before the marker
+     * @param positionOnLine positionOnLine at the marker
      * @param marker the marker
      * @param markerClass the class of the marker
      * @param strokeWidth the edge stroke width
@@ -1719,31 +1825,35 @@ export default class GraphEditor extends HTMLElement {
      */
     private updateEndMarkerPosition(
             path: Selection<SVGPathElement, Edge, any, unknown>,
-            length: number, posA: number, posB: number,
+            length: number, positionOnLine: number,
             marker: Marker, markerClass: string,
             strokeWidth: number,
             edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>
         ) {
-        // calculate angle for marker
-        const pathPointA = path.node().getPointAtLength(posA);
-        const pathPointB = path.node().getPointAtLength(posB);
-        const edgeNormal = normalizeVector({
-            dx: length > 1e-3 ? pathPointA.x - pathPointB.x : 1,
-            dy: length > 1e-3 ? pathPointA.y - pathPointB.y : 0,
-        });
-        // calculate marker offset
-        const attachementPointVector: RotationVector = this.calculateLineAttachementVector(edgeNormal, marker, strokeWidth);
-        const point = {
-            x: pathPointA.x - attachementPointVector.dx,
-            y: pathPointA.y - attachementPointVector.dy,
-        };
-        // calculate marker transformation
-        const transformEnd = this.calculateMarkerTransformation(point, marker, strokeWidth, edgeNormal);
-        // apply transformation
-        const markerEndSelection: Selection<SVGGElement, Marker, any, unknown> = edgeGroupSelection
+        const markerSelection: Selection<SVGGElement, Marker, any, unknown> = edgeGroupSelection
             .select<SVGGElement>(`g.marker.${markerClass}`)
             .datum(marker);
-        markerEndSelection.attr('transform', transformEnd);
+        // calculate angle for marker
+        const pathPointA = path.node().getPointAtLength(length * positionOnLine);
+        const edgeNormal = this.calculatePathNormalAtPosition(path.node(), positionOnLine, pathPointA, length);
+        // calculate marker offset
+        const attachementPointVector: RotationVector = this.calculateLineAttachementVector(edgeNormal, markerSelection, strokeWidth);
+        const point = {
+            x: pathPointA.x + (positionOnLine === 0 ? attachementPointVector.dx : -attachementPointVector.dx),
+            y: pathPointA.y + (positionOnLine === 0 ? attachementPointVector.dy : -attachementPointVector.dy),
+        };
+        // account for deprecated attributes:
+        if (marker.rotate != null) {
+            console.warn('The marker.rotate attribute is deprecated!');
+            if (marker.rotate.normal != null) {
+                marker.absoluteRotation = calculateAngle(marker.rotate.normal);
+            }
+            marker.relativeRotation = marker.rotate.relativeAngle ?? null;
+        }
+        // calculate marker transformation
+        const transformEnd = this.calculatePathObjectTransformation(point, marker, strokeWidth, edgeNormal);
+        // apply transformation
+        markerSelection.attr('transform', transformEnd);
     }
 
     /**
@@ -1759,35 +1869,56 @@ export default class GraphEditor extends HTMLElement {
             const path = parent.select<SVGPathElement>('path.edge');
             const length = path.node().getTotalLength();
             const strokeWidth: number = parseFloat(path.style('stroke-width').replace(/px/, ''));
-            let positionOnLine = d.positionOnLine;
-            if (positionOnLine == null && positionOnLine !== 0) {
-                positionOnLine = 1; // default
-            }
-            if (positionOnLine === 'end') {
-                positionOnLine = 1;
-            }
-            if (positionOnLine === 'start') {
-                positionOnLine = 0;
-            }
-            if (typeof positionOnLine === 'string') {
-                positionOnLine = parseFloat(positionOnLine);
-            }
-            if (isNaN(positionOnLine)) {
-                positionOnLine = 0;
-            }
+            const positionOnLine = normalizePositionOnLine(d.positionOnLine);
 
             const point = path.node().getPointAtLength(length * positionOnLine);
-            const epsilon = positionOnLine > 0.5 ? -1e-5 : 1e-5;
-            const point2 = path.node().getPointAtLength(length * (positionOnLine + epsilon));
-            const normal = {
-                dx: positionOnLine > 0.5 ? (point.x - point2.x) : (point2.x - point.x),
-                dy: positionOnLine > 0.5 ? (point.y - point2.y) : (point2.y - point.y),
-            };
-
-            const transform = self.calculateMarkerTransformation(point, d, strokeWidth, normal);
+            const normal = self.calculatePathNormalAtPosition(path.node(), positionOnLine, point, length);
+            // account for deprecated attributes:
+            if (d.rotate != null) {
+                console.warn('The marker.rotate attribute is deprecated!');
+                if (d.rotate.normal != null) {
+                    d.absoluteRotation = calculateAngle(d.rotate.normal);
+                }
+                d.relativeRotation = d.rotate.relativeAngle ?? null;
+            }
+            const transform = self.calculatePathObjectTransformation(point, d, strokeWidth, normal);
 
             marker.attr('transform', transform);
         });
+    }
+
+    /**
+     * Apply a transformation to a bbox.
+     *
+     * @param bbox the bbox to transform
+     * @param transformation the transformation matrix
+     */
+    // tslint:disable-next-line:max-line-length
+    public transformBBox(bbox: {x: number, y: number, width: number, height: number}, transformation: DOMMatrix): {x: number, y: number, width: number, height: number} {
+        const p = this.svg.node().createSVGPoint();
+
+        p.x = bbox.x;
+        p.y = bbox.y;
+        const a = p.matrixTransform(transformation);
+
+        p.x = bbox.x + bbox.width;
+        p.y = bbox.y;
+        const b = p.matrixTransform(transformation);
+
+        p.x = bbox.x + bbox.width;
+        p.y = bbox.y + bbox.height;
+        const c = p.matrixTransform(transformation);
+
+        p.x = bbox.x;
+        p.y = bbox.y + bbox.height;
+        const d = p.matrixTransform(transformation);
+
+        const minX = Math.min(a.x, b.x, c.x, d.x);
+        const maxX = Math.max(a.x, b.x, c.x, d.x);
+        const minY = Math.min(a.y, b.y, c.y, d.y);
+        const maxY = Math.max(a.y, b.y, c.y, d.y);
+
+        return {x: minX, y: minY, width: maxX - minX, height: maxY - minY};
     }
 
     /**
@@ -1797,9 +1928,11 @@ export default class GraphEditor extends HTMLElement {
      * @param d edge datum
      */
     private updateEdgeTextPositions(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, d: Edge) {
+        const self = this;
         const path = edgeGroupSelection.select<SVGPathElement>('path.edge');
         const length = path.node().getTotalLength();
-        const textSelection = edgeGroupSelection.selectAll<SVGTextElement, TextComponent>('text')
+        const strokeWidth: number = parseFloat(path.style('stroke-width').replace(/px/, ''));
+        const textSelection = edgeGroupSelection.selectAll<SVGGElement, TextComponent>('g.text-component')
             .data<TextComponent>(d.texts != null ? d.texts : []);
 
         // calculate the node bounding boxes for collision detection
@@ -1836,26 +1969,20 @@ export default class GraphEditor extends HTMLElement {
         // update text selections
         textSelection.each(function (t) {
             const text = select(this);
-            let positionOnLine = t.positionOnLine as number|string;
-            if (positionOnLine === 'end') {
-                positionOnLine = 1;
-            }
-            if (positionOnLine === 'start') {
-                positionOnLine = 0;
-            }
-            if (typeof positionOnLine === 'string') {
-                positionOnLine = parseFloat(positionOnLine);
-            }
-            if (isNaN(positionOnLine as number)) {
-                positionOnLine = 0;
-            }
-            const pathPoint = (path.node() as SVGPathElement).getPointAtLength(length * (positionOnLine as number));
+            const positionOnLine =  normalizePositionOnLine(t.positionOnLine);
+            const pathPoint = path.node().getPointAtLength(length * positionOnLine);
+
+            const edgeNormal = self.calculatePathNormalAtPosition(path.node(), positionOnLine, pathPoint, length);
 
             // factor in offset coordinates of text component
             const referencePoint = {
-                x: pathPoint.x + (t.offsetX != null ? t.offsetX : 0),
-                y: pathPoint.y + (t.offsetY != null ? t.offsetY : 0),
+                x: pathPoint.x + (t.offsetX ?? 0),
+                y: pathPoint.y + (t.offsetY ?? 0),
             };
+
+            // apply transformation fisrt
+            const initialTransform = self.calculatePathObjectTransformation(referencePoint, t, strokeWidth, edgeNormal);
+            text.attr('transform', initialTransform);
 
             // calculate center of nearest node (line distance, not euklidean distance)
             const nodeBB = (positionOnLine > 0.5) ? targetBB : sourceBB;
@@ -1877,36 +2004,31 @@ export default class GraphEditor extends HTMLElement {
                 angle -= 360;
             }
 
-            // account for different text anchors
-            let textAnchorCorrection = 1;
-            const textAnchor = text.style('text-anchor');
-            if (textAnchor === 'end') {
-                // text is right aligned and 100% to the left of the x position
-                textAnchorCorrection = 0;
+            let bbox: {x: number, y: number, width: number, height: number} = text.node().getBBox();
+
+            if (initialTransform.includes('scale') || initialTransform.includes('rotate')) {
+                const svgNode = text.node();
+                const ctm = (svgNode.parentElement as unknown as SVGGElement).getScreenCTM().inverse().multiply(svgNode.getScreenCTM());
+                bbox = self.transformBBox(bbox, ctm);
+            } else {
+                bbox = {
+                    x: referencePoint.x + bbox.x,
+                    y: referencePoint.y + bbox.y,
+                    width: bbox.width,
+                    height: bbox.height
+                };
             }
-            if (textAnchor === 'middle') {
-                // text is center aligned and 50% to the left of the x position
-                textAnchorCorrection = 0.5;
-            }
-            const bbox = text.node().getBBox();
 
             const targetPoint: Point = {
                 x: referencePoint.x,
                 y: referencePoint.y,
             };
 
-            const lineheight = text.attr('data-lineheight');
-            // Account for text origin beeing at the bottom of the line
-            let lineHeightCorrection = bbox.height; // single line texts only have bbox height
-            if (lineheight) {
-                // use calculated line height from text wrapping for multi line texts
-                lineHeightCorrection = parseFloat(lineheight);
-            }
             let deltaX = 0;
             let deltaY = 0;
             if (angle > 0 && angle < 180) {
                 // bottom of the text (possibly) overlaps
-                let delta = (nodeBB.y) - (referencePoint.y + bbox.height - lineHeightCorrection);
+                let delta = (nodeBB.y) - (bbox.y + bbox.height);
                 if (t.padding) {
                     delta -= t.padding;
                 }
@@ -1917,7 +2039,7 @@ export default class GraphEditor extends HTMLElement {
 
             if (angle > 180 && angle < 360) {
                 // top of the text (possibly) overlaps
-                let delta = (nodeBB.y + nodeBB.height) - (referencePoint.y - lineHeightCorrection);
+                let delta = (nodeBB.y + nodeBB.height) - bbox.y;
                 if (t.padding) {
                     delta += t.padding;
                 }
@@ -1927,7 +2049,7 @@ export default class GraphEditor extends HTMLElement {
             }
             if (angle > 90 && angle < 270) {
                 // left side of text (possibly) overlaps
-                let delta = (nodeBB.x + nodeBB.width) - (referencePoint.x - (bbox.width * (1 - textAnchorCorrection)));
+                let delta = (nodeBB.x + nodeBB.width) - bbox.x;
                 if (t.padding) {
                     delta += t.padding;
                 }
@@ -1937,7 +2059,7 @@ export default class GraphEditor extends HTMLElement {
             }
             if (angle > 270 || angle < 90) {
                 // right side of text (possibly) overlaps
-                let delta = (nodeBB.x) - (referencePoint.x + (bbox.width * textAnchorCorrection));
+                let delta = (nodeBB.x) - (bbox.x + bbox.width);
                 if (t.padding) {
                     delta -= t.padding;
                 }
@@ -1956,11 +2078,8 @@ export default class GraphEditor extends HTMLElement {
                 }
             }
 
-            text.attr('x', targetPoint.x).attr('y', targetPoint.y);
-            // update span positions for multiline texts
-            text.selectAll('tspan').datum(function () {
-                return parseFloat((this as Element).getAttribute('data-deltay'));
-            }).attr('x', targetPoint.x).attr('y', (y) => targetPoint.y + y);
+            const finalTransform = initialTransform.replace(/^translate\([^\)]*\)/, `translate(${targetPoint.x},${targetPoint.y})`);
+            text.attr('transform', finalTransform);
         });
 
     }

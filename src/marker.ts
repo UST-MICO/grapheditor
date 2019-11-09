@@ -15,41 +15,54 @@
  * limitations under the License.
  */
 
-import { RotationVector, angleToVector, calculateAngle, calculateLength } from './rotation-vector';
+import { angleToVector, calculateAngle, calculateLength, RotationVector } from './rotation-vector';
+import { PathPositionRotationAndScale, Point } from './edge';
 
-interface RotationData {
-    /** Absolute rotation via direction vector. */
-    normal?: RotationVector;
-    /** Relative angle in degree. */
-    relativeAngle: number;
-}
-
-export interface Marker {
+/**
+ * Interface describing an edge marker.
+ */
+export interface Marker extends PathPositionRotationAndScale{
     /** the marker template id to use for this marker. */
     template: string;
     /** True iff the link handle uses a dynamic template. */
     isDynamicTemplate?: boolean;
-    /** The relative position of the marker on the edge (between 0 and 1, defaults to 1). */
-    positionOnLine?: number|string;
-    /** @deprecated The length used for end/start markers to offset the line position. */
-    lineOffset?: number;
     /** A factor to scale the marker. */
     scale?: number;
     /** If true the marker and lineOffset is scaled relative to the stroke width. */
     scaleRelative?: boolean;
-    /** Rotation information for the marker. */
-    rotate?: RotationData;
+    /** @deprecated Rotation information for the marker. (Use `absoluteRotation` and `relativeRotation attributes instead!) */
+    rotate?: {
+        /** Absolute rotation via direction vector. */
+        normal?: RotationVector;
+        /** Relative angle in degree. */
+        relativeAngle: number;
+    };
     /** A key used in a click event when the marker was clicked. */
     clickEventKey?: string;
 }
 
+/**
+ * Helper class to calculate where the edge attaches to an end marker.
+ */
 export class LineAttachementInfo {
 
     private isDirectional: boolean;
     private lineAttachementAngle: number;
     private attachementOffset: number;
 
-    constructor(lineAttachementPoint: string|number) {
+    /**
+     * Create a new line attachement info object.
+     *
+     * The attachement point can either be an offset from 0,0 or a point relative to 0,0 of the template.
+     * To specify an offset use a single number or a string containing exactly one number.
+     * To specify a point use a string with two numbers seperated by a space or a point object.
+     * The line attachement point must not include any transformations applied to the marker when it is rendered.
+     *
+     * If only an offset was specified the attachement info is not directional.
+     *
+     * @param lineAttachementPoint the attachement point relative to 0,0 in the template
+     */
+    constructor(lineAttachementPoint: string|number|Point) {
         if (lineAttachementPoint == null) {
             lineAttachementPoint = 0;
         }
@@ -57,19 +70,25 @@ export class LineAttachementInfo {
             this.attachementOffset = lineAttachementPoint;
             this.lineAttachementAngle = 0;
             this.isDirectional = false;
-        }
-        const coords = lineAttachementPoint.toString().split(' ');
-        if (coords.length === 1) {
-            this.attachementOffset = parseFloat(coords[0]);
-            this.lineAttachementAngle = 0;
-            this.isDirectional = false;
-        } else if (coords.length === 2) {
-            const normal = {dx: parseFloat(coords[0]), dy: parseFloat(coords[1])};
+        } else if (typeof lineAttachementPoint === 'string') {
+            const coords = lineAttachementPoint.toString().split(' ');
+            if (coords.length === 1) {
+                this.attachementOffset = parseFloat(coords[0]);
+                this.lineAttachementAngle = 0;
+                this.isDirectional = false;
+            } else if (coords.length === 2) {
+                const normal = {dx: parseFloat(coords[0]), dy: parseFloat(coords[1])};
+                this.attachementOffset = calculateLength(normal);
+                this.lineAttachementAngle = calculateAngle(normal);
+                this.isDirectional = true;
+            } else {
+                console.warn('lineAttachementPoint must be one or two numbers seperated by a space!');
+            }
+        } else {
+            const normal = {dx: lineAttachementPoint.x, dy: lineAttachementPoint.y};
             this.attachementOffset = calculateLength(normal);
             this.lineAttachementAngle = calculateAngle(normal);
             this.isDirectional = true;
-        } else {
-            console.warn('lineAttachementPoint must be one or two numbers seperated by a space!');
         }
         if (this.attachementOffset == null || isNaN(this.attachementOffset)) {
             console.warn('Could not parse attachement offset! Using 0 instead.');
@@ -82,6 +101,12 @@ export class LineAttachementInfo {
         }
     }
 
+    /**
+     * Return a rotation vector pointing at the translated line attachement point.
+     *
+     * @param angle the angle the marker is currently rotated
+     * @param scale the current scale of the marker
+     */
     getRotationVector(angle: number, scale?: number) {
         let attachementAngle;
         if (this.isDirectional) {
