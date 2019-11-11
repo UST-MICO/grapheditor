@@ -21,7 +21,7 @@ import { PathPositionRotationAndScale, Point } from './edge';
 /**
  * Interface describing an edge marker.
  */
-export interface Marker extends PathPositionRotationAndScale{
+export interface Marker extends PathPositionRotationAndScale {
     /** the marker template id to use for this marker. */
     template: string;
     /** True iff the link handle uses a dynamic template. */
