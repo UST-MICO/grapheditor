@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { LinkHandle, calculateNormal, handlesForCircle, handlesForRectangle, handlesForPolygon, handlesForPath } from './link-handle';
+import { LinkHandle, calculateLinkHandleNormal, handlesForCircle, handlesForRectangle, handlesForPolygon, handlesForPath } from './link-handle';
 import { Selection, select } from 'd3-selection';
 import { Point, TextComponent } from './edge';
 import { LineAttachementInfo, Marker } from './marker';
@@ -312,7 +312,7 @@ function calculateLinkHandles(nodeTemplate: Selection<SVGGElement, unknown, any,
 
     // cleanup link handles:
     linkHandles.forEach((element, index) => element.id = index);
-    linkHandles.forEach(calculateNormal);
+    linkHandles.forEach(calculateLinkHandleNormal);
 
     return linkHandles;
 }

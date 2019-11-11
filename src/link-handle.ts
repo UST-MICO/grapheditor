@@ -45,7 +45,7 @@ export interface LinkHandle {
  *
  * @param handle link handle to calculate normal for
  */
-export function calculateNormal(handle: LinkHandle) {
+export function calculateLinkHandleNormal(handle: LinkHandle) {
     const x = handle.normal != null ? handle.normal.dx : handle.x;
     const y = handle.normal != null ? handle.normal.dy : handle.y;
 
@@ -91,7 +91,7 @@ export function handlesForRectangle(x: number, y: number, width: number, height:
         handles.push({id: 0, x: x, y: y + (height / 2)});
     }
     handles.forEach((element, index) => {element.id = index; });
-    handles.forEach(calculateNormal);
+    handles.forEach(calculateLinkHandleNormal);
     return handles;
 }
 
@@ -136,7 +136,7 @@ export function handlesForCircle(radius: number, linkHandles: string): LinkHandl
         });
     }
     handles.forEach((element, index) => {element.id = index; });
-    handles.forEach(calculateNormal);
+    handles.forEach(calculateLinkHandleNormal);
     return handles;
 }
 
@@ -166,7 +166,7 @@ export function handlesForPolygon(points: Point[], linkHandles: string): LinkHan
         }
     });
     handles.forEach((element, index) => {element.id = index; });
-    handles.forEach(calculateNormal);
+    handles.forEach(calculateLinkHandleNormal);
     return handles;
 }
 
@@ -196,7 +196,7 @@ export function handlesForPath(path: SVGPathElement, linkHandles: string): LinkH
         });
     }
     handles.forEach((element, index) => {element.id = index; });
-    handles.forEach(calculateNormal);
+    handles.forEach(calculateLinkHandleNormal);
     return handles;
 }
 

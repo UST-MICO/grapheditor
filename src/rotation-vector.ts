@@ -20,6 +20,9 @@ export interface RotationVector {
     dy: number;
 }
 
+/**
+ * Interface holding rotation information of a graph object.
+ */
 export interface RotationData {
     /**
      * Absolute rotation angle in degree.

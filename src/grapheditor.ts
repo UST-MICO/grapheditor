@@ -604,7 +604,7 @@ export default class GraphEditor extends HTMLElement {
      * Setup group for zooming and groups for nodes and edges.
      * Add a missing `defs` tag.
      */
-    private initialize(svg) {
+    public initialize(svg) {
         const oldSvg = this.svg;
         const newSvg = select<SVGSVGElement, unknown>(svg);
 
@@ -1154,7 +1154,7 @@ export default class GraphEditor extends HTMLElement {
      * @param obj the object to get the attribute from
      * @param attr the attribute or attribute path to get
      */
-    private recursiveAttributeGet(obj: any, attr: string) {
+    public recursiveAttributeGet(obj: any, attr: string) {
         let result = null;
         try {
             if (attr != null) {
