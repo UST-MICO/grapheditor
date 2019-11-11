@@ -35,5 +35,5 @@ Documentation
 .. toctree::
    quickstart
    grapheditor
-   datatypes
+   api/api-index
    changelog

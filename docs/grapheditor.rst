@@ -301,7 +301,6 @@ For an arrowhead at the start or end of the edge use the special edge-end-marker
 The attachement point of the edge line to the marker can be adjusted by setting the ``data-line-attachement-point`` attribute in the marker template (:ref:`example <grapheditor:example styling usage>`).
 If the attribute is a single number it describes how far from the center of the template the edge attaches.
 If the attribute is two numbers (seperated by a single space) the it describes a specific point in the template where the edge attaches to.
-The deprecated :js:attr:`lineOffset <Marker.lineOffset>` behaves like a single number in the attribute.
 
 To update markers of dragged edges it is possible to set the function :js:func:`onCreateDraggedEdge <GraphEditor.onCreateDraggedEdge>`, :js:func:`onDraggedEdgeTargetChange <GraphEditor.onDraggedEdgeTargetChange>` and :js:func:`onDropDraggedEdge <GraphEditor.onDropDraggedEdge>`.
 
@@ -310,8 +309,8 @@ Text-Components
 
 :js:class:`Edges <Edge>` can have a list of :js:class:`Text-Components <TextComponent>`.
 To set the displayed text either use :js:attr:`value <TextComponent.value>` to set a specific text or :js:attr:`attributePath <TextComponent.attributePath>` to set the text based on an attribute of the edge.
-The position of the Text can be controlled via the :js:attr:`positionOnLine <TextComponent.positionOnLine>` Attribute similar to the Markers.
-A Text-Component must have a :js:attr:`width <TextComponent.width>` > 0 which is used to wrap the text.
+The position of the Text can be controlled via the :js:attr:`positionOnLine <PathPositionRotationAndScale.positionOnLine>` Attribute similar to the Markers.
+A Text-Component must have a :js:attr:`width <TextComponent.width>` ``> 0`` which is used to wrap the text.
 For multiline text wrapping also set the :js:attr:`height <TextComponent.height>` attribute.
 
 To adjust the styling of the displayed text use the :js:attr:`class <TextComponent.class>` attribute which is used to set class attribute of the svg ``text`` element.
@@ -694,11 +693,4 @@ For custom buttons in :js:class:`Edges <Edge>` use markers with the :js:attr:`cl
             }
         });
     </script>
-
-
-Public API
-----------
-
-.. js:autoclass:: GraphEditor
-   :members: nodeList, edgeList, mode, zoomMode, setMode, setZoomMode, setNodes, setEdges, addNode, getNode, removeNode, addEdge, getEdge, removeEdge, getEdgesBySource, getEdgesByTarget, completeRender, updateTextElements, zoomToBoundingBox, onCreateDraggedEdge, onDraggedEdgeTargetChange, onDropDraggedEdge, setNodeClass, setEdgeClass, calculateLinkHandlesForEdge
 
