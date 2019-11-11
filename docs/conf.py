@@ -20,6 +20,7 @@ from recommonmark.parser import CommonMarkParser
 from recommonmark.transform import AutoStructify
 
 on_rtd = os.environ.get('READTHEDOCS') == 'True'
+skip_typedoc = os.environ.get('SKIP_TYPEDOC') == 'True'
 
 # -- Recommonmark Monkey patch -----------------------------------------------
 
@@ -39,6 +40,7 @@ DummyStateMachine.run_role = run_role
 
 # -- sphinx-js Monkey patch --------------------------------------------------
 from sphinx_js import doclets
+from sphinx_js.typedoc import TypeDoc
 from tempfile import NamedTemporaryFile
 import subprocess
 from shutil import copyfile
@@ -48,7 +50,7 @@ from errno import ENOENT
 from json import load, dump
 from pathlib import Path
 
-
+# analyzer that makes sure the typescript doc json only contains relative paths
 def analyze_typescript(abs_source_paths, app):
     command = doclets.Command('npm')
     command.add('run', 'doc', '--')
@@ -59,7 +61,7 @@ def analyze_typescript(abs_source_paths, app):
 
     source = abs_source_paths[0]
     command.add('--json', json_path, *abs_source_paths)
-    if not on_rtd:
+    if not on_rtd and not skip_typedoc:
         # only build typedoc json locally as readthedocs build container does not
         # support it natively (and typedoc process takes a while to finish)
         try:
@@ -97,12 +99,62 @@ def analyze_typescript(abs_source_paths, app):
 doclets.ANALYZERS['custom_typescript'] = analyze_typescript
 
 
+# fix relative path resolution
 def new_relpath(path, basedir):
     if Path(path).drive != Path(basedir).drive:
         return path
     return relpath(path, basedir)
 
 doclets.relpath = new_relpath
+
+# fix type name resolution:
+old_make_type_name = TypeDoc.make_type_name
+
+
+def new_make_type_name(self, type):
+    if type.get('type') == 'reflection':
+        declaration = type.get('declaration', {})
+        if declaration.get('signatures'):
+            names = []
+            for signature in declaration.get('signatures'):
+                name = '(' + ', '.join(
+                    p.get('name') + ': ' + '|'.join(new_make_type_name(self, p.get('type')))
+                    for p in signature.get('parameters', [])
+                    if p.get('type')
+                ) + ') => ' + '|'.join(new_make_type_name(self, signature.get('type')))
+                names.append(name)
+            return names
+        elif declaration.get('children'):
+            variables = ', '.join(
+                v.get('name') + ': ' + '|'.join(new_make_type_name(self, v.get('type')))
+                for v in declaration.get('children')
+                if v.get('type')
+            )
+            names = []
+            if declaration.get('indexSignature'):
+                extras = [variables]
+                for sig in declaration.get('indexSignature'):
+                    inner_text = ''
+                    if sig.get('parameters'):
+                        p = sig.get('parameters')[0]
+                        inner_text += p.get('name') + ': ' + '|'.join(new_make_type_name(self, p.get('type')))
+                    extras.append('[' + inner_text + ']: ' + '|'.join(new_make_type_name(self, sig.get('type'))))
+                names.append('{' + ', '.join(extras) + '}')
+            else:
+                names.append('{' + variables + '}')
+            return names
+    elif type.get('type') == 'typeParameter':
+        names = old_make_type_name(self, type)
+        constraint_type = type.get('constraint').get('type')
+        if constraint_type == 'union' or constraint_type == 'reference':
+            names[-1] = '|'.join(names[-1])
+        else:
+            print('Encountered unknown constraint type for typeParameter', constraint_type)
+        return names
+    return old_make_type_name(self, type)
+
+
+TypeDoc.make_type_name = new_make_type_name
 
 # -- Project information -----------------------------------------------------
 
@@ -266,7 +318,6 @@ texinfo_documents = [
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3/', None),
-    'mico': ('https://mico-docs.readthedocs.io/en/latest/', None),
 }
 
 # -- Options for todo extension ----------------------------------------------
