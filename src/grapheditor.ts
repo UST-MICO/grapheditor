@@ -1036,13 +1036,7 @@ export default class GraphEditor extends HTMLElement {
             const handleSelection = g.selectAll<SVGGElement, LinkHandle>('g.link-handle')
                 .data<LinkHandle>(handles as any, (handle: LinkHandle) => handle.id.toString())
                 .join(
-                    enter => enter.append('g')
-                        .classed('link-handle', true)
-                        .attr('transform', (d) => {
-                            const x = d.x != null ? d.x : 0;
-                            const y = d.y != null ? d.y : 0;
-                            return `translate(${x},${y})`;
-                        })
+                    enter => enter.append('g').classed('link-handle', true)
                 ).each(function (d: LinkHandle) {
                     // tslint:disable-next-line:no-shadowed-variable
                     const g = select(this).datum(d);
@@ -1059,6 +1053,14 @@ export default class GraphEditor extends HTMLElement {
                             }
                         }
                     }
+                }).attr('transform', (d) => {
+                    const x = d.x != null ? d.x : 0;
+                    const y = d.y != null ? d.y : 0;
+                    const angle = self.calculateRotationTransformationAngle(d, d.normal ?? {dx: 0, dy: 0});
+                    if (angle !== 0) {
+                        return `translate(${x},${y})rotate(${angle})`;
+                    }
+                    return `translate(${x},${y})`;
                 });
 
             // allow edge drag from link handles

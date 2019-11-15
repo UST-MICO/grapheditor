@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-import { RotationVector, normalizeVector } from './rotation-vector';
+import { RotationVector, normalizeVector, RotationData } from './rotation-vector';
 import { Point } from './edge';
 
 /**
  * Start- or End-Point of edge.
  */
-export interface LinkHandle {
+export interface LinkHandle extends RotationData {
     /** Normally the index of the LinkHandle. Unique for each template. */
     id: number;
     /** X coordinate relative to node center */
