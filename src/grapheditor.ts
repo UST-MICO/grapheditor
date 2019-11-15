@@ -1084,7 +1084,7 @@ export default class GraphEditor extends HTMLElement {
             .call(this.updateNodeClasses.bind(this))
             .call(this.updateNodeHighligts.bind(this))
             .call(this.updateNodeText.bind(this))
-            .call(this.updateNodeDynamicProperties.bind(this))
+            .call(this.updateDynamicProperties.bind(this))
             .each(function(d) {
                 self.objectCache.setNodeBBox(d.id, this.getBBox());
             });
@@ -1100,7 +1100,7 @@ export default class GraphEditor extends HTMLElement {
         nodeSelection.each(function (d) {
             const singleNodeSelection = select(this);
             const textSelection = singleNodeSelection.selectAll<SVGTextElement, unknown>('text.text').datum(function () {
-                return (this as Element).getAttribute('data-content');
+                return this.getAttribute('data-content');
             });
             textSelection.each(function (attr) {
                 let newText = self.recursiveAttributeGet(d, attr);
@@ -1115,30 +1115,30 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
-     * Update non text elements of existing nodes.
+     * Update non text elements of existing nodes or edges.
      *
-     * @param nodeSelection d3 selection of nodes to update with bound data
+     * @param groupSelection d3 selection of nodes or edges to update with bound data
      */
-    private updateNodeDynamicProperties(nodeSelection: Selection<SVGGElement, Node, any, unknown>) {
+    private updateDynamicProperties(groupSelection: Selection<SVGGElement, Node|Edge, any, unknown>) {
         const self = this;
         const updatableAttributes = ['fill', 'stroke'];
-        nodeSelection.each(function (d) {
-            const singleNodeSelection = select(this);
+        groupSelection.each(function (d) {
+            const singleGoupSelection = select(this);
             // update text
-            singleNodeSelection.selectAll('[data-content]:not(.text)').datum(function () {
-                const attribute = (this as Element).getAttribute('data-content');
+            singleGoupSelection.selectAll<Element, any>('[data-content]:not(.text)').datum(function () {
+                const attribute = this.getAttribute('data-content');
                 return self.recursiveAttributeGet(d, attribute);
             }).text(text => text);
             // update attributes
             updatableAttributes.forEach(attr => {
-                singleNodeSelection.selectAll(`[data-${attr}]`).datum(function () {
-                    const attribute = (this as Element).getAttribute(`data-${attr}`);
+                singleGoupSelection.selectAll<Element, any>(`[data-${attr}]`).datum(function () {
+                    const attribute = this.getAttribute(`data-${attr}`);
                     return self.recursiveAttributeGet(d, attribute);
                 }).attr(attr, value => value);
             });
             // update href
-            singleNodeSelection.selectAll('[data-href]').datum(function () {
-                const attribute = (this as Element).getAttribute('data-href');
+            singleGoupSelection.selectAll<Element, any>('[data-href]').datum(function () {
+                const attribute = this.getAttribute('data-href');
                 return self.recursiveAttributeGet(d, attribute);
             }).attr('xlink:href', value => value);
         });
@@ -1350,6 +1350,7 @@ export default class GraphEditor extends HTMLElement {
             .call(this.updateMarker.bind(this), d);
 
         this.updateEdgeText(edgeGroupSelection, d);
+        this.updateDynamicProperties(edgeGroupSelection);
 
         if (this.isInteractive) {
             edgeGroupSelection.select<SVGGElement>('g.link-handle')
