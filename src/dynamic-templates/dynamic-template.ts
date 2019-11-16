@@ -148,7 +148,7 @@ export class DefaultTextComponentTemplate implements DynamicTextComponentTemplat
 
     // tslint:disable-next-line:max-line-length
     updateTemplate(g: Selection<SVGGElement, TextComponent, any, unknown>, grapheditor: GraphEditor, context: DynamicChildElementTemplateContext): void {
-        g.select('text').attr('width', d => d.width);
+        return;
     }
 
     // tslint:disable-next-line:max-line-length

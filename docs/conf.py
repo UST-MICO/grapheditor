@@ -16,7 +16,6 @@
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 import os
-from recommonmark.parser import CommonMarkParser
 from recommonmark.transform import AutoStructify
 
 on_rtd = os.environ.get('READTHEDOCS') == 'True'
@@ -26,17 +25,6 @@ skip_typedoc = os.environ.get('SKIP_TYPEDOC') == 'True'
 
 # https://github.com/rtfd/recommonmark/issues/93#issuecomment-433371240
 from functools import wraps
-from recommonmark.states import DummyStateMachine
-
-
-old_run_role = DummyStateMachine.run_role
-@wraps(old_run_role)
-def run_role(self, name, *args, **kwargs):
-    if name == 'doc':
-        name = 'any'
-    return old_run_role(self, name, *args, **kwargs)
-
-DummyStateMachine.run_role = run_role
 
 # -- sphinx-js Monkey patch --------------------------------------------------
 from sphinx_js import doclets
@@ -184,6 +172,7 @@ extensions = [
     'sphinx.ext.todo',
     'sphinx.ext.imgmath',
     'sphinx.ext.graphviz',
+    'recommonmark',
     'sphinx_js',
 ]
 
@@ -191,15 +180,10 @@ extensions = [
 templates_path = []
 
 # Setup markdown parser:
-source_parsers = {
-    '.md': CommonMarkParser,
+source_suffix = {
+    '.rst': 'restructuredtext',
+    '.md': 'markdown',
 }
-
-# The suffix(es) of source filenames.
-# You can specify multiple suffix as a list of string:
-#
-source_suffix = ['.rst', '.md']
-# source_suffix = '.rst'
 
 # The master toctree document.
 master_doc = 'index'
