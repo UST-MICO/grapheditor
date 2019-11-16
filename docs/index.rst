@@ -14,9 +14,10 @@ Features
 
 :doc:`quickstart`
 
-* Custom templates with dynamic :ref:`text <grapheditor:text injection>` and :ref:`content <grapheditor:dynamic content>`
+* Custom :doc:`static templates <static-templates>` with dynamic :ref:`text <static-templates:text injection for node templates>` and :ref:`content <static-templates:dynamic content>`
+* Fully :doc:`dynamic templates <dynamic-templates>`
 * Dynamic styling with :ref:`css classes <grapheditor:styling nodes and edges with custom css classes>`
-* :ref:`Text wrapping <grapheditor:text injection>` in plain svg (this is not supported natively by browsers!)
+* :ref:`Text wrapping <static-templates:text injection for node templates>` in plain svg (this is not supported natively by browsers!)
 * Pan and zoom using mouse or touch
 * :ref:`Highly configurable <grapheditor:component attributes>`
 * :ref:`View only mode <view-mode-attribute>`
@@ -33,7 +34,11 @@ Documentation
 -------------
 
 .. toctree::
-   quickstart
-   grapheditor
-   api/api-index
-   changelog
+    :maxdepth: 2
+
+    quickstart
+    grapheditor
+    static-templates
+    dynamic-templates
+    api/api-index
+    changelog

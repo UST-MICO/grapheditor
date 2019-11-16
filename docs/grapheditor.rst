@@ -65,13 +65,11 @@ This is achieved by using the `slots <https://developer.mozilla.org/en-US/docs/W
 To use custom styles with the component place a ``<style slot="style">`` tag inside the ``<network-graph>`` tag.
 Styles can also be placed in a ``<style>`` tag inside the ``<svg slot="graph">`` used to render the graph.
 Placing all graph related styles in the svg is recommended as it allows to simply save the current graph as a self contained svg.
-There is also very limited support for completely dynamic styles with :ref:`dynamic content <grapheditor:dynamic content>`.
+There is also very limited support for completely dynamic styles with :ref:`dynamic content <static-templates:dynamic content>`.
 
-It is possible to set the svg content of Nodes and Markers using templates.
-The templates are simply a svg group with the ``data-template-type`` inside the first ``<defs>`` tag of the provided svg (``<g data-template-type="node|marker">``).
+.. seealso:: It is possible to set the svg content of Nodes and Markers using templates.
 
-:js:class:`Node` templates need to have the attribute ``data-template-type="node"`` and must have a unique id that corresponds to a specific :js:class:`Node` type.
-:js:class:`Marker` templates need to have the attribute ``data-template-type="marker"`` and must also have a unique id.
+    See the documentation for :doc:`static templates <static-templates>` and :doc:`static templates <dynamic-templates>`.
 
 .. code-block:: html
 
@@ -79,7 +77,6 @@ The templates are simply a svg group with the ``data-template-type`` inside the 
         <style slot="style">/* general styles go here */</style>
         <svg slot="graphs">
             <style>/* graph styles go here */</style>
-            <defs><!-- templates go here --></defs>
         </svg>
     </network-graph>
 
@@ -157,70 +154,7 @@ List of special node classes
 ``text``
     Special class to select all text elements that need to be updated with text from the node.
 
-Text injection
-""""""""""""""
 
-It is possible to use text from the :js:class:`Node` object inside a templated node.
-The template has to contain a ``text`` tag with an ``data-content`` attribute and the ``text`` class.
-The ``data-content`` attribute is used to determine wich attribute of the :js:class:`Node` is used as text for this element.
-To use a value of a nested Object as text source a path can be provided in ``data-content`` where the path segments are seperated by ``.``.
-Currently arrays are not supported as a text source.
-
-.. code-block:: html
-
-    <text class="text" data-content="type" x="-40" y="10" width="80"></text>
-
-For text wrapping a ``width`` or ``data-width`` attribute must be supplied.
-To enable multiline text wrapping an additional ``height`` or ``data-height`` attribute must be supplied.
-The wrapping behaviour can be partially controlled with the css attributes ``text-overflow``, ``word-break`` and ``line-height``.
-
-Dynamic content
-"""""""""""""""
-
-To have the content of the node template change according to the node data use the following atrributes.
-
-``data-content``
-    Sets the text for this tag. Useful for ``<title>`` and ``<desc>`` tags. See :ref:`text injection <grapheditor:text injection>` for text wrapping.
-
-``data-fill``
-    Sets the ``fill`` attribute of the svg node.
-
-``data-stroke``
-    Sets the ``stroke`` attribute of the svg node.
-
-``data-href``
-    Sets the ``href`` attribute of ``<a>`` or ``<image>`` tags.
-
-The content of these custom attributes is the path to the value in the node object where the path segments are seperated by ``.``.
-
-Link handles
-""""""""""""
-
-:js:class:`Link handles <LinkHandle>` get calculated per node template.
-The calculation uses the first element in the group with the class ``outline`` or just the first element in the group.
-Tha calculation can be influenced with the ``data-link-handles`` attribute set at the dom element.
-
-The following svg elements are supported for link handle calculation:
-
-``circle``
-    ``data-link-handles`` can either be ``all`` or ``minimal``
-
-``rect``
-    ``data-link-handles`` can either be ``all``, ``edges``, ``corners`` or ``minimal``
-
-``polygon``
-    ``data-link-handles`` can either be ``all``, ``edges``, ``corners`` or ``minimal``
-
-``path``
-    ``data-link-handles`` can either be ``all``, ``minimal`` or a number
-
-``any``
-    ``data-link-handles`` can either be ``all``, ``edges``, ``corners`` or ``minimal``
-
-If ``data-link-handles`` is set to ``edges`` the midpoint between two corners will be added to the link handles.
-If ``data-link-handles`` is set to ``corners`` the corners will be added to the link handles.
-Setting ``all`` implies ``edges`` and ``corners``.
-For path objects the link handles are spaced evenly on the path (``all`` = 8 handles, ``minimal`` = 4 handles).
 
 
 Styling Edges
@@ -313,8 +247,8 @@ The position of the Text can be controlled via the :js:attr:`positionOnLine <Pat
 A Text-Component must have a :js:attr:`width <TextComponent.width>` ``> 0`` which is used to wrap the text.
 For multiline text wrapping also set the :js:attr:`height <TextComponent.height>` attribute.
 
-To adjust the styling of the displayed text use the :js:attr:`class <TextComponent.class>` attribute which is used to set class attribute of the svg ``text`` element.
 The ``text`` element will always have the ``text`` class.
+
 Normally the text origin is the left of the baseline.
 This means that a single line text is to the right and above the calculated anchor point on the edge path.
 This can be changed by the ``text-anchor`` css attribute.
@@ -328,7 +262,7 @@ Customising where edges attach to nodes
 """""""""""""""""""""""""""""""""""""""
 
 :js:class:`Edges <Edge>` will snap to the nearest :js:class:`LinkHandle`.
-:js:class:`Link handles <LinkHandle>` are :ref:`calculated per node template <grapheditor:link handles>`.
+:js:class:`Link handles <LinkHandle>` are :ref:`calculated per node template <static-templates:link handles>`.
 To customize the position where the edge attaches to nodes set the :js:attr:`calculateLinkHandlesForEdge <GraphEditor.calculateLinkHandlesForEdge>` callback.
 
 
