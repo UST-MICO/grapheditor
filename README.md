@@ -10,7 +10,7 @@ For a full feature list please consult the documentation on redthedocs.
 
 ## Using the library
 
-There is a [Quickstart](https://mico-grapheditor.readthedocs.io/en/latest/quickstart.html) available in the documentation and also a [Demo HTML](docs/example.html) for experimentation.
+There is a [Quickstart](https://mico-grapheditor.readthedocs.io/en/stable/quickstart.html) available in the documentation and also a [Demo HTML](docs/example.html) for experimentation.
 
 The library is packaged in three different formats on npm.
 
@@ -18,7 +18,8 @@ Browsercompatibility: The library uses Webcomponents, slots, ResizeObserver and 
 
 ## Documentation [![Documentation Status](https://readthedocs.org/projects/mico-grapheditor/badge/?version=latest)](https://mico-grapheditor.readthedocs.io/en/latest/?badge=latest)
 
-The full documentation is available on [READTHEDOCS](https://mico-grapheditor.readthedocs.io).
+The full documentation is available on [READTHEDOCS (stable)](https://mico-grapheditor.readthedocs.io/en/stable).
+The documentation for the version in development can be found here: [READTHEDOCS (latest)](https://mico-grapheditor.readthedocs.io)
 
 ---
 
