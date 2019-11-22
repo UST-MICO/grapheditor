@@ -9,6 +9,11 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Added
 
+
+## [0.3.0] - 2019-11-22
+
+### Added
+
 - Added `Edge.markerStart`
 - Added `data-line-attachement-point` to marker templates to specify where an edge attaches to the marker if the marker is an end marker
 - Added dynamic templates for Nodes, Markers,TextComponents and LinkHandles
