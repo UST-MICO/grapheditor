@@ -13,3 +13,5 @@ API
    static-template-registry
    dynamic-template-registry
    dynamic-templates
+   edge-path-generator-registry
+   edge-path-generators

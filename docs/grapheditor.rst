@@ -191,6 +191,8 @@ All classes are set on the top level group (``<g class="edge-group"></g>``) tag.
 The top level group *always* has the ``edge`` class.
 To change the classlist of a edge dynamically set the :js:attr:`GraphEditor.setEdgeClass` (:ref:`details <grapheditor:styling nodes and edges with custom css classes>`).
 
+.. hint:: The edge path can be changed with :doc:`edge-path-templates`.
+
 List of special edge classes
 """"""""""""""""""""""""""""
 
@@ -238,6 +240,8 @@ If the attribute is two numbers (seperated by a single space) the it describes a
 
 To update markers of dragged edges it is possible to set the function :js:func:`onCreateDraggedEdge <GraphEditor.onCreateDraggedEdge>`, :js:func:`onDraggedEdgeTargetChange <GraphEditor.onDraggedEdgeTargetChange>` and :js:func:`onDropDraggedEdge <GraphEditor.onDropDraggedEdge>`.
 
+.. hint:: The position of the marker can be controlled with the attributes defined in :js:class:`PathPositionRotationAndScale` and :js:class:`RotationData`.
+
 Text-Components
 """""""""""""""
 
@@ -258,12 +262,16 @@ This is achieved by checking whether the text is nearer to the start or end of t
 If the text overlaps it gets pushed in the direction towards the center of the edge.
 The :js:attr:`padding <TextComponent.padding>` is used as a buffer zone around the text.
 
+.. hint:: The position of the text component can be controlled with the attributes defined in :js:class:`PathPositionRotationAndScale` and :js:class:`RotationData`.
+
 Customising where edges attach to nodes
 """""""""""""""""""""""""""""""""""""""
 
 :js:class:`Edges <Edge>` will snap to the nearest :js:class:`LinkHandle`.
 :js:class:`Link handles <LinkHandle>` are :ref:`calculated per node template <static-templates:link handles>`.
 To customize the position where the edge attaches to nodes set the :js:attr:`calculateLinkHandlesForEdge <GraphEditor.calculateLinkHandlesForEdge>` callback.
+
+..seealso:: Documentation for :ref:`dynamic node templates <dynamic-templates:dynamic node templates>`.
 
 
 Example Styling Usage

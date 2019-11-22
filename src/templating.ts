@@ -21,6 +21,67 @@ import { Point, TextComponent } from './edge';
 import { LineAttachementInfo, Marker } from './marker';
 import { DynamicTemplate } from './dynamic-templates/dynamic-template';
 import { Node } from './node';
+import { EdgePathGenerator } from './dynamic-templates/edge-path-generators';
+
+/**
+ * Registry for edge path generators.
+ *
+ * The current instance can be retrieved from the GraphEditor object.
+ */
+export class EdgePathGeneratorRegistry {
+
+    private pathGenerators: Map<string, EdgePathGenerator>;
+
+    constructor() {
+        this.pathGenerators = new Map<string, EdgePathGenerator>();
+    }
+
+    /**
+     * Clears all path generators (including the default path generator).
+     */
+    clearAllPathGenerators() {
+        this.pathGenerators  = new Map<string, EdgePathGenerator>();
+    }
+
+    /**
+     * Add a new path generator to the registry.
+     *
+     * @param pathGeneratorId the key to register the path generator with
+     * @param pathGenerator the path generator to register (`null` will remove the path generator with `pathGeneratorId`)
+     */
+    addEdgePathGenerator(pathGeneratorId: string, pathGenerator: EdgePathGenerator) {
+        if (pathGenerator == null) {
+            this.removePathGenerator(pathGeneratorId);
+            return;
+        }
+        if (this.pathGenerators.has(pathGeneratorId)) {
+            console.warn(`Path generator id ${pathGeneratorId} was already in use!`);
+        }
+        this.pathGenerators.set(pathGeneratorId, pathGenerator);
+    }
+
+    /**
+     * Remove a registered path generator.
+     *
+     * @param pathGeneratorId the id to remove
+     */
+    removePathGenerator(pathGeneratorId: string) {
+        this.pathGenerators.delete(pathGeneratorId);
+    }
+
+    /**
+     * Get the edge path generator.
+     *
+     * If the id was not found the id 'default' will be used instead.
+     * @param pathGeneratorId the id to retrieve
+     */
+    getEdgePathGenerator(pathGeneratorId: string) {
+        if (pathGeneratorId == null || !this.pathGenerators.has(pathGeneratorId)) {
+            return this.pathGenerators.get('default');
+        }
+        return this.pathGenerators.get(pathGeneratorId);
+    }
+}
 
 /**
  * Template registry for static templates.
@@ -207,7 +268,7 @@ export class DynymicTemplateRegistry {
     }
 
     /**
-     * Clears all dynamic templates.
+     * Clears all dynamic templates (including any default templates).
      */
     public clearAllTemplates() {
         this.templates = new Map<string, DynamicTemplate<Node|Marker|LinkHandle|TextComponent>>();

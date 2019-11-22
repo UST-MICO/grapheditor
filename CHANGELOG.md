@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - Consolidated positioning for all objects placed along an edge (markers and text components)
 - Added rotation to text components
 - Added rotation to link handles
+- Added `EdgePathGenerator` and `EdgePathGeneratorRegistry`
 
 ### Deprecated
 

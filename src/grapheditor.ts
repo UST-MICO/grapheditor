@@ -18,7 +18,7 @@
 import { select, event, Selection } from 'd3-selection';
 import { zoom, zoomIdentity, zoomTransform, ZoomBehavior } from 'd3-zoom';
 import { drag } from 'd3-drag';
-import { line, curveBasis } from 'd3-shape';
+import { curveBasis } from 'd3-shape';
 
 import { Node } from './node';
 import { Edge, DraggedEdge, edgeId, Point, TextComponent, PathPositionRotationAndScale, normalizePositionOnLine } from './edge';
@@ -26,10 +26,11 @@ import { LinkHandle } from './link-handle';
 import { GraphObjectCache } from './object-cache';
 import { wrapText } from './textwrap';
 import { calculateAngle, normalizeVector, RotationVector, RotationData } from './rotation-vector';
-import { StaticTemplateRegistry, DynymicTemplateRegistry } from './templating';
+import { StaticTemplateRegistry, DynymicTemplateRegistry, EdgePathGeneratorRegistry } from './templating';
 import { Marker, LineAttachementInfo } from './marker';
 import { DynamicNodeTemplate, DynamicMarkerTemplate, DynamicTextComponentTemplate, DefaultTextComponentTemplate } from './dynamic-templates/dynamic-template';
 import { getNodeLinkHandles, applyUserLinkHandleCalculationCallback, calculateNearestHandles } from './link-handle-helper';
+import { SmoothedEdgePathGenerator, EdgePathGenerator } from './dynamic-templates/edge-path-generators';
 
 const SHADOW_DOM_TEMPLATE = `
 <slot name="style"></slot>
@@ -58,7 +59,6 @@ export default class GraphEditor extends HTMLElement {
     private root: ShadowRoot;
     private zoom: ZoomBehavior<any, any>;
     private zoomActive: boolean = false;
-    private edgeGenerator;
 
     private contentMinHeight = 0;
     private contentMaxHeight = 1;
@@ -88,6 +88,15 @@ export default class GraphEditor extends HTMLElement {
      * templates get updated!
      */
     public dynamicTemplateRegistry: DynymicTemplateRegistry;
+    /**
+     * The edge path generator registry of this graph.
+     *
+     * The registry does not get cleared automatically when the other
+     * templates get updated!
+     */
+    public edgePathGeneratorRegistry: EdgePathGeneratorRegistry;
+    private defaultEdgePathGenerator: EdgePathGenerator;
+
     /**
      * The object cache responsible for fast access of nodes and edges.
      */
@@ -232,8 +241,9 @@ export default class GraphEditor extends HTMLElement {
         this.staticTemplateRegistry = new StaticTemplateRegistry();
         this.dynamicTemplateRegistry = new DynymicTemplateRegistry();
         this.objectCache = new GraphObjectCache();
-        this.edgeGenerator = line<{ x: number; y: number; }>().x((d) => d.x)
-            .y((d) => d.y).curve(curveBasis);
+        this.edgePathGeneratorRegistry = new EdgePathGeneratorRegistry();
+        this.defaultEdgePathGenerator = new SmoothedEdgePathGenerator(curveBasis, true, 10);
+        this.edgePathGeneratorRegistry.addEdgePathGenerator('default', this.defaultEdgePathGenerator);
 
         this.root = this.attachShadow({ mode: 'open' });
 
@@ -713,6 +723,9 @@ export default class GraphEditor extends HTMLElement {
         }
         if (this.dynamicTemplateRegistry.getDynamicTemplate('default-textcomponent') == null) {
             this.dynamicTemplateRegistry.addDynamicTemplate('default-textcomponent', new DefaultTextComponentTemplate());
+        }
+        if (this.edgePathGeneratorRegistry.getEdgePathGenerator('default') == null) {
+            this.edgePathGeneratorRegistry.addEdgePathGenerator('default', this.defaultEdgePathGenerator);
         }
     }
 
@@ -1647,7 +1660,17 @@ export default class GraphEditor extends HTMLElement {
                 } else {
                     points.push(targetCoordinates);
                 }
-                return self.edgeGenerator(points);
+                const pathGenerator = self.edgePathGeneratorRegistry.getEdgePathGenerator(d.pathType) ?? self.defaultEdgePathGenerator;
+                let path: string;
+                try {
+                    // tslint:disable-next-line: max-line-length
+                    path = pathGenerator.generateEdgePath(points[0], points[points.length - 1], sourceHandleNormal, (d.target != null) ? targetHandleNormal : null);
+                } catch (error) {
+                    console.error(`An error occurred while generating the edge path for the edge ${edgeId(edge)}`, error);
+                    // tslint:disable-next-line: max-line-length
+                    path = self.defaultEdgePathGenerator.generateEdgePath(points[0], points[points.length - 1], sourceHandleNormal, (d.target != null) ? targetHandleNormal : null);
+                }
+                return path;
             });
         });
     }
@@ -1807,11 +1830,11 @@ export default class GraphEditor extends HTMLElement {
         const strokeWidth: number = parseFloat(path.style('stroke-width').replace(/px/, ''));
 
         if (d.markerStart != null) {
-            this.updateEndMarkerPosition(path, length, 0, d.markerStart, 'marker-start', strokeWidth, edgeGroupSelection);
+            this.updateEndMarkerPosition(path, length, 0, d.markerStart, d.sourceHandle, 'marker-start', strokeWidth, edgeGroupSelection);
         }
 
         if (d.markerEnd != null) {
-            this.updateEndMarkerPosition(path, length, 1, d.markerEnd, 'marker-end', strokeWidth, edgeGroupSelection);
+            this.updateEndMarkerPosition(path, length, 1, d.markerEnd, d.targetHandle, 'marker-end', strokeWidth, edgeGroupSelection);
         }
     }
 
@@ -1822,6 +1845,7 @@ export default class GraphEditor extends HTMLElement {
      * @param length the path length
      * @param positionOnLine positionOnLine at the marker
      * @param marker the marker
+     * @param handle the link handle at the path end of the marker; can be `null`
      * @param markerClass the class of the marker
      * @param strokeWidth the edge stroke width
      * @param edgeGroupSelection d3 selection of a single edge group
@@ -1829,18 +1853,29 @@ export default class GraphEditor extends HTMLElement {
     private updateEndMarkerPosition(
             path: Selection<SVGPathElement, Edge, any, unknown>,
             length: number, positionOnLine: number,
-            marker: Marker, markerClass: string,
+            marker: Marker, handle: LinkHandle, markerClass: string,
             strokeWidth: number,
             edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>
         ) {
         const markerSelection: Selection<SVGGElement, Marker, any, unknown> = edgeGroupSelection
             .select<SVGGElement>(`g.marker.${markerClass}`)
             .datum(marker);
-        // calculate angle for marker
+        // path end point
         const pathPointA = path.node().getPointAtLength(length * positionOnLine);
-        const edgeNormal = this.calculatePathNormalAtPosition(path.node(), positionOnLine, pathPointA, length);
+        // calculate angle for marker
+        let markerStartingNormal: RotationVector;
+        if (handle?.normal?.dx !== 0 || handle?.normal?.dy !== 0) {
+            markerStartingNormal = handle?.normal;
+        }
+        if (markerClass === 'marker-end' && markerStartingNormal != null) {
+            markerStartingNormal = { dx: -markerStartingNormal.dx, dy: -markerStartingNormal.dy};
+        }
+        if (markerStartingNormal == null) {
+            // no link handle for marker present, calculate starting angle from path
+            markerStartingNormal = this.calculatePathNormalAtPosition(path.node(), positionOnLine, pathPointA, length);
+        }
         // calculate marker offset
-        const attachementPointVector: RotationVector = this.calculateLineAttachementVector(edgeNormal, markerSelection, strokeWidth);
+        const attachementPointVector: RotationVector = this.calculateLineAttachementVector(markerStartingNormal, markerSelection, strokeWidth);
         const point = {
             x: pathPointA.x + (positionOnLine === 0 ? attachementPointVector.dx : -attachementPointVector.dx),
             y: pathPointA.y + (positionOnLine === 0 ? attachementPointVector.dy : -attachementPointVector.dy),
@@ -1854,7 +1889,7 @@ export default class GraphEditor extends HTMLElement {
             marker.relativeRotation = marker.rotate.relativeAngle ?? null;
         }
         // calculate marker transformation
-        const transformEnd = this.calculatePathObjectTransformation(point, marker, strokeWidth, edgeNormal);
+        const transformEnd = this.calculatePathObjectTransformation(point, marker, strokeWidth, markerStartingNormal);
         // apply transformation
         markerSelection.attr('transform', transformEnd);
     }
@@ -2155,15 +2190,22 @@ export default class GraphEditor extends HTMLElement {
             createdFrom: edgeId(edge),
             source: edge.source,
             target: null,
+            type: edge.type,
+            pathType: edge.pathType,
             validTargets: validTargets,
             currentTarget: { x: event.x, y: event.y },
             markers: [],
+            textx: [],
         };
-        if (edge.markers != null) {
-            draggedEdge.markers = JSON.parse(JSON.stringify(edge.markers));
-        }
-        if (edge.markerEnd != null) {
-            draggedEdge.markerEnd = JSON.parse(JSON.stringify(edge.markerEnd));
+        for (const key in edge) {
+            if (edge.hasOwnProperty(key) && key !== 'id' && key !== 'createdFrom' && key !== 'sourceHandle' &&
+                key !== 'targetHandle' && key !== 'validTargets' && key !== 'currentTarget') {
+                try {
+                    draggedEdge[key] = JSON.parse(JSON.stringify(edge[key]));
+                } catch (error) {
+                    draggedEdge[key] = edge.key;
+                }
+            }
         }
         if (this.onCreateDraggedEdge != null) {
             draggedEdge = this.onCreateDraggedEdge(draggedEdge);
