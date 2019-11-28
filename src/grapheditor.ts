@@ -1216,7 +1216,7 @@ export default class GraphEditor extends HTMLElement {
                     if (this.setNodeClass != null) {
                         return this.setNodeClass(className, d);
                     }
-                    return true;
+                    return false;
                 });
             });
         }
@@ -1307,7 +1307,7 @@ export default class GraphEditor extends HTMLElement {
                         return this.setEdgeClass(className, d, this.objectCache.getNode(d.source),
                             (d.target != null) ? this.objectCache.getNode(d.target) : null);
                     }
-                    return true;
+                    return false;
                 });
             });
         }

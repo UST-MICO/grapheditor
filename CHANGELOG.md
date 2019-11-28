@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Added
 
+### Fixed
+
+- Fixed all possible classes in the `classes` attribute of the `network-graph` beeing applied to nodes/edges if `setNodeClass`/`setEdgeClass` was null
+
 
 ## [0.3.0] - 2019-11-22
 
@@ -146,7 +150,8 @@ First beta version.
 - Initial webcomponent
 - Documentation
 
-[Unreleased]: https://github.com/UST-MICO/grapheditor/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/UST-MICO/grapheditor/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/UST-MICO/grapheditor/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/UST-MICO/grapheditor/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/UST-MICO/grapheditor/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/UST-MICO/grapheditor/compare/v0.1.1...v0.1.2
