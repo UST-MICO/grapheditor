@@ -27,7 +27,7 @@
                 Links: <a href="/">index.html</a>
             </p>
         </div>
-        <network-graph classes="simple-node" mode="layout" zoom="both">
+        <network-graph classes="group-a group-b group-c" mode="layout" zoom="both">
             <style slot="style">
                 svg {width:100%; height: 100%}
             </style>
@@ -44,13 +44,15 @@
                     .text.title {font-size: initial; text-overflow: clip; word-break: break-word;}
                     .node.hovered {fill: red;}
                     .hovered .link-handle {display: initial;}
-                    .node.selected {fill: green; }
                     .highlight-outgoing .edge {stroke: red;}
                     .highlight-incoming .edge {stroke: green;}
                     .highlight-outgoing .marker {fill: red;}
                     .highlight-incoming .marker {fill: green;}
-                    .simple-node {fill: green;}
-                    .simple-node .edge {stroke: green;}
+                    .group-a {fill: green;}
+                    .group-b {fill: orange;}
+                    .group-c {fill: deepskyblue;}
+                    .edge {stroke: black;}
+                    .edge .marker {fill: black;}
                 </style>
                 <defs class="templates">
                     <g id="simple-node" data-template-type="node">
@@ -69,15 +71,20 @@
             var graph = document.querySelector('network-graph');
 
                 graph.setNodeClass = (className, node) => {
-                    if (className === 'simple-node') {
-                        return true;
+                    if (className === 'group-a') {
+                        if (node.id == 1) return true;
+                        const children = graph.groupingManager.getChildrenOf(1);
+                        return children && children.has(node.id.toString());
                     }
-                    return false;
-                }
-
-                graph.setEdgeClass = (className, edge, sourceNode, targetNode) => {
-                    if (className === 'simple-node') {
-                        return true;
+                    if (className === 'group-b') {
+                        if (node.id == 2) return true;
+                        const children = graph.groupingManager.getChildrenOf(2);
+                        return children && children.has(node.id.toString());
+                    }
+                    if (className === 'group-c') {
+                        if (node.id == 3) return true;
+                        const children = graph.groupingManager.getChildrenOf(3);
+                        return children && children.has(node.id.toString());
                     }
                     return false;
                 }
@@ -91,18 +98,54 @@
 
                 graph.nodeList = [
                     { id: 1, title: 'A', type: 'simple-node', x: 0, y: 0 },
-                    { id: 2, title: 'B', type: 'simple-node', x: 150, y: 100 },
-                    { id: 3, title: 'C', type: 'simple-node', x: 270, y: 50 },
+                    { id: 2, title: 'B', type: 'simple-node', x: 250, y: 0 },
+                    { id: 3, title: 'C', type: 'simple-node', x: 100, y: 200 },
+                    { id: 4, title: 'A-1', type: 'simple-node', x: 100, y: -50 },
+                    { id: 5, title: 'A-2', type: 'simple-node', x: 50, y: 50 },
+                    { id: 6, title: 'B-1', type: 'simple-node', x: 250, y: 50 },
+                    { id: 7, title: 'C-1', type: 'simple-node', x: 150, y: 150 },
                 ];
 
                 var gm = graph.groupingManager;
                 gm.markAsTreeRoot(1);
-                gm.addNodeToGroup(1, 2);
-                gm.addNodeToGroup(1, 3);
+                gm.addNodeToGroup(1, 4);
+                gm.addNodeToGroup(1, 5);
+
+                gm.markAsTreeRoot(2);
+                gm.addNodeToGroup(2, 6);
+
+                gm.markAsTreeRoot(3);
+                gm.addNodeToGroup(3, 7);
 
                 gm.setGroupBehaviourOf(1, {
                     moveChildrenAlongGoup: true,
                     captureChildMovement: false,
+                });
+
+                gm.setGroupBehaviourOf(2, {
+                    moveChildrenAlongGoup: true,
+                    captureChildMovement: true,
+                    captureOutgoingEdges: true,
+                    delegateOutgoingEdgeSourceToNode: (groupNode, edge, graph) => {
+                        if (edge.target != null) {
+                            if (!gm.getChildrenOf(groupNode.id).has(edge.target)) { // target is not path of this group
+                                if (gm.getParentsOf(edge.target).size > 0) { // target is a child node (has a parent)
+                                    return gm.getChildrenOf(groupNode.id.toString()).values().next().value;
+                                }
+                            }
+                        }
+                        return groupNode.id.toString();
+                    }
+                });
+
+                gm.setGroupBehaviourOf(3, {
+                    moveChildrenAlongGoup: false,
+                    captureChildMovement: false,
+                    captureIncomingEdges: true,
+                    delegateIncomingEdgeTargetToNode: (groupNode, edge, graph) => {
+                        // always delegate to child
+                        return gm.getChildrenOf(groupNode.id.toString()).values().next().value;
+                    }
                 });
 
                 graph.completeRender();

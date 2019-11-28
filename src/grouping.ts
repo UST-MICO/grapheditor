@@ -1,3 +1,7 @@
+import { Node } from "./node";
+import GraphEditor from "./grapheditor";
+import { Edge } from "./edge";
+
 class NodeGroup {
     readonly nodeId: string;
 
@@ -17,10 +21,23 @@ class NodeGroup {
     }
 }
 
+type GroupBehaviourDecisionCallback = (groupNode: Node, childNode: Node, graphEditor: GraphEditor) => boolean;
+type GroupBehaviourEdgeDelegationCallback = (groupNode: Node, edge: Edge, graphEditor: GraphEditor) => string;
+
+
 export interface GroupBehaviour {
 
     moveChildrenAlongGoup?: boolean;
     captureChildMovement?: boolean;
+    captureChildMovementForNode?: GroupBehaviourDecisionCallback;
+
+    captureOutgoingEdges?: boolean;
+    captureOutgoingEdgesForNode?: GroupBehaviourDecisionCallback;
+    delegateOutgoingEdgeSourceToNode?: GroupBehaviourEdgeDelegationCallback;
+
+    captureIncomingEdges?: boolean;
+    captureIncomingEdgesForNode?: GroupBehaviourDecisionCallback;
+    delegateIncomingEdgeTargetToNode?: GroupBehaviourEdgeDelegationCallback;
 }
 
 export class GroupingManager {
@@ -185,16 +202,38 @@ export class GroupingManager {
         return this.groupsById.get(groupId.toString())?.groupBehaviour;
     }
 
-    getGroupCapturingMovementOfChild(childId: string|number) {
-        let group: NodeGroup = this.getGroupForNode(childId);
-        while (group.treeParent != null) {
-            const parent = this.getGroupForNode(group.treeParent);
-            if (parent.groupBehaviour?.captureChildMovement ?? false) {
-                group = parent;
-            } else {
-                return group.nodeId;
+    protected getGroupWithProperty(childNode: Node, groupProperty: string, groupDecisionCallback: string, strategy: 'closest-parent'|'largest-group', graphEditor: GraphEditor): string {
+        const childId = childNode.id.toString();
+        let currentGroup: NodeGroup = this.groupsById.get(childId); // the child group is never checked
+        let validGroup: string;
+        while (currentGroup?.treeParent != null && currentGroup.nodeId !== currentGroup.treeRoot) {
+            const parentGroup = this.getGroupForNode(currentGroup.treeParent);
+            if (parentGroup.groupBehaviour[groupProperty]) {
+                const groupDecision: GroupBehaviourDecisionCallback = parentGroup.groupBehaviour[groupDecisionCallback];
+                if (groupDecision == null || groupDecision(graphEditor.getNode(parentGroup.nodeId), childNode, graphEditor)) {
+                    // groupBehaviour satisfies conditions
+                    if (strategy === 'closest-parent') {
+                        return parentGroup.nodeId;
+                    }
+                    if (strategy === 'largest-group') {
+                        validGroup = parentGroup.nodeId;
+                    }
+                }
             }
+            currentGroup = parentGroup;
         }
-        return group.nodeId;
+        return validGroup ?? childId;
+    }
+
+    getGroupCapturingMovementOfChild(child: Node, graphEditor: GraphEditor) {
+        return this.getGroupWithProperty(child, 'captureChildMovement', 'captureChildMovementForNode', 'largest-group', graphEditor);
+    }
+
+    getGroupCapturingOutgoingEdge(child: Node, graphEditor: GraphEditor) {
+        return this.getGroupWithProperty(child, 'captureOutgoingEdges', 'captureOutgoingEdgesForNode', 'closest-parent', graphEditor);
+    }
+
+    getGroupCapturingIncomingEdge(child: Node, graphEditor: GraphEditor) {
+        return this.getGroupWithProperty(child, 'captureIncomingEdges', 'captureIncomingEdgesForNode', 'closest-parent', graphEditor);
     }
 }
