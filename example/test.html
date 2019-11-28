@@ -5,11 +5,28 @@
         <title>Test</title>
         <style>
             html {height: 100%}
-            body {height: 100%}
+            body {
+                height: 100%;
+                margin: 0;
+                display: grid;
+                grid-template-columns: auto;
+                grid-template-rows: 4.5rem auto;
+                grid-template-areas: "header" "main";
+            }
+            .header {grid-area: header; padding: 0.5rem;}
+            h1 {font-size: 1.5rem; margin-top: 0; margin-bottom: 0.5rem;}
+            p {margin: 0;}
+            network-graph {grid-area: main;}
         </style>
     </head>
     <body>
         <!--script src="./_bundles/grapheditor-webcomponent.js"></script-->
+        <div class="header">
+            <h1>Grapheditor:</h1>
+            <p>
+                Links: <a href="/groups.html">groups.html</a>
+            </p>
+        </div>
         <network-graph nodes="[{'id': 1, 'title': 'hello world', 'type': 'simple-node', 'x': 0, 'y': 0}, {'id': 2, 'title': 'HI2', 'type': 'small-node', 'x': 150, 'y': 100}]"
                 edges="[{'source': 1, 'target': 2}]"
                 classes="simple-node small-node fancy-node"

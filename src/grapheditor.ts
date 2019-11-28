@@ -31,6 +31,7 @@ import { Marker, LineAttachementInfo } from './marker';
 import { DynamicNodeTemplate, DynamicMarkerTemplate, DynamicTextComponentTemplate, DefaultTextComponentTemplate } from './dynamic-templates/dynamic-template';
 import { getNodeLinkHandles, applyUserLinkHandleCalculationCallback, calculateNearestHandles } from './link-handle-helper';
 import { SmoothedEdgePathGenerator, EdgePathGenerator } from './dynamic-templates/edge-path-generators';
+import { GroupingManager } from './grouping';
 
 const SHADOW_DOM_TEMPLATE = `
 <slot name="style"></slot>
@@ -94,6 +95,8 @@ export default class GraphEditor extends HTMLElement {
      */
     public edgePathGeneratorRegistry: EdgePathGeneratorRegistry;
     private defaultEdgePathGenerator: EdgePathGenerator;
+
+    public groupingManager: GroupingManager;
 
     /**
      * The object cache responsible for fast access of nodes and edges.
@@ -288,6 +291,8 @@ export default class GraphEditor extends HTMLElement {
         this.edgePathGeneratorRegistry = new EdgePathGeneratorRegistry();
         this.defaultEdgePathGenerator = new SmoothedEdgePathGenerator(curveBasis, true, 10);
         this.edgePathGeneratorRegistry.addEdgePathGenerator('default', this.defaultEdgePathGenerator);
+
+        this.groupingManager = new GroupingManager();
 
         this.root = this.attachShadow({ mode: 'open' });
 
@@ -953,12 +958,53 @@ export default class GraphEditor extends HTMLElement {
             .on('click', (d) => { this.onNodeClick.bind(this)(d); });
 
         if (this.isInteractive) {
-            nodeSelection.call(drag<SVGGElement, Node>().on('drag', (d) => {
-                d.x = event.x;
-                d.y = event.y;
-                this.onNodePositionChange.bind(this)(d);
-                this.updateGraphPositions.bind(this)();
-            }) as any);
+            nodeSelection.call(
+                drag<SVGGElement, Node, {node: Node, children?: Set<string>, offset?: RotationVector}>()
+                    .subject((node) => {
+                        const groupId = this.groupingManager.getGroupCapturingMovementOfChild(node.id);
+                        if (groupId != null && groupId !== node.id.toString()) {
+                            const groupNode = this.objectCache.getNode(groupId) ?? node;
+                            let children: Set<string>;
+                            if (this.groupingManager.getGroupBehaviourOf(groupId)?.moveChildrenAlongGoup ?? false) {
+                                children = this.groupingManager.getAllChildrenOf(groupId);
+                            }
+                            // tslint:disable-next-line:no-shadowed-variable
+                            const offset = {
+                                dx: event.x - groupNode.x,
+                                dy: event.y - groupNode.y,
+                            };
+                            return {node: groupNode, children: children, offset: offset};
+                        }
+                        const offset = {
+                            dx: event.x - node.x,
+                            dy: event.y - node.y,
+                        };
+                        if (this.groupingManager.getGroupBehaviourOf(node.id)?.moveChildrenAlongGoup ?? false) {
+                            return {node: node, children: this.groupingManager.getAllChildrenOf(node.id), offset: offset};
+                        }
+                        return {node: node, offset: offset};
+                    })
+                    .on('drag', () => {
+                        const node: Node = event.subject.node;
+                        const x = event.x - (event.subject.offset?.dx ?? 0);
+                        const y = event.y - (event.subject.offset?.dy ?? 0);
+                        const dx = x - node.x;
+                        const dy = y - node.y;
+                        node.x = x;
+                        node.y = y;
+                        if (event.subject.children != null) {
+                            event.subject.children.forEach(childId => {
+                                const child = this.objectCache.getNode(childId);
+                                child.x += dx;
+                                child.y += dy;
+                                this.onNodePositionChange.bind(this)(child);
+                            });
+                        }
+                        this.onNodePositionChange.bind(this)(node);
+
+                        this.updateGraphPositions.bind(this)();
+                    })
+            );
         } else {
             nodeSelection.on('.drag', null);
         }

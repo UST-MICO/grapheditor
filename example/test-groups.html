@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>Test Groups</title>
+        <style>
+            html {height: 100%;}
+            body {
+                height: 100%;
+                margin: 0;
+                display: grid;
+                grid-template-columns: auto;
+                grid-template-rows: 4.5rem auto;
+                grid-template-areas: "header" "main";
+            }
+            .header {grid-area: header; padding: 0.5rem;}
+            h1 {font-size: 1.5rem; margin-top: 0; margin-bottom: 0.5rem;}
+            p {margin: 0;}
+            network-graph {grid-area: main;}
+        </style>
+    </head>
+    <body>
+        <!--script src="./_bundles/grapheditor-webcomponent.js"></script-->
+        <div class="header">
+            <h1>Grapheditor with Node Grouping:</h1>
+            <p>
+                Links: <a href="/">index.html</a>
+            </p>
+        </div>
+        <network-graph classes="simple-node" mode="layout" zoom="both">
+            <style slot="style">
+                svg {width:100%; height: 100%}
+            </style>
+            <svg slot="graph">
+                <style>
+                    .ghost {opacity: 0.5;}
+                    .node {fill: aqua;}
+                    .link-handle {display: none; fill: black; opacity: 0.1;}
+                    .link-handle>* {transition:transform 0.25s ease-out;}
+                    .edge-group .link-handle {display: initial}
+                    .link-handle:hover {opacity: 0.7;}
+                    .link-handle:hover>* {transform: scale(1.5);}
+                    .text {fill: black; font-size: 6pt; text-overflow: ellipsis; word-break: break-word}
+                    .text.title {font-size: initial; text-overflow: clip; word-break: break-word;}
+                    .node.hovered {fill: red;}
+                    .hovered .link-handle {display: initial;}
+                    .node.selected {fill: green; }
+                    .highlight-outgoing .edge {stroke: red;}
+                    .highlight-incoming .edge {stroke: green;}
+                    .highlight-outgoing .marker {fill: red;}
+                    .highlight-incoming .marker {fill: green;}
+                    .simple-node {fill: green;}
+                    .simple-node .edge {stroke: green;}
+                </style>
+                <defs class="templates">
+                    <g id="simple-node" data-template-type="node">
+                        <rect width="100" height="40" x="-50" y="-20" data-link-handles="edges"></rect>
+                        <text class="title text" data-content="title" data-click="title" x="-40" y="-3" width="80"></text>
+                        <text class="text" data-content="type" x="-40" y="12" width="80"></text>
+                    </g>
+                    <g id="arrow" data-template-type="marker" data-line-attachement-point="-9 0">
+                        <path d="M -9 -4 L 0 0 L -9 4 z" />
+                    </g>
+                </defs>
+            </svg>
+        </network-graph>
+
+        <script>
+            var graph = document.querySelector('network-graph');
+
+                graph.setNodeClass = (className, node) => {
+                    if (className === 'simple-node') {
+                        return true;
+                    }
+                    return false;
+                }
+
+                graph.setEdgeClass = (className, edge, sourceNode, targetNode) => {
+                    if (className === 'simple-node') {
+                        return true;
+                    }
+                    return false;
+                }
+
+                graph.onCreateDraggedEdge = (edge) => {
+                    if (edge.createdFrom == null || edge.createdFrom == undefined) {
+                        edge.markerEnd = { template: 'arrow', positionOnLine: 1, scale: 0.5, relativeRotation: 0 };
+                    }
+                    return edge
+                }
+
+                graph.nodeList = [
+                    { id: 1, title: 'A', type: 'simple-node', x: 0, y: 0 },
+                    { id: 2, title: 'B', type: 'simple-node', x: 150, y: 100 },
+                    { id: 3, title: 'C', type: 'simple-node', x: 270, y: 50 },
+                ];
+
+                var gm = graph.groupingManager;
+                gm.markAsTreeRoot(1);
+                gm.addNodeToGroup(1, 2);
+                gm.addNodeToGroup(1, 3);
+
+                gm.setGroupBehaviourOf(1, {
+                    moveChildrenAlongGoup: true,
+                    captureChildMovement: false,
+                });
+
+                graph.completeRender();
+                graph.zoomToBoundingBox();
+        </script>
+    </body>
+</html>
