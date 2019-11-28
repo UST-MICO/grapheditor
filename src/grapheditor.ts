@@ -961,7 +961,7 @@ export default class GraphEditor extends HTMLElement {
             nodeSelection.call(
                 drag<SVGGElement, Node, {node: Node, children?: Set<string>, offset?: RotationVector}>()
                     .subject((node) => {
-                        const groupId = this.groupingManager.getGroupCapturingMovementOfChild(node.id);
+                        const groupId = this.groupingManager.getGroupCapturingMovementOfChild(node, this);
                         if (groupId != null && groupId !== node.id.toString()) {
                             const groupNode = this.objectCache.getNode(groupId) ?? node;
                             let children: Set<string>;
@@ -1265,16 +1265,25 @@ export default class GraphEditor extends HTMLElement {
             // allow edge drag from link handles
             if (self.isInteractive) {
                 handleSelection.call(
-                    drag<SVGGElement, LinkHandle, DraggedEdge>()
+                    drag<SVGGElement, LinkHandle, {edge: DraggedEdge, capturingGroup?: string}>()
                         .subject((handle) => {
-                            return self.createDraggedEdge(node);
+                            const groupCapturingEdge = self.groupingManager.getGroupCapturingOutgoingEdge(node, self);
+                            if (groupCapturingEdge != null && groupCapturingEdge !== node.id.toString()) {
+                                const groupNode = self.getNode(groupCapturingEdge);
+                                if (groupNode != null) {
+                                    return {edge: self.createDraggedEdge(groupNode), capturingGroup: groupCapturingEdge};
+                                }
+                            }
+                            return {edge: self.createDraggedEdge(node), capturingGroup: node.id.toString()};
                         })
                         .container(() => self.svg.select('g.zoom-group').select<SVGGElement>('g.edges').node())
                         .on('drag', () => {
-                            self.updateDraggedEdge();
+                            self.updateDraggedEdge(event.subject.edge, event.subject.capturingGroup);
                             self.updateDraggedEdgeGroups();
                         })
-                        .on('end', self.dropDraggedEdge.bind(self))
+                        .on('end', () => {
+                            self.dropDraggedEdge(event.subject.edge);
+                        })
                 );
             } else {
                 handleSelection.on('.drag', null);
@@ -1556,17 +1565,29 @@ export default class GraphEditor extends HTMLElement {
         if (this.isInteractive) {
             edgeGroupSelection.select<SVGGElement>('g.link-handle')
                 .datum<Edge>(d)
-                .call(drag<SVGGElement, Edge, DraggedEdge>()
+                .call(drag<SVGGElement, Edge, {edge: DraggedEdge, capturingGroup?: string}>()
                     .subject((edge) => {
-                        return this.createDraggedEdgeFromExistingEdge(edge);
+                        const sourceNode = this.getNode(edge.source);
+                        const groupCapturingEdge = this.groupingManager.getGroupCapturingOutgoingEdge(sourceNode, this);
+                        if (groupCapturingEdge != null && groupCapturingEdge !== sourceNode.id.toString()) {
+                            const groupNode = this.getNode(groupCapturingEdge);
+                            if (groupNode != null) {
+                                const newEdge = this.createDraggedEdgeFromExistingEdge(edge);
+                                newEdge.source = groupCapturingEdge;
+                                return {edge: newEdge, capturingGroup: groupCapturingEdge};
+                            }
+                        }
+                        return {edge: this.createDraggedEdgeFromExistingEdge(edge), capturingGroup: edge.source.toString()};
                     })
                     .container(() => this.svg.select('g.zoom-group').select('g.edges').node() as any)
                     .on('start', () => this.completeRender())
                     .on('drag', () => {
-                        this.updateDraggedEdge();
+                        this.updateDraggedEdge(event.subject.edge, event.subject.capturingGroup);
                         this.updateDraggedEdgeGroups();
                     })
-                    .on('end', this.dropDraggedEdge.bind(this))
+                    .on('end', () => {
+                        this.dropDraggedEdge(event.subject.edge);
+                    })
                 );
         } else {
             edgeGroupSelection.select('g.link-handle').on('.drag', null);
@@ -2412,36 +2433,63 @@ export default class GraphEditor extends HTMLElement {
     /**
      * Update dragged edge on drag event.
      */
-    private updateDraggedEdge() {
-        const oldTarget = event.subject.target;
-        event.subject.target = null;
-        event.subject.currentTarget.x = event.x;
-        event.subject.currentTarget.y = event.y;
+    private updateDraggedEdge(edge: DraggedEdge, capturingGroup?: string) {
+        const oldTarget = edge.target;
+        edge.target = null;
+        edge.currentTarget.x = event.x;
+        edge.currentTarget.y = event.y;
         const possibleTarget = document.elementFromPoint(event.sourceEvent.clientX, event.sourceEvent.clientY);
         if (possibleTarget != null) {
             let target = select(possibleTarget);
             while (!target.empty()) {
                 if (target.classed('node')) {
                     const id = target.attr('id').replace(/^node-/, '');
-                    if (event.subject.source.toString() === id) {
+                    if (edge.source.toString() === id) {
                         break;
                     }
-                    event.subject.target = id;
+                    edge.target = id;
+                    if (id !== oldTarget) {
+                        // check target group behaviour
+                        const targetNode = this.getNode(id);
+                        if (targetNode != null) {
+                            const targetGroupCapturingEdge = this.groupingManager.getGroupCapturingIncomingEdge(targetNode, this);
+                            if (targetGroupCapturingEdge != null) {
+                                const targetGroupBehaviour = this.groupingManager.getGroupBehaviourOf(targetGroupCapturingEdge);
+                                const targetGroupNode = this.getNode(targetGroupCapturingEdge);
+                                if (targetGroupBehaviour?.delegateIncomingEdgeTargetToNode != null && targetGroupNode != null) {
+                                    const newTarget = targetGroupBehaviour.delegateIncomingEdgeTargetToNode(targetGroupNode, edge, this);
+                                    if (newTarget != null && newTarget !== '' && this.getNode(newTarget) !== null) {
+                                        edge.target = newTarget;
+                                    }
+                                }
+                            }
+                        }
+                    }
                     break;
                 }
                 target = select(target.node().parentElement);
             }
         }
-        if (event.subject.target != null) {
-            if (!event.subject.validTargets.has(event.subject.target)) {
-                event.subject.target = null;
+        if (edge.target != null) {
+            if (!edge.validTargets.has(edge.target.toString())) {
+                edge.target = null;
             }
         }
-        if (event.subject.target !== oldTarget) {
+        if (edge.target !== oldTarget) {
+            if (capturingGroup != null) {
+                const groupBehaviour = this.groupingManager.getGroupBehaviourOf(capturingGroup);
+                const groupNode = this.getNode(capturingGroup);
+                if (groupBehaviour != null && groupNode != null) {
+                    const newSource = groupBehaviour.delegateOutgoingEdgeSourceToNode(groupNode, edge, this);
+                    if (newSource != null && newSource !== '' && this.getNode(newSource) !== null) {
+                        edge.source = newSource;
+                    }
+                }
+            }
             if (this.onDraggedEdgeTargetChange != null) {
-                const source = this.objectCache.getNode(event.subject.source);
-                const target = event.subject.target != null ? this.objectCache.getNode(event.subject.target) : null;
-                this.onDraggedEdgeTargetChange(event.subject, source, target);
+                const source = this.objectCache.getNode(edge.source);
+                const target = edge.target != null ? this.objectCache.getNode(edge.target) : null;
+                this.onDraggedEdgeTargetChange(edge, source, target);
             }
         }
     }
@@ -2449,13 +2497,13 @@ export default class GraphEditor extends HTMLElement {
     /**
      * Drop dragged edge.
      */
-    private dropDraggedEdge() {
+    private dropDraggedEdge(edge: DraggedEdge) {
         let updateEdgeCache = false;
-        if (event.subject.createdFrom != null) {
-            const edge = this.objectCache.getEdge(event.subject.createdFrom);
-            if (event.subject.target !== edge.target.toString()) {
+        if (edge.createdFrom != null) {
+            const existingEdge = this.objectCache.getEdge(edge.createdFrom);
+            if (edge.target !== existingEdge.target.toString()) {
                 // only remove original edge if target of dropped edge is different then original target
-                const i = this._edges.findIndex(e => edgeId(e) === event.subject.createdFrom);
+                const i = this._edges.findIndex(e => edgeId(e) === edge.createdFrom);
                 if (this.onEdgeRemove(this._edges[i], EventSource.USER_INTERACTION)) {
                     this._edges.splice(i, 1);
                     updateEdgeCache = true;
@@ -2463,19 +2511,19 @@ export default class GraphEditor extends HTMLElement {
             }
         }
 
-        const index = this.draggedEdges.findIndex(edge => edge.id === event.subject.id);
+        const index = this.draggedEdges.findIndex(e => e.id === edge.id);
         this.draggedEdges.splice(index, 1);
         this.updateDraggedEdgeGroups();
-        if (event.subject.target != null) {
+        if (edge.target != null) {
             // dragged edge has a target
-            let edge = event.subject;
-            delete edge.id;
+            let finalEdge: Edge = edge;
+            delete finalEdge.id;
             if (this.onDropDraggedEdge != null) {
-                edge = this.onDropDraggedEdge(edge, this.objectCache.getNode(edge.source),
+                finalEdge = this.onDropDraggedEdge(edge, this.objectCache.getNode(edge.source),
                                               this.objectCache.getNode(edge.target));
             }
-            if (event.subject.createdFrom != null &&
-                event.subject.target === this.objectCache.getEdge(event.subject.createdFrom).target.toString()) {
+            if (edge.createdFrom != null &&
+                edge.target === this.objectCache.getEdge(edge.createdFrom).target.toString()) {
                 // edge was dropped on the node that was the original target for the edge
                 this.completeRender();
             } else {
@@ -2485,7 +2533,7 @@ export default class GraphEditor extends HTMLElement {
                 }
             }
         } else {
-            this.onEdgeDrop(event.subject, {x: event.x, y: event.y});
+            this.onEdgeDrop(edge, {x: event.x, y: event.y});
         }
         if (updateEdgeCache) {
             this.objectCache.updateEdgeCache(this._edges);
