@@ -1875,6 +1875,7 @@ export default class GraphEditor extends HTMLElement {
             markerStartingNormal = this.calculatePathNormalAtPosition(path.node(), positionOnLine, pathPointA, length);
         }
         // calculate marker offset
+        // tslint:disable-next-line:max-line-length
         const attachementPointVector: RotationVector = this.calculateLineAttachementVector(markerStartingNormal, markerSelection, strokeWidth);
         const point = {
             x: pathPointA.x + (positionOnLine === 0 ? attachementPointVector.dx : -attachementPointVector.dx),
@@ -1888,8 +1889,15 @@ export default class GraphEditor extends HTMLElement {
             }
             marker.relativeRotation = marker.rotate.relativeAngle ?? null;
         }
+        let markerTemplateStartingNormal: RotationVector;
+        // flip normal for markerStart
+        if (markerClass === 'marker-start' && markerStartingNormal != null) {
+            markerTemplateStartingNormal = { dx: -markerStartingNormal.dx, dy: -markerStartingNormal.dy};
+        } else {
+            markerTemplateStartingNormal = markerStartingNormal;
+        }
         // calculate marker transformation
-        const transformEnd = this.calculatePathObjectTransformation(point, marker, strokeWidth, markerStartingNormal);
+        const transformEnd = this.calculatePathObjectTransformation(point, marker, strokeWidth, markerTemplateStartingNormal);
         // apply transformation
         markerSelection.attr('transform', transformEnd);
     }

@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 ### Fixed
 
 - Fixed all possible classes in the `classes` attribute of the `network-graph` beeing applied to nodes/edges if `setNodeClass`/`setEdgeClass` was null
+- Fixed marker for `MarkerStart` not beeing rotated 180° like the line attachement point
 
 
 ## [0.3.0] - 2019-11-22
