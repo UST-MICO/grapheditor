@@ -389,6 +389,24 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
             "newMode": "both"
         }
 
+.. describe:: backgroundclick
+
+    Fired when the graph background was clicked.
+
+    The event contains the point where the click happened in graph coordinates.
+
+    **Example** ``detail``
+
+    .. code-block:: ts
+
+        {
+            sourceEvent: {},
+            point: {
+                x: 0,
+                y: 0,
+            },
+        }
+
 .. describe:: selection
 
     Fired when a user (de-)selects a :js:class:`Node`.

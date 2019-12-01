@@ -651,10 +651,20 @@ export default class GraphEditor extends HTMLElement {
         // TODO cleanup old svg?
         if (oldSvg != null && !oldSvg.empty()) {
             console.warn('Switching to new SVG, old SVG needs to be disposed manually!');
+
+            // cleanup listeners
+            oldSvg.on('click', null);
         }
 
         this.svg = newSvg;
         this.zoom = newZoom;
+
+        // listener for clicks on the graph background
+        newSvg.on('click', () => {
+            if (event.target === newSvg.node()) {
+                this.onBackgroundClick();
+            }
+        });
 
         this.updateTemplates();
         this.updateSize();
@@ -2712,6 +2722,27 @@ export default class GraphEditor extends HTMLElement {
         edgeSelection
             .classed('highlight-outgoing', (d) => nodes.has(d.source))
             .classed('highlight-incoming', (d) => nodes.has(d.target));
+    }
+
+    /**
+     * Create and dispatch a 'backgroundclick' event.
+     */
+    private onBackgroundClick() {
+        const currentZoom = zoomTransform(this.svg.select<SVGGElement>('.zoom-group').node());
+        const ev = new CustomEvent('backgroundclick', {
+            bubbles: true,
+            composed: true,
+            cancelable: false,
+            detail: {
+                eventSource: EventSource.USER_INTERACTION,
+                sourceEvent: event,
+                point: {
+                    x: currentZoom.invertX(event.x),
+                    y: currentZoom.invertY(event.y),
+                },
+            }
+        });
+        this.dispatchEvent(ev);
     }
 }
 
