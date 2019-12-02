@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 import { LinkHandle } from './link-handle';
 import { Edge, DraggedEdge, Point, edgeId } from './edge';
 import { Node } from './node';
@@ -51,7 +68,6 @@ export function applyUserLinkHandleCalculationCallback(
     source: Node,
     targetHandles: LinkHandle[],
     target: Node | Point,
-    // tslint:disable-next-line:max-line-length
     callback?: (edge: Edge | DraggedEdge, sourceHandles: LinkHandle[], source: Node, targetHandles: LinkHandle[], target: Node | Point) => { sourceHandles: LinkHandle[], targetHandles: LinkHandle[] }
 ): { sourceHandles: LinkHandle[], targetHandles: LinkHandle[] } {
     const initialSourceHandles = sanitizeHandleList(sourceHandles);
@@ -71,7 +87,6 @@ export function applyUserLinkHandleCalculationCallback(
             }
         }
     } catch (error) {
-        // tslint:disable-next-line:max-line-length
         console.error(`An error occured while calculating the link handles for the edge ${edgeId(edge)} with the user supplied callback!`, error);
     }
     return {

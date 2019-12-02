@@ -60,9 +60,7 @@ export default class GraphEditor extends HTMLElement {
     private zoom: ZoomBehavior<any, any>;
     private zoomActive: boolean = false;
 
-    private contentMinHeight = 0;
     private contentMaxHeight = 1;
-    private contentMinWidth = 0;
     private contentMaxWidth = 1;
 
     private hovered: Set<number | string> = new Set();
@@ -123,6 +121,11 @@ export default class GraphEditor extends HTMLElement {
      * Callback when a new dragged edge is created.
      *
      * Use this callback only to customize the edge attributes like markers or type!
+     * The callback must return the modified edge.
+     * If the callback returns null the drag is cancelled.
+     *
+     * @param edge the newly created dragged edge
+     * @returns the modified dragged edge
      */
     public onCreateDraggedEdge: (edge: DraggedEdge) => DraggedEdge;
 
@@ -130,6 +133,10 @@ export default class GraphEditor extends HTMLElement {
      * Callback dragged edge has a new target.
      *
      * Only modify the existing edge!
+     *
+     * @param edge the dragged edge
+     * @param sourceNode the source node of the edge
+     * @param targetNode the target node of the edge (may be `null` if the edge currently has no target)
      */
     public onDraggedEdgeTargetChange: (edge: DraggedEdge, sourceNode: Node, targetNode?: Node) => void;
 
@@ -137,16 +144,37 @@ export default class GraphEditor extends HTMLElement {
      * Callback when a existing dragged edge is dropped.
      *
      * Use this callback only to customize the edge attributes like markers or type!
+     * The callback must return the modified edge.
+     * The returned edge must not be `null`!
+     *
+     * @param edge the dragged edge
+     * @param sourceNode the source node of the edge
+     * @param targetNode the target node of the edge (is never `null` when dropping the edge on a target)
+     * @returns the updated edge object (must NOT be `null`)
      */
     public onDropDraggedEdge: (edge: DraggedEdge, sourceNode: Node, targetNode: Node) => Edge;
 
     /**
      * Callback to set/unset a given class for a node.
+     *
+     * The callback will be called for each class defined in `classes` for each node.
+     *
+     * @param className the css class to be set for the node
+     * @param node the node to set the class for
+     * @returns `true` iff the class should be set for this node, false if not
      */
     public setNodeClass: (className: string, node: Node) => boolean;
 
     /**
      * Callback to set/unset a given class for an edge.
+     *
+     * The callback will be called for each class defined in `classes` for each edge.
+     *
+     * @param className the css class to be set for the edge
+     * @param edge the edge to set the class for
+     * @param sourceNode the source node of the edge
+     * @param the target node of the edge (may be `null` for dragged edges without a target)
+     * @returns `true` iff the class should be set for this edge, false if not
      */
     public setEdgeClass: (className: string, edge: Edge|DraggedEdge, sourceNode: Node, targetNode?: Node) => boolean;
 
@@ -158,8 +186,14 @@ export default class GraphEditor extends HTMLElement {
      * Use this callback to customize where an edge attaches to a node.
      * If more than one link handle is in the result list the nearest one will be used.
      * If the list is empty or null then the LinkHandles of the template will be used.
+     *
+     * @param edge the edge to calculate the link handles for
+     * @param sourceHandles the current list of link handles for the edge source
+     * @param source the source node
+     * @param targetHandles the current list of link handles for the edge target
+     * @param target the current target node (for dragged edges without a target this is a `Point`)
+     * @returns an object containing the (altered) link handle lists
      */
-    // tslint:disable-next-line:max-line-length
     public calculateLinkHandlesForEdge: (edge: Edge|DraggedEdge, sourceHandles: LinkHandle[], source: Node, targetHandles: LinkHandle[], target: Node|Point) => {sourceHandles: LinkHandle[], targetHandles: LinkHandle[]};
 
     get classes() {
@@ -186,7 +220,8 @@ export default class GraphEditor extends HTMLElement {
     /**
      * The list of nodes.
      *
-     * This list should **not** be altered without updating the cache!
+     * This list should **not** be altered outside without updating the cache!
+     * Use `addNode` and `removeNode` to keep the cache consistent.
      */
     set nodeList(nodes: Node[]) {
         this._nodes = nodes;
@@ -201,6 +236,7 @@ export default class GraphEditor extends HTMLElement {
      * The list of edges.
      *
      * This list should **not** be altered without updating the cache!
+     * Use `addEdge` and `removeEdge` to keep the cache consistent.
      */
     set edgeList(edges: Edge[]) {
         this._edges = edges;
@@ -255,7 +291,7 @@ export default class GraphEditor extends HTMLElement {
 
         this.root = this.attachShadow({ mode: 'open' });
 
-        // prelaod shadow dom with html
+        // preload shadow dom with html
         select(this.root).html(SHADOW_DOM_TEMPLATE);
 
         // monitor graph slot
@@ -334,7 +370,7 @@ export default class GraphEditor extends HTMLElement {
      * Use `addNode` and `removeNode` to update the list instead.
      *
      * @param nodes new nodeList
-     * @param redraw if graph should be redrawn
+     * @param redraw if graph should be redrawn (default: `false`)
      */
     public setNodes(nodes: Node[], redraw: boolean = false) {
         this.nodeList = nodes;
@@ -348,7 +384,7 @@ export default class GraphEditor extends HTMLElement {
      * Add a single node to the graph.
      *
      * @param node node to add
-     * @param redraw if graph should be redrawn
+     * @param redraw if graph should be redrawn (default: `false`)
      */
     public addNode(node: Node, redraw: boolean = false) {
         this._nodes.push(node);
@@ -376,7 +412,7 @@ export default class GraphEditor extends HTMLElement {
      * This method deselects the node before removing it.
      *
      * @param node node or id to remove
-     * @param redraw if the graph should be redrawn
+     * @param redraw if the graph should be redrawn (default: `false`)
      */
     public removeNode(node: Node | number | string, redraw: boolean = false) {
         const id: string | number = (node as Node).id != null ? (node as Node).id : (node as number | string);
@@ -496,7 +532,7 @@ export default class GraphEditor extends HTMLElement {
      * Use `addEdge` and `removeEdge` to update the list instead.
      *
      * @param edges new edgeList
-     * @param redraw if the graph should be redrawn
+     * @param redraw if the graph should be redrawn (default: `false`)
      */
     public setEdges(edges: Edge[], redraw: boolean = false) {
         this.edgeList = edges;
@@ -510,7 +546,7 @@ export default class GraphEditor extends HTMLElement {
      * Add a single edge to the graph.
      *
      * @param edge edge to add
-     * @param redraw if graph should be redrawn
+     * @param redraw if graph should be redrawn (default: `false`)
      */
     public addEdge(edge: Edge, redraw: boolean = false) {
         this._edges.push(edge);
@@ -524,9 +560,8 @@ export default class GraphEditor extends HTMLElement {
     /**
      * Get the edge with the given id.
      *
-     * @param edgeId the id of the edge
+     * @param edgeId the id of the edge (use the `edgeId` function to compute the id)
      */
-    // tslint:disable-next-line:no-shadowed-variable
     public getEdge(edgeId: number|string): Edge {
         return this.objectCache.getEdge(edgeId);
     }
@@ -535,13 +570,16 @@ export default class GraphEditor extends HTMLElement {
      * Remove a single edge from the graph.
      *
      * @param edge edge to remove
-     * @param redraw if the graph should be redrawn
+     * @param redraw if the graph should be redrawn (default: `false`)
      */
-    public removeEdge(edge: Edge, redraw: boolean = false) {
-        const index = this._edges.findIndex((e) => {
-            return (e.source === edge.source) &&
-                (e.target === edge.target);
-        });
+    public removeEdge(edge: Edge|number|string, redraw: boolean = false) {
+        let edgeIdToDelete: string;
+        if (typeof(edge) === 'number') {
+            edgeIdToDelete = edge.toString();
+        } else if (typeof(edge) !== 'string') {
+            edgeIdToDelete = edgeId(edge);
+        }
+        const index = this._edges.findIndex((e) => edgeId(e) === edgeIdToDelete);
         if (index >= 0) {
             this.onEdgeRemove(this._edges[index], EventSource.API);
             this._edges.splice(index, 1);
@@ -554,7 +592,7 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
-     * Get all edges that have the given nodeId as source
+     * Get all edges that have the given nodeId as source.
      *
      * @param sourceNodeId the node id of the edge source
      */
@@ -563,7 +601,7 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
-     * Get all edges that have the given nodeId as target
+     * Get all edges that have the given nodeId as target.
      *
      * @param targetNodeId the node id of the edge target
      */
@@ -817,6 +855,7 @@ export default class GraphEditor extends HTMLElement {
      * Update the template cache from the provided svg or the current svg.
      *
      * This method will add missing `default` and `default-marker` templates before updating the template cache.
+     * It will also add a `default-textcomponent` template and a `default` EdgePathGenerator to the respective registrys.
      */
     public updateTemplates(svg?: Selection<SVGSVGElement, any, any, any>) {
         if (svg != null) {
@@ -995,7 +1034,6 @@ export default class GraphEditor extends HTMLElement {
      * @param templateType the template type to use
      * @param dynamic `true` iff the template is a dynamic template (default: `false`)
      */
-    // tslint:disable-next-line:max-line-length
     private updateContentTemplate<T extends Node|Marker|LinkHandle|TextComponent>(element: Selection<SVGGElement, T, any, unknown>, templateId: string, templateType: string, dynamic: boolean= false, parent?: Node|Edge) {
         const oldTemplateID = element.attr('data-template');
         const oldDynamic = element.attr('data-dynamic-template') === 'true';
@@ -1070,7 +1108,6 @@ export default class GraphEditor extends HTMLElement {
      * @param templateId the new template ID
      * @param templateType the template type to use
      */
-    // tslint:disable-next-line:max-line-length
     private updateStaticContentTemplate<T extends Node|Marker|LinkHandle>(element: Selection<SVGGElement, T, any, unknown>, templateId: string, templateType: string) {
         let newTemplate: Selection<SVGGElement, unknown, any, unknown>;
         if (templateType === 'node') {
@@ -1156,7 +1193,6 @@ export default class GraphEditor extends HTMLElement {
                 .join(
                     enter => enter.append('g').classed('link-handle', true)
                 ).each(function (d: LinkHandle) {
-                    // tslint:disable-next-line:no-shadowed-variable
                     const g = select(this).datum(d);
                     const templateId = self.staticTemplateRegistry.getMarkerTemplateId(d.template);
                     self.updateContentTemplate<LinkHandle>(g, templateId, 'marker', d.isDynamicTemplate, node);
@@ -1166,7 +1202,6 @@ export default class GraphEditor extends HTMLElement {
                             try {
                                 dynTemplate.updateTemplate(g, self, {parent: node});
                             } catch (error) {
-                                // tslint:disable-next-line:max-line-length
                                 console.error(`An error occured while updating the dynamic link handle template in node ${node.id}!`, error);
                             }
                         }
@@ -1513,7 +1548,6 @@ export default class GraphEditor extends HTMLElement {
                     try {
                         dynTemplate?.updateTemplate(g, self, {parent: edge});
                     } catch (error) {
-                        // tslint:disable-next-line:max-line-length
                         console.error(`An error occured updating the text component in edge ${edgeId(edge)} before text wrapping`, textComponent, error);
                     }
                 })
@@ -1544,7 +1578,6 @@ export default class GraphEditor extends HTMLElement {
                 try {
                     dynTemplate?.updateAfterTextwrapping(g, self, {parent: edge});
                 } catch (error) {
-                    // tslint:disable-next-line:max-line-length
                     console.error(`An error occured updating the text component in edge ${edgeId(edge)} after text wrapping`, textComponent, error);
                 }
             });
@@ -1572,7 +1605,6 @@ export default class GraphEditor extends HTMLElement {
      * @param marker the selection of a single marker
      * @param strokeWidth the current stroke width
      */
-    // tslint:disable-next-line:max-line-length
     private calculateLineAttachementVector(startingAngle: number|RotationVector, markerSelection: Selection<SVGGElement, Marker, any, unknown>, strokeWidth: number) {
         if (markerSelection.empty()) {
             return {dx: 0, dy: 0};
@@ -1619,13 +1651,11 @@ export default class GraphEditor extends HTMLElement {
             const targetNodeSelection = (edge.target != null) ? this.getSingleNodeSelection(edge.target) : null;
             let initialSourceHandles, initialTargetHandles;
             try {
-                // tslint:disable-next-line:max-line-length
                 initialSourceHandles = getNodeLinkHandles(sourceNodeSelection, this.staticTemplateRegistry, this.dynamicTemplateRegistry, this);
             } catch (error) {
                 console.error(`An error occured while calculating the link handles for node ${edge.source}!`, error);
             }
             try {
-                // tslint:disable-next-line:max-line-length
                 initialTargetHandles = getNodeLinkHandles(targetNodeSelection, this.staticTemplateRegistry, this.dynamicTemplateRegistry, this);
             } catch (error) {
                 console.error(`An error occured while calculating the link handles for node ${edge.target}!`, error);
@@ -1768,11 +1798,9 @@ export default class GraphEditor extends HTMLElement {
                 const pathGenerator = self.edgePathGeneratorRegistry.getEdgePathGenerator(d.pathType) ?? self.defaultEdgePathGenerator;
                 let path: string;
                 try {
-                    // tslint:disable-next-line: max-line-length
                     path = pathGenerator.generateEdgePath(points[0], points[points.length - 1], sourceHandleNormal, (d.target != null) ? targetHandleNormal : null);
                 } catch (error) {
                     console.error(`An error occurred while generating the edge path for the edge ${edgeId(edge)}`, error);
-                    // tslint:disable-next-line: max-line-length
                     path = self.defaultEdgePathGenerator.generateEdgePath(points[0], points[points.length - 1], sourceHandleNormal, (d.target != null) ? targetHandleNormal : null);
                 }
                 return path;
@@ -1827,7 +1855,6 @@ export default class GraphEditor extends HTMLElement {
      * @param markerClass the css class to select for
      * @param edge the edge datum this marker belongs to
      */
-    // tslint:disable-next-line:max-line-length
     private updateEndMarker(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, marker: Marker, markerClass: string, edge: Edge) {
         if (marker == null) {
             // delete
@@ -1879,7 +1906,6 @@ export default class GraphEditor extends HTMLElement {
      * @param strokeWidth the stroke width of the edge
      * @param normal the normal vector of the edge at the path object position
      */
-    // tslint:disable-next-line:max-line-length
     private calculatePathObjectTransformation(point: { x: number; y: number; }, pathObject: PathPositionRotationAndScale, strokeWidth: number, normal: RotationVector) {
         let transform = `translate(${point.x},${point.y})`;
         if (pathObject.scale != null) {
@@ -1905,7 +1931,6 @@ export default class GraphEditor extends HTMLElement {
      * @param normal the normal vector used for relative rotation
      * @param ignorePathDirectionForRotation iff true the normal rotation is limited to half a circle (useful for text components)
      */
-    // tslint:disable-next-line:max-line-length
     private calculateRotationTransformationAngle(rotationData: RotationData, normal: RotationVector, ignorePathDirectionForRotation: boolean= false): number {
         let angle = rotationData.absoluteRotation ?? 0;
         if (rotationData.relativeRotation != null && rotationData.absoluteRotation == null) {
@@ -1980,7 +2005,6 @@ export default class GraphEditor extends HTMLElement {
             markerStartingNormal = this.calculatePathNormalAtPosition(path.node(), positionOnLine, pathPointA, length);
         }
         // calculate marker offset
-        // tslint:disable-next-line:max-line-length
         const attachementPointVector: RotationVector = this.calculateLineAttachementVector(markerStartingNormal, markerSelection, strokeWidth);
         const point = {
             x: pathPointA.x + (positionOnLine === 0 ? attachementPointVector.dx : -attachementPointVector.dx),
@@ -2044,7 +2068,6 @@ export default class GraphEditor extends HTMLElement {
      * @param bbox the bbox to transform
      * @param transformation the transformation matrix
      */
-    // tslint:disable-next-line:max-line-length
     public transformBBox(bbox: {x: number, y: number, width: number, height: number}, transformation: DOMMatrix): {x: number, y: number, width: number, height: number} {
         const p = this.svg.node().createSVGPoint();
 

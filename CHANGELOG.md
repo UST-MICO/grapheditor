@@ -19,6 +19,7 @@ The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`.
 
 - Fixed all possible classes in the `classes` attribute of the `network-graph` beeing applied to nodes/edges if `setNodeClass`/`setEdgeClass` was null
 - Fixed marker for `MarkerStart` not beeing rotated 180° like the line attachement point
+- Fixed `removeEdge` not working correctly with edges with explicit id
 
 
 ## [0.3.0] - 2019-11-22

@@ -69,7 +69,7 @@ There is also very limited support for completely dynamic styles with :ref:`dyna
 
 .. seealso:: It is possible to set the svg content of Nodes and Markers using templates.
 
-    See the documentation for :doc:`static templates <static-templates>` and :doc:`static templates <dynamic-templates>`.
+    See the documentation for :doc:`static templates <static-templates>` and :doc:`dynamic templates <dynamic-templates>`.
 
 .. code-block:: html
 
@@ -154,6 +154,8 @@ List of special node classes
 ``text``
     Special class to select all text elements that need to be updated with text from the node.
 
+
+.. seealso:: Setting custom css classes is also supported: :ref:`grapheditor:styling nodes and edges with custom css classes`.
 
 
 
@@ -333,7 +335,7 @@ To controll which class is set for a node or an edge set the functions :js:func:
     var graph = document.querySelector('network-graph');
 
     graph.setNodeClass = (className, node) => {
-        return className === node.type);
+        return className === node.type;
     }
 
     graph.setEdgeClass = (className, edge, sourceNode, targetNode) => {

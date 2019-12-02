@@ -18,6 +18,9 @@
 import { Node } from './node';
 import { Edge, edgeId } from './edge';
 
+/**
+ * A cache for fast access of graph objects.
+ */
 export class GraphObjectCache {
 
     private nodes: Map<string, Node>;
@@ -34,6 +37,11 @@ export class GraphObjectCache {
         this.edgesByTarget = new Map<string, Set<Edge>>();
     }
 
+    /**
+     * Invalidate the node cache.
+     *
+     * @param nodes the new node list
+     */
     updateNodeCache(nodes: Node[]) {
         const nodeMap = new Map();
         nodes.forEach((node) => nodeMap.set(node.id.toString(), node));
@@ -41,6 +49,11 @@ export class GraphObjectCache {
         this.nodeBBoxes = new Map<string, DOMRect>();
     }
 
+    /**
+     * Invalidate all edge related caches.
+     *
+     * @param edges the new edge list
+     */
     updateEdgeCache(edges: Edge[]) {
         const edgeMap = new Map();
         const bySourceMap = new Map();
@@ -65,22 +78,49 @@ export class GraphObjectCache {
         this.edgesByTarget = byTargetMap;
     }
 
+    /**
+     * Get the cached node.
+     *
+     * @param id the node id
+     */
     getNode(id: number|string) {
         return this.nodes.get(id.toString());
     }
 
+    /**
+     * Store a bbox for a node in the cache.
+     *
+     * @param id the node id to store the bbox for
+     * @param bbox the bbox of the node
+     */
     setNodeBBox(id: number|string, bbox: DOMRect) {
         return this.nodeBBoxes.set(id.toString(), bbox);
     }
 
+    /**
+     * Get a node bbox from the cache.
+     *
+     * @param id the node id
+     */
     getNodeBBox(id: number|string) {
         return this.nodeBBoxes.get(id.toString());
     }
 
+    /**
+     * Get an edge by its id.
+     *
+     * @param id the edge id
+     */
     getEdge(id: number|string) {
         return this.edges.get(id.toString());
     }
 
+    /**
+     * Get all edges with the same target.
+     *
+     * @param targetId id of the target node
+     * @returns the set of edges with the same target
+     */
     getEdgesByTarget(targetId: number|string): Set<Edge> {
         const edges = this.edgesByTarget.get(targetId.toString());
         if (edges == null) {
@@ -89,6 +129,12 @@ export class GraphObjectCache {
         return edges;
     }
 
+    /**
+     * Get all edges with the same source.
+     *
+     * @param sourceId id of the source node
+     * @returns the set of edges with the same source
+     */
     getEdgesBySource(sourceId: number|string): Set<Edge> {
         const edges = this.edgesBySource.get(sourceId.toString());
         if (edges == null) {

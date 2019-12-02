@@ -1,4 +1,21 @@
-import { line, curveBasis, Line, CurveFactory, CurveFactoryLineOnly, curveLinear } from 'd3-shape';
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { line, Line, CurveFactory, CurveFactoryLineOnly, curveLinear } from 'd3-shape';
 import { Point } from '../edge';
 import { RotationVector } from '../rotation-vector';
 
@@ -35,12 +52,15 @@ export class SmoothedEdgePathGenerator implements EdgePathGenerator {
      * @param offsetPointOffset the distance of the offset points (default: `1`)
      */
     constructor(smoothing: CurveFactory|CurveFactoryLineOnly, useOffsetPoints: boolean= true, offsetPointOffset: number= 1) {
-        this.lineGenerator = line<Point>().x((d) => d.x).y((d) => d.y).curve(smoothing);
+        this.lineGenerator = line<Point>()
+            .x((d) => d.x)
+            .y((d) => d.y)
+            .curve(smoothing);
         this.useOffsetPoints = useOffsetPoints;
         this.offsetPointOffset = offsetPointOffset;
     }
 
-    generateEdgePath(start: Point, end: Point, startNormal?: RotationVector, endNormal?: RotationVector) {
+    generateEdgePath(start: Point, end: Point, startNormal?: RotationVector, endNormal?: RotationVector): string {
         const points = [start];
         if (this.useOffsetPoints) {
             if (startNormal != null) {
@@ -65,9 +85,12 @@ export class SmoothedEdgePathGenerator implements EdgePathGenerator {
  * A naive stepping path generator that tries to produce the shortest path using only lines parallel to the axes.
  */
 export class SteppedEdgePathGenerator implements EdgePathGenerator {
-    lineGenerator = line<Point>().x((d) => d.x).y((d) => d.y).curve(curveLinear);
+    lineGenerator = line<Point>()
+        .x((d) => d.x)
+        .y((d) => d.y)
+        .curve(curveLinear);
 
-    generateEdgePath(start: Point, end: Point, startNormal?: RotationVector, endNormal?: RotationVector) {
+    generateEdgePath(start: Point, end: Point, startNormal?: RotationVector, endNormal?: RotationVector): string {
         const dx = Math.abs(start.x - end.x);
         const dy = Math.abs(start.y - end.y);
         const points = [start];
