@@ -10,5 +10,6 @@ CONTRIBUTING.md
 readthedocs.yml
 tsconfig.json
 tslint.json
+.eslintrc.json
 webpack.config.js
 webpack-dev.config.js
