@@ -105,7 +105,7 @@ export default class GraphEditor extends HTMLElement {
     private interactionStateData: {
         source?: number | string,
         target?: number | string,
-        selected?: Set<number | string>,
+        selected?: Set<string>,
         fromMode?: string,
         [property: string]: any
     } = null;
@@ -205,6 +205,14 @@ export default class GraphEditor extends HTMLElement {
     set edgeList(edges: Edge[]) {
         this._edges = edges;
         this.objectCache.updateEdgeCache(edges);
+    }
+
+    /**
+     * The currently selected nodes.
+     */
+    get selected() {
+        const selected: Set<string> = this.interactionStateData?.selected ?? new Set();
+        return selected;
     }
 
     get mode() {
@@ -364,6 +372,9 @@ export default class GraphEditor extends HTMLElement {
     /**
      * Remove a single node from the graph.
      *
+     * This method removes all edges connected to this node from the graph.
+     * This method deselects the node before removing it.
+     *
      * @param node node or id to remove
      * @param redraw if the graph should be redrawn
      */
@@ -371,6 +382,7 @@ export default class GraphEditor extends HTMLElement {
         const id: string | number = (node as Node).id != null ? (node as Node).id : (node as number | string);
         const index = this._nodes.findIndex(n => n.id === id);
         if (index >= 0) {
+            this.deselectNode(id);
             this.onNodeRemove(this._nodes[index], EventSource.API);
             this._nodes.splice(index, 1);
             this.objectCache.updateNodeCache(this._nodes);
@@ -391,6 +403,89 @@ export default class GraphEditor extends HTMLElement {
                 this.completeRender();
                 this.zoomToBoundingBox(false);
             }
+        }
+    }
+
+    /**
+     * Add a node to the selected set.
+     *
+     * This method will cause a 'selection' event if the selection has changed.
+     * This method does not check if the nodeId exists.
+     *
+     * To update the graph the `updateHighlights` method is used iff `updateHighlights` is `true`.
+     *
+     * @param nodeId the id of the node to select
+     * @param updateHighlights set this to true to update highlights immediately (default `false`)
+     */
+    public selectNode(nodeId: number | string, updateHighlights: boolean = false) {
+        if (this._mode !== 'select') {
+            this.setMode('select');
+        }
+        if (this.interactionStateData.selected.has(nodeId.toString())) {
+            return; // nothing changed
+        }
+        this.interactionStateData.selected.add(nodeId.toString());
+        this.onSelectionChangeInternal(EventSource.API);
+        if (updateHighlights) {
+            this.updateHighlights();
+        }
+    }
+
+    /**
+     * Remove a node from the selected set.
+     *
+     * This method will cause a 'selection' event if the selection has changed.
+     * This method does not check if the nodeId exists.
+     *
+     * To update the graph the `updateHighlights` method is used iff `updateHighlights` is `true`.
+     *
+     * @param nodeId the id of the node to deselect
+     * @param updateHighlights set this to true to update highlights immediately (default `false`)
+     */
+    public deselectNode(nodeId: number | string, updateHighlights: boolean = false) {
+        if (this._mode !== 'select') {
+            return; // no selection
+        }
+        if (!this.interactionStateData.selected.has(nodeId.toString())) {
+            return; // nothing changed
+        }
+        this.interactionStateData.selected.delete(nodeId.toString());
+        this.onSelectionChangeInternal(EventSource.API);
+        if (this.interactionStateData.selected.size <= 0) {
+            this.setMode(this.interactionStateData.fromMode);
+        }
+        if (updateHighlights) {
+            this.updateHighlights();
+        }
+    }
+
+    /**
+     * Completely replace the current node selection.
+     *
+     * Use an empty set or `null` to clear the current selection.
+     *
+     * This method will cause a 'selection' event if the selection has changed.
+     * This method does not check if the node id's in the set exist.
+     *
+     * @param selected the new set of selected node id's
+     * @param updateHighlights set this to true to update highlights immediately (default `false`)
+     */
+    public changeSelected(selected: Set<string>, updateHighlights: boolean = false) {
+        if (selected == null || selected.size <= 0) {
+            if (this._mode === 'select') {
+                // selection is not empty
+                this.setMode(this.interactionStateData.fromMode);
+                this.onSelectionChangeInternal(EventSource.API);
+            }
+        } else {
+            if (this._mode !== 'select') {
+                this.setMode('select');
+            }
+            this.interactionStateData.selected = selected;
+            this.onSelectionChangeInternal(EventSource.API);
+        }
+        if (updateHighlights) {
+            this.updateHighlights();
         }
     }
 
@@ -2164,6 +2259,16 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
+     * Update Node and Edge highlights to match the current selection state and hovered state.
+     *
+     * This should be called after manually changing the selection.
+     */
+    public updateHighlights() {
+        this.updateNodeHighligts();
+        this.updateEdgeHighligts();
+    }
+
+    /**
      * Create a new dragged edge from a source node.
      *
      * @param sourceNode node that edge was dragged from
@@ -2501,13 +2606,12 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param nodeDatum Corresponding datum of node
      */
-    private onNodeEnter(nodeDatum) {
+    private onNodeEnter(nodeDatum: Node) {
         this.hovered.add(nodeDatum.id);
         if (this._mode === 'link' && this.interactionStateData.source != null) {
             this.interactionStateData.target = nodeDatum.id;
         }
-        this.updateNodeHighligts();
-        this.updateEdgeHighligts();
+        this.updateHighlights();
         const ev = new CustomEvent('nodeenter', {
             bubbles: true,
             composed: true,
@@ -2526,13 +2630,12 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param nodeDatum Corresponding datum of node
      */
-    private onNodeLeave(nodeDatum) {
+    private onNodeLeave(nodeDatum: Node) {
         this.hovered.delete(nodeDatum.id);
         if (this._mode === 'link' && this.interactionStateData.target === nodeDatum.id) {
             this.interactionStateData.target = null;
         }
-        this.updateNodeHighligts();
-        this.updateEdgeHighligts();
+        this.updateHighlights();
         const ev = new CustomEvent('nodeleave', {
             bubbles: true,
             composed: true,
@@ -2551,7 +2654,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param nodeDatum Corresponding datum of node
      */
-    private onNodeClick = (nodeDatum) => {
+    private onNodeClick = (nodeDatum: Node) => {
         const eventDetail: any = {};
         eventDetail.eventSource = EventSource.USER_INTERACTION,
         eventDetail.sourceEvent = event;
@@ -2584,29 +2687,30 @@ export default class GraphEditor extends HTMLElement {
         }
         if (this._mode !== 'select') {
             this.setMode('select');
-            this.interactionStateData.selected.add(nodeDatum.id);
+            this.interactionStateData.selected.add(nodeDatum.id.toString());
             this.onSelectionChangeInternal();
-        } else if (this.interactionStateData.selected.has(nodeDatum.id)) {
-            this.interactionStateData.selected.delete(nodeDatum.id);
+        } else if (this.interactionStateData.selected.has(nodeDatum.id.toString())) {
+            this.interactionStateData.selected.delete(nodeDatum.id.toString());
             this.onSelectionChangeInternal();
             if (this.interactionStateData.selected.size <= 0) {
                 this.setMode(this.interactionStateData.fromMode);
             }
         } else {
-            this.interactionStateData.selected.add(nodeDatum.id);
+            this.interactionStateData.selected.add(nodeDatum.id.toString());
             this.onSelectionChangeInternal();
         }
-        this.updateNodeHighligts();
-        this.updateEdgeHighligts();
+        this.updateHighlights();
     }
 
     /**
      * Internal selection changed callback.
      *
      * Create new 'selection' event.
+     *
+     * @param eventSource the source of the selection event (default: EventSource.USER_INTERACTION)
      */
-    private onSelectionChangeInternal() {
-        let selected: Set<number | string> = new Set();
+    private onSelectionChangeInternal(eventSource= EventSource.USER_INTERACTION) {
+        let selected: Set<string> = new Set();
         if (this.mode === 'select') {
             selected = this.interactionStateData.selected;
         }
@@ -2614,7 +2718,7 @@ export default class GraphEditor extends HTMLElement {
             bubbles: true,
             composed: true,
             detail: {
-                eventSource: EventSource.USER_INTERACTION,
+                eventSource: eventSource,
                 selection: selected
             }
         });
@@ -2626,7 +2730,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param nodeDatum Corresponding datum of node
      */
-    private onNodeSelectLink(nodeDatum) {
+    private onNodeSelectLink(nodeDatum: Node) {
         if (this.interactionStateData.source == null) {
             this.interactionStateData.source = nodeDatum.id;
             return;
@@ -2666,13 +2770,13 @@ export default class GraphEditor extends HTMLElement {
     /**
      * Calculate highlighted nodes and update their classes.
      */
-    private updateNodeHighligts(nodeSelection?) {
+    private updateNodeHighligts(nodeSelection?: Selection<SVGGElement, Node, any, unknown>) {
         if (nodeSelection == null) {
             const svg = this.svg;
 
             const graph = svg.select('g.zoom-group');
-            nodeSelection = graph.select('.nodes')
-                .selectAll<any, Node>('g.node')
+            nodeSelection = graph.select<SVGGElement>('.nodes')
+                .selectAll<SVGGElement, Node>('g.node')
                 .data<Node>(this._nodes, (d: Node) => d.id.toString());
         }
 
@@ -2682,7 +2786,7 @@ export default class GraphEditor extends HTMLElement {
                 if (this._mode === 'select') {
                     const selected = this.interactionStateData.selected;
                     if (selected != null) {
-                        return selected.has(d.id);
+                        return selected.has(d.id.toString());
                     }
                 }
                 if (this._mode === 'link') {
@@ -2699,14 +2803,14 @@ export default class GraphEditor extends HTMLElement {
     /**
      * Calculate highlighted edges and update their classes.
      */
-    private updateEdgeHighligts(edgeSelection?) {
+    private updateEdgeHighligts(edgeSelection?: Selection<SVGGElement, Edge, any, unknown>) {
         if (edgeSelection == null) {
             const svg = this.svg;
 
-            const graph = svg.select('g.zoom-group');
-            edgeSelection = graph.select('.edges')
-                .selectAll('g.edge-group:not(.dragged)')
-                .data(this._edges, edgeId);
+            const graph = svg.select<SVGGElement>('g.zoom-group');
+            edgeSelection = graph.select<SVGGElement>('.edges')
+                .selectAll<SVGGElement, Edge>('g.edge-group:not(.dragged)')
+                .data<Edge>(this._edges, edgeId);
         }
 
         let nodes: Set<number | string> = new Set();

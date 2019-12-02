@@ -411,6 +411,12 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
 
     Fired when a user (de-)selects a :js:class:`Node`.
 
+    .. hint::
+
+        Use :js:func:`GraphEditor.selectNode`, :js:func:`GraphEditor.deselectNode` and
+        :js:func:`GraphEditor.changeSelected` to change the selection programmatically.
+        Use :js:attr:`GraphEditor.selected` to get the current selection outside of events.
+
     **Example** ``detail``
 
     .. code-block:: ts
