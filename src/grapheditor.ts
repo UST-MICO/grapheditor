@@ -32,6 +32,7 @@ import { DynamicNodeTemplate, DynamicMarkerTemplate, DynamicTextComponentTemplat
 import { getNodeLinkHandles, applyUserLinkHandleCalculationCallback, calculateNearestHandles } from './link-handle-helper';
 import { SmoothedEdgePathGenerator, EdgePathGenerator } from './dynamic-templates/edge-path-generators';
 import { GroupingManager } from './grouping';
+import { NodeDropZone } from './drop-zone';
 
 const SHADOW_DOM_TEMPLATE = `
 <slot name="style"></slot>
@@ -1295,9 +1296,29 @@ export default class GraphEditor extends HTMLElement {
             .call(this.updateNodeHighligts.bind(this))
             .call(this.updateNodeText.bind(this))
             .call(this.updateDynamicProperties.bind(this))
+            .call(this.updateNodeDropAreas.bind(this))
             .each(function(d) {
                 self.objectCache.setNodeBBox(d.id, this.getBBox());
             });
+    }
+
+    private updateNodeDropAreas(nodeSelection: Selection<SVGGElement, Node, any, unknown>) {
+        const self = this;
+        nodeSelection.each(function(node) {
+            const dropZones = new Map<string, NodeDropZone>();
+            select(this)
+                .selectAll<SVGGraphicsElement, NodeDropZone>('[data-node-drop-zone]')
+                .datum(function() {
+                    const id = select(this).attr('data-node-drop-zone');
+                    const bbox = this.getBBox();
+                    return {id: id, bbox: bbox};
+                }).call(dropZoneSelection => {
+                    if (dropZoneSelection != null && ! dropZoneSelection.empty()) {
+                        dropZones.set(dropZoneSelection.datum().id, dropZoneSelection.datum());
+                    }
+                });
+            self.objectCache.setNodeDropZones(node.id, dropZones);
+        });
     }
 
     /**

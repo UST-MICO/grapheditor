@@ -18,6 +18,12 @@ module.exports = merge(common, {
             hash: true,
             inject: 'head',
         }),
+        new HtmlWebpackPlugin({
+            filename: 'groups-drag-and-drop.html',
+            template: 'example/test-groups-drag-and-drop.html',
+            hash: true,
+            inject: 'head',
+        }),
     ],
     devServer: {
         contentBase: path.resolve(__dirname, '_bundles'),
