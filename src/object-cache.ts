@@ -17,6 +17,7 @@
 
 import { Node } from './node';
 import { Edge, edgeId } from './edge';
+import { NodeDropZone } from './drop-zone';
 
 /**
  * A cache for fast access of graph objects.
@@ -25,6 +26,7 @@ export class GraphObjectCache {
 
     private nodes: Map<string, Node>;
     private nodeBBoxes: Map<string, DOMRect>;
+    private nodeDropZones: Map<string, Map<string, NodeDropZone>>;
     private edges: Map<string, Edge>;
     private edgesBySource: Map<string, Set<Edge>>;
     private edgesByTarget: Map<string, Set<Edge>>;
@@ -32,6 +34,7 @@ export class GraphObjectCache {
     constructor() {
         this.nodes = new Map<string, Node>();
         this.nodeBBoxes = new Map<string, DOMRect>();
+        this.nodeDropZones = new Map<string, Map<string, NodeDropZone>>();
         this.edges = new Map<string, Edge>();
         this.edgesBySource = new Map<string, Set<Edge>>();
         this.edgesByTarget = new Map<string, Set<Edge>>();
@@ -47,6 +50,7 @@ export class GraphObjectCache {
         nodes.forEach((node) => nodeMap.set(node.id.toString(), node));
         this.nodes = nodeMap;
         this.nodeBBoxes = new Map<string, DOMRect>();
+        this.nodeDropZones = new Map<string, Map<string, NodeDropZone>>();
     }
 
     /**
@@ -104,6 +108,18 @@ export class GraphObjectCache {
      */
     getNodeBBox(id: number|string) {
         return this.nodeBBoxes.get(id.toString());
+    }
+
+    setNodeDropZones(id: number|string, dropZones: Map<string, NodeDropZone>) {
+        this.nodeDropZones.set(id.toString(), dropZones);
+    }
+
+    getAllDropZones(id: number|string) {
+        return this.nodeDropZones.get(id.toString());
+    }
+
+    getDropZone(id: number|string, dropZoneId: string) {
+        return this.nodeDropZones.get(id.toString())?.get(dropZoneId);
     }
 
     /**
