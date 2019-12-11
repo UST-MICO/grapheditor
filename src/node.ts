@@ -1,3 +1,5 @@
+import { RotationVector } from "./rotation-vector";
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -30,4 +32,10 @@ export interface Node {
     /** The id of the dynamic node template to use for this node. */
     dynamicTemplate?: string;
     [prop: string]: any;
+}
+
+export interface NodeMovementInformation {
+    node: Node;
+    children?: Set<string>;
+    offset?: RotationVector;
 }
