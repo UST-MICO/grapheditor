@@ -117,45 +117,31 @@
 
                 var gm = graph.groupingManager;
                 gm.markAsTreeRoot(1);
-                //gm.addNodeToGroup(1, 4);
-                //gm.addNodeToGroup(1, 5);
 
-                //gm.markAsTreeRoot(2);
-                //gm.addNodeToGroup(2, 6);
+                gm.markAsTreeRoot(2);
 
-                //gm.markAsTreeRoot(3);
-                //gm.addNodeToGroup(3, 7);
+                gm.markAsTreeRoot(3);
 
-                //gm.setGroupBehaviourOf(1, {
-                //    moveChildrenAlongGoup: true,
-                //    captureChildMovement: false,
-                //});
+                gm.setGroupBehaviourOf(1, {
+                    moveChildrenAlongGoup: true,
+                    captureChildMovement: false,
+                    captureDraggedNodes: true,
+                    allowDraggedNodesLeavingGroup: true,
+                });
 
-                //gm.setGroupBehaviourOf(2, {
-                //    moveChildrenAlongGoup: true,
-                //    captureChildMovement: true,
-                //    captureOutgoingEdges: true,
-                //    delegateOutgoingEdgeSourceToNode: (groupNode, edge, graph) => {
-                //        if (edge.target != null) {
-                //            if (!gm.getChildrenOf(groupNode.id).has(edge.target)) { // target is not path of this group
-                //                if (gm.getParentsOf(edge.target).size > 0) { // target is a child node (has a parent)
-                //                    return gm.getChildrenOf(groupNode.id.toString()).values().next().value;
-                //                }
-                //            }
-                //        }
-                //        return groupNode.id.toString();
-                //    }
-                //});
+                gm.setGroupBehaviourOf(2, {
+                    moveChildrenAlongGoup: true,
+                    captureChildMovement: false,
+                    captureDraggedNodes: true,
+                    allowDraggedNodesLeavingGroup: true,
+                });
 
-                //gm.setGroupBehaviourOf(3, {
-                //    moveChildrenAlongGoup: false,
-                //    captureChildMovement: false,
-                //    captureIncomingEdges: true,
-                //    delegateIncomingEdgeTargetToNode: (groupNode, edge, graph) => {
-                //        // always delegate to child
-                //        return gm.getChildrenOf(groupNode.id.toString()).values().next().value;
-                //    }
-                //});
+                gm.setGroupBehaviourOf(3, {
+                    moveChildrenAlongGoup: true,
+                    captureChildMovement: false,
+                    captureDraggedNodes: true,
+                    allowDraggedNodesLeavingGroup: true,
+                });
 
                 graph.completeRender();
                 graph.zoomToBoundingBox();

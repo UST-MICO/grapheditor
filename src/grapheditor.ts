@@ -20,7 +20,7 @@ import { zoom, zoomIdentity, zoomTransform, ZoomBehavior } from 'd3-zoom';
 import { drag } from 'd3-drag';
 import { curveBasis } from 'd3-shape';
 
-import { Node } from './node';
+import { Node, NodeMovementInformation } from './node';
 import { Edge, DraggedEdge, edgeId, Point, TextComponent, PathPositionRotationAndScale, normalizePositionOnLine } from './edge';
 import { LinkHandle } from './link-handle';
 import { GraphObjectCache } from './object-cache';
@@ -293,7 +293,7 @@ export default class GraphEditor extends HTMLElement {
         this.defaultEdgePathGenerator = new SmoothedEdgePathGenerator(curveBasis, true, 10);
         this.edgePathGeneratorRegistry.addEdgePathGenerator('default', this.defaultEdgePathGenerator);
 
-        this.groupingManager = new GroupingManager();
+        this.groupingManager = new GroupingManager(this);
 
         this.root = this.attachShadow({ mode: 'open' });
 
@@ -446,6 +446,11 @@ export default class GraphEditor extends HTMLElement {
                 this.zoomToBoundingBox(false);
             }
         }
+    }
+
+    public getNodeDropZonesForNode(node: Node | number | string) {
+        const id: string | number = (node as Node).id != null ? (node as Node).id : (node as number | string);
+        return this.objectCache.getAllDropZones(id);
     }
 
     /**
@@ -960,50 +965,27 @@ export default class GraphEditor extends HTMLElement {
 
         if (this.isInteractive) {
             nodeSelection.call(
-                drag<SVGGElement, Node, {node: Node, children?: Set<string>, offset?: RotationVector}>()
+                drag<SVGGElement, Node, NodeMovementInformation>()
                     .subject((node) => {
-                        const groupId = this.groupingManager.getGroupCapturingMovementOfChild(node, this);
-                        if (groupId != null && groupId !== node.id.toString()) {
-                            const groupNode = this.objectCache.getNode(groupId) ?? node;
-                            let children: Set<string>;
-                            if (this.groupingManager.getGroupBehaviourOf(groupId)?.moveChildrenAlongGoup ?? false) {
-                                children = this.groupingManager.getAllChildrenOf(groupId);
-                            }
-                            // tslint:disable-next-line:no-shadowed-variable
-                            const offset = {
-                                dx: event.x - groupNode.x,
-                                dy: event.y - groupNode.y,
-                            };
-                            return {node: groupNode, children: children, offset: offset};
-                        }
-                        const offset = {
-                            dx: event.x - node.x,
-                            dy: event.y - node.y,
-                        };
-                        if (this.groupingManager.getGroupBehaviourOf(node.id)?.moveChildrenAlongGoup ?? false) {
-                            return {node: node, children: this.groupingManager.getAllChildrenOf(node.id), offset: offset};
-                        }
-                        return {node: node, offset: offset};
+                        return this.getNodeMovementInformation(node, event.x, event.y);
                     })
                     .on('drag', () => {
-                        const node: Node = event.subject.node;
-                        const x = event.x - (event.subject.offset?.dx ?? 0);
-                        const y = event.y - (event.subject.offset?.dy ?? 0);
-                        const dx = x - node.x;
-                        const dy = y - node.y;
-                        node.x = x;
-                        node.y = y;
-                        if (event.subject.children != null) {
-                            event.subject.children.forEach(childId => {
-                                const child = this.objectCache.getNode(childId);
-                                child.x += dx;
-                                child.y += dy;
-                                this.onNodePositionChange.bind(this)(child);
-                            });
+                        let x = event.x;
+                        let y = event.y;
+                        if (event.subject != null) {
+                            const info: NodeMovementInformation = event.subject;
+                            if (info.offset?.dx !== null) {
+                                x += info.offset.dx;
+                            }
+                            if (info.offset?.dy !== null) {
+                                x += info.offset.dy;
+                            }
                         }
-                        this.onNodePositionChange.bind(this)(node);
-
-                        this.updateGraphPositions.bind(this)();
+                        this.tryToLeaveCurrentGroup(event.subject, x, y);
+                        this.tryJoinNodeIntoGroup(event.subject, x, y);
+                        this._moveNode(event.subject, event.x, event.y, EventSource.USER_INTERACTION);
+                        this.updateGraphPositions();
+                        this.getNodesFromPoint(event.sourceEvent.clientX, event.sourceEvent.clientY);
                     })
             );
         } else {
@@ -1045,6 +1027,228 @@ export default class GraphEditor extends HTMLElement {
             .on('click', (d) => { this.onEdgeClick.bind(this)(d); });
 
         this.classesToRemove.clear();
+    }
+
+    public getNodesFromPoint(clientX: number, clientY: number) {
+        const possibleTargets = document.elementsFromPoint(clientX, clientY);
+        if (possibleTargets.length == 0) {
+            return [];
+        }
+        const foundNodes = new Set<string>();
+        const nodes: Node[] = [];
+        for (let currentIndex = 0; currentIndex < possibleTargets.length; currentIndex++) {
+            const element = possibleTargets[currentIndex];
+            if (element == this.svg.node()) {
+                break;
+            }
+            let target = select(element);
+
+            while (!target.empty()) {
+                if (target.classed('node')) {
+                    const id = target.attr('id').replace(/^node-/, '');
+                    const node = this.objectCache.getNode(id);
+                    if (node != null && !foundNodes.has(id)) {
+                        foundNodes.add(id);
+                        nodes.push(node);
+                    }
+                    break;
+                }
+                const parent = target.node().parentElement;
+                if ((parent as unknown) == this.svg.node()) {
+                    break;
+                }
+                target = select(parent);
+            }
+        }
+        return nodes;
+    }
+
+    private getNodeMovementInformation(node: Node, x: number, y: number): NodeMovementInformation {
+        const movementInfo: NodeMovementInformation = {node: node};
+        const groupId = this.groupingManager.getGroupCapturingMovementOfChild(node);
+        if (groupId != null && groupId !== node.id.toString()) {
+            const groupNode = this.objectCache.getNode(groupId);
+            if (groupNode == null) {
+                movementInfo.node = {
+                    id: groupId,
+                    x: x,
+                    y: y,
+                    type: 'dummy',
+                };
+            } else {
+                movementInfo.node = groupNode;
+            }
+        }
+        if (this.groupingManager.getGroupBehaviourOf(movementInfo.node.id)?.moveChildrenAlongGoup ?? false) {
+            movementInfo.children = this.groupingManager.getAllChildrenOf(movementInfo.node.id);
+        }
+        movementInfo.offset = {
+            dx: x - movementInfo.node.x,
+            dy: y - movementInfo.node.y,
+        };
+        return movementInfo;
+    }
+
+    public moveNode(nodeId: string | number, x: number, y: number, updatePositions: boolean=false) {
+        const node = this.objectCache.getNode(nodeId);
+        const nodeMovementInfo = this.getNodeMovementInformation(node, node.x, node.y);
+        this._moveNode(nodeMovementInfo, x, y, EventSource.API);
+        if (updatePositions) {
+            this.updateGraphPositions();
+        }
+    }
+
+    private getGroupDictatedPositionOfNode(node: Node): Point {
+        let groupRelativePosition: string|Point;
+        let relativeToGroup: string;
+        const treeParent = this.groupingManager.getTreeParentOf(node.id);
+        if (treeParent != null) {
+            relativeToGroup = treeParent;
+            groupRelativePosition = this.groupingManager.getGroupBehaviourOf(relativeToGroup)?.childNodePositions?.get(node.id.toString());
+        } else {
+            this.groupingManager.getParentsOf(node.id)?.forEach(parentId => {
+                if (relativeToGroup == null) {
+                    return;
+                }
+                const parentBehaviour = this.groupingManager.getGroupBehaviourOf(parentId);
+                const relPos = parentBehaviour?.childNodePositions?.get(node.id.toString());
+                if (relPos != null) {
+                    relativeToGroup = parentId;
+                    groupRelativePosition = relPos;
+                }
+            });
+        }
+        if (typeof(groupRelativePosition) === 'string') {
+            const dropZone = this.objectCache.getDropZone(relativeToGroup, groupRelativePosition);
+            if (dropZone == null) {
+                return null;
+            }
+            groupRelativePosition = {
+                x: dropZone.bbox.x + (dropZone.bbox.width/2),
+                y: dropZone.bbox.y + (dropZone.bbox.height/2),
+            }
+        }
+        if (relativeToGroup != null) {
+            const parentNode = this.objectCache.getNode(relativeToGroup);
+            if (parentNode != null) {
+                return {
+                    x: parentNode.x + groupRelativePosition.x,
+                    y: parentNode.y + groupRelativePosition.y,
+                }
+            }
+        }
+        return null;
+    }
+
+    private _moveNode(nodeMovementInfo: NodeMovementInformation, x: number, y: number, eventSource: EventSource) {
+        if (nodeMovementInfo.offset != null) {
+            x -= nodeMovementInfo.offset?.dx ?? 0;
+            y -= nodeMovementInfo.offset?.dy ?? 0;
+        }
+        const node = nodeMovementInfo.node;
+        // call parent groups beforeNodeMove
+        const currentTreeParent = this.groupingManager.getTreeParentOf(node.id);
+        if (currentTreeParent != null) {
+            const groupBehaviour = this.groupingManager.getGroupBehaviourOf(currentTreeParent);
+            if (groupBehaviour.beforeNodeMove != null) {
+                const groupNode = this.objectCache.getNode(currentTreeParent);
+                groupBehaviour.beforeNodeMove(groupNode, node, {x: x, y: y}, this);
+            }
+        }
+        // check for fixed group positions
+        const groupDictatedPosition = this.getGroupDictatedPositionOfNode(node);
+        if (groupDictatedPosition != null) {
+            x = groupDictatedPosition.x;
+            y = groupDictatedPosition.y;
+        }
+        const dx = x - node.x;
+        const dy = y - node.y;
+        if (dx == 0 && dy == 0) {
+            return; // nothing has moved
+        }
+        node.x = x;
+        node.y = y;
+        if (nodeMovementInfo.children != null) {
+            nodeMovementInfo.children.forEach(childId => {
+                const child = this.objectCache.getNode(childId);
+                if (child != null) {
+                    child.x += dx;
+                    child.y += dy;
+                    this.onNodePositionChange(child, eventSource);
+                }
+            });
+        }
+        this.onNodePositionChange(node, eventSource);
+    }
+
+    public getClientPointFromGraphCoordinates(graphPoint: Point): Point {
+        const ng = this.svg.select<SVGGElement>('g.nodes');
+        const p = this.svg.node().createSVGPoint();
+        p.x = graphPoint.x;
+        p.y = graphPoint.y;
+        return p.matrixTransform(ng.node().getScreenCTM());
+    }
+
+    private tryToLeaveCurrentGroup(nodeMovementInformation: NodeMovementInformation, x: number, y: number) {
+        const node = nodeMovementInformation.node;
+
+        const currentGroup = this.groupingManager.getTreeParentOf(node.id);
+        if (currentGroup == null) {
+            return; // is not part of a group
+        }
+        if (!(this.groupingManager.getGroupBehaviourOf(currentGroup)?.allowDraggedNodesLeavingGroup ?? false)) {
+            return; // group does not allow dragged nodes to leave
+        }
+
+        const clientPoint = this.getClientPointFromGraphCoordinates({x: x, y: y});
+
+        const possibleTargetNodes = this.getNodesFromPoint(clientPoint.x, clientPoint.y);
+        const allChildren = this.groupingManager.getAllChildrenOf(currentGroup);
+
+        const isOutsideGroup = !possibleTargetNodes.some(targetNode => {
+            if (targetNode.id === node.id) {
+                return false; // ignore dragged node
+            }
+            if (targetNode.id.toString() === currentGroup) {
+                return true; // is over the group node
+            }
+            return allChildren.has(targetNode.id.toString()); // is over a child node of the group
+        });
+
+        if (isOutsideGroup) {
+            if (this.groupingManager.getCanDraggedNodeLeaveGroup(currentGroup, node)) {
+                console.log('try leave group')
+                this.groupingManager.removeNodeFromGroup(currentGroup, node.id);
+            }
+        }
+    }
+
+    private tryJoinNodeIntoGroup(nodeMovementInformation: NodeMovementInformation, x: number, y: number) {
+        const node = nodeMovementInformation.node;
+
+        if (this.groupingManager.getTreeParentOf(node.id) != null) {
+            return;
+        }
+
+        const clientPoint = this.getClientPointFromGraphCoordinates({x: x, y: y});
+
+        const possibleTargetNodes = this.getNodesFromPoint(clientPoint.x, clientPoint.y);
+        const targetNode = possibleTargetNodes.find(targetNode => targetNode.id !== node.id);
+        if (targetNode != null) {
+            const canJoinGroup = this.groupingManager.getGroupCapturingDraggedNode(targetNode, node);
+            if (canJoinGroup != null) {
+                console.log(node.id, 'joined group', canJoinGroup)
+                if (this.groupingManager.getTreeRootOf(canJoinGroup) == null) {
+                    // canJoinGroup is not part of a tree => mark it as a tree root
+                    this.groupingManager.markAsTreeRoot(canJoinGroup);
+                }
+                this.groupingManager.addNodeToGroup(canJoinGroup, node.id, {x: x, y: y});
+                if (this.groupingManager.getTreeDepthOf(node.id) === 0) {
+                    console.log('Join tree as subtree')
+                    this.groupingManager.joinTreeOfParent(node.id, canJoinGroup);
+                }
+            }
+        }
     }
 
     /**
@@ -1268,7 +1472,7 @@ export default class GraphEditor extends HTMLElement {
                 handleSelection.call(
                     drag<SVGGElement, LinkHandle, {edge: DraggedEdge, capturingGroup?: string}>()
                         .subject((handle) => {
-                            const groupCapturingEdge = self.groupingManager.getGroupCapturingOutgoingEdge(node, self);
+                            const groupCapturingEdge = self.groupingManager.getGroupCapturingOutgoingEdge(node);
                             if (groupCapturingEdge != null && groupCapturingEdge !== node.id.toString()) {
                                 const groupNode = self.getNode(groupCapturingEdge);
                                 if (groupNode != null) {
@@ -1312,10 +1516,8 @@ export default class GraphEditor extends HTMLElement {
                     const id = select(this).attr('data-node-drop-zone');
                     const bbox = this.getBBox();
                     return {id: id, bbox: bbox};
-                }).call(dropZoneSelection => {
-                    if (dropZoneSelection != null && ! dropZoneSelection.empty()) {
-                        dropZones.set(dropZoneSelection.datum().id, dropZoneSelection.datum());
-                    }
+                }).each(function (dropZone) {
+                    dropZones.set(dropZone.id, dropZone);
                 });
             self.objectCache.setNodeDropZones(node.id, dropZones);
         });
@@ -1589,7 +1791,7 @@ export default class GraphEditor extends HTMLElement {
                 .call(drag<SVGGElement, Edge, {edge: DraggedEdge, capturingGroup?: string}>()
                     .subject((edge) => {
                         const sourceNode = this.getNode(edge.source);
-                        const groupCapturingEdge = this.groupingManager.getGroupCapturingOutgoingEdge(sourceNode, this);
+                        const groupCapturingEdge = this.groupingManager.getGroupCapturingOutgoingEdge(sourceNode);
                         if (groupCapturingEdge != null && groupCapturingEdge !== sourceNode.id.toString()) {
                             const groupNode = this.getNode(groupCapturingEdge);
                             if (groupNode != null) {
@@ -2473,7 +2675,7 @@ export default class GraphEditor extends HTMLElement {
                         // check target group behaviour
                         const targetNode = this.getNode(id);
                         if (targetNode != null) {
-                            const targetGroupCapturingEdge = this.groupingManager.getGroupCapturingIncomingEdge(targetNode, this);
+                            const targetGroupCapturingEdge = this.groupingManager.getGroupCapturingIncomingEdge(targetNode);
                             if (targetGroupCapturingEdge != null) {
                                 const targetGroupBehaviour = this.groupingManager.getGroupBehaviourOf(targetGroupCapturingEdge);
                                 const targetGroupNode = this.getNode(targetGroupCapturingEdge);
@@ -2500,7 +2702,7 @@ export default class GraphEditor extends HTMLElement {
             if (capturingGroup != null) {
                 const groupBehaviour = this.groupingManager.getGroupBehaviourOf(capturingGroup);
                 const groupNode = this.getNode(capturingGroup);
-                if (groupBehaviour != null && groupNode != null) {
+                if (groupBehaviour != null && groupNode != null && groupBehaviour.delegateOutgoingEdgeSourceToNode != null) {
                     const newSource = groupBehaviour.delegateOutgoingEdgeSourceToNode(groupNode, edge, this);
                     if (newSource != null && newSource !== '' && this.getNode(newSource) !== null) {
                         edge.source = newSource;
@@ -2724,15 +2926,16 @@ export default class GraphEditor extends HTMLElement {
     /**
      * Callback for creating nodepositionchange events.
      *
-     * @param nodes nodes thatchanged
+     * @param nodes nodes that changed
+     * @param eventSource the source of the selection event (default: EventSource.USER_INTERACTION)
      */
-    private onNodePositionChange(node: Node) {
+    private onNodePositionChange(node: Node, eventSource: EventSource=EventSource.USER_INTERACTION) {
         const ev = new CustomEvent('nodepositionchange', {
             bubbles: true,
             composed: true,
             cancelable: false,
             detail: {
-                eventSource: EventSource.USER_INTERACTION,
+                eventSource: eventSource,
                 node: node
             }
         });

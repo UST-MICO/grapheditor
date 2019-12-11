@@ -1,12 +1,14 @@
 import { Node } from "./node";
 import GraphEditor from "./grapheditor";
-import { Edge } from "./edge";
+import { Edge, Point } from "./edge";
+
 
 class NodeGroup {
-    readonly nodeId: string;
+    readonly groupId: string;
 
     readonly parents: Set<string>;
     readonly children: Set<string>;
+    public groupDepth: number;
 
     public treeRoot: string;
     public treeParent: string;
@@ -15,11 +17,13 @@ class NodeGroup {
     public groupBehaviour: GroupBehaviour;
 
     constructor(nodeId: string) {
-        this.nodeId = nodeId;
+        this.groupId = nodeId;
         this.parents = new Set<string>();
         this.children = new Set<string>();
+        this.groupDepth = 0;
     }
 }
+
 
 type GroupBehaviourDecisionCallback = (groupNode: Node, childNode: Node, graphEditor: GraphEditor) => boolean;
 type GroupBehaviourEdgeDelegationCallback = (groupNode: Node, edge: Edge, graphEditor: GraphEditor) => string;
@@ -38,13 +42,92 @@ export interface GroupBehaviour {
     captureIncomingEdges?: boolean;
     captureIncomingEdgesForNode?: GroupBehaviourDecisionCallback;
     delegateIncomingEdgeTargetToNode?: GroupBehaviourEdgeDelegationCallback;
+
+    captureDraggedNodes?: boolean;
+    allowFreePositioning?: boolean;
+    captureThisDraggedNode?: GroupBehaviourDecisionCallback;
+
+    allowDraggedNodesLeavingGroup?: boolean;
+    allowThisDraggedNodeLeavingGroup?: GroupBehaviourDecisionCallback;
+
+    afterNodeJoinedGroup?: (groupNode: Node, childNode: Node, graphEditor: GraphEditor, atPosition?: Point) => void;
+    afterNodeLeftGroup?: (groupNode: Node, childNode: Node, graphEditor: GraphEditor) => void;
+    beforeNodeMove?: (groupNode: Node, childNode: Node, newPosition: Point, graphEditor: GraphEditor) => void;
+
+    occupiedDropZones?: Map<string, string>;
+    childNodePositions?: Map<string, string|Point>;
 }
+
+export function defaultBeforeNodeMove(this: GroupBehaviour, groupNode: Node, childNode: Node, newPosition: Point, graphEditor: GraphEditor) {
+    const dropZones = graphEditor.getNodeDropZonesForNode(groupNode);
+    if (dropZones != null) {
+        if (this.occupiedDropZones == null) {
+            this.occupiedDropZones = new Map();
+        }
+        if (this.childNodePositions == null) {
+            this.childNodePositions= new Map();
+        }
+        let bestDropZone: string;
+        let bestDistance: number;
+        let lastDropZone: string;
+        for (const [key, dropZone] of dropZones) {
+            if (this.occupiedDropZones.has(key)) {
+                if (this.occupiedDropZones.get(key) === childNode.id.toString()) {
+                    lastDropZone = key;
+                } else {
+                    continue;
+                }
+            }
+            // TODO filter for dropzone type(s)
+            const dropZonePos = {
+                x: groupNode.x + dropZone.bbox.x + dropZone.bbox.width/2,
+                y: groupNode.y + dropZone.bbox.y + dropZone.bbox.height/2,
+            };
+            const distance = ((newPosition.x - dropZonePos.x) ** 2) + ((newPosition.y - dropZonePos.y) ** 2);
+            if (bestDistance == null || bestDistance > distance) {
+                bestDistance = distance;
+                bestDropZone = key;
+            }
+        }
+        if (lastDropZone != null && lastDropZone !== bestDropZone) {
+            this.occupiedDropZones.delete(lastDropZone);
+        }
+        if (bestDropZone != null) {
+            this.occupiedDropZones.set(bestDropZone, childNode.id.toString());
+            this.childNodePositions.set(childNode.id.toString(), bestDropZone);
+        } else {
+            this.childNodePositions.delete(childNode.id.toString());
+        }
+    }
+}
+
+
+export function defaultAfterNodeJoinedGroup(this: GroupBehaviour, groupNode: Node, childNode: Node, graphEditor: GraphEditor, atPosition?: Point) {
+    if (this.beforeNodeMove != null) {
+        this.beforeNodeMove(groupNode, childNode, atPosition ?? childNode, graphEditor);
+    }
+}
+
+
+export function defaultAfterNodeLeftGroup(this: GroupBehaviour, groupNode: Node, childNode: Node, graphEditor: GraphEditor) {
+    if (this.childNodePositions != null) {
+        const position = this.childNodePositions.get(childNode.id.toString());
+        if (typeof(position) === 'string') {
+            this.occupiedDropZones?.delete(position);
+        }
+        this.childNodePositions.delete(childNode.id.toString());
+    }
+}
+
 
 export class GroupingManager {
     private groupsById: Map<string, NodeGroup>;
 
-    constructor() {
+    private graphEditor: GraphEditor;
+
+    constructor(graphEditor: GraphEditor) {
         this.groupsById = new Map<string, NodeGroup>();
+        this.graphEditor = graphEditor;
     }
 
     private getGroupForNode(nodeId: string|number) {
@@ -53,22 +136,36 @@ export class GroupingManager {
             return this.groupsById.get(groupId);
         }
         const newGroup = new NodeGroup(groupId);
+        newGroup.groupBehaviour = {
+            afterNodeJoinedGroup: defaultAfterNodeJoinedGroup,
+            afterNodeLeftGroup: defaultAfterNodeLeftGroup,
+            beforeNodeMove: defaultBeforeNodeMove,
+        }
         this.groupsById.set(groupId, newGroup);
         return newGroup;
     }
 
-    addNodeToGroup(groupId: string|number, nodeId: string|number) {
+    addNodeToGroup(groupId: string|number, nodeId: string|number, atPosition?: Point) {
         const group = this.getGroupForNode(groupId);
+        if (group.children.has(nodeId.toString())) {
+            return;
+        }
         const children = this.getAllChildrenOf(nodeId);
-        if (children.has(group.nodeId)) {
+        if (children.has(group.groupId)) {
             console.error(`Adding node ${nodeId} to group ${groupId} would create a cycle!`);
             return;
         }
         const childGroup = this.getGroupForNode(nodeId);
-        group.children.add(childGroup.nodeId);
-        childGroup.parents.add(group.nodeId);
+        group.children.add(childGroup.groupId);
+        childGroup.parents.add(group.groupId);
         if (group.treeRoot != null) {
             this.propagateTreeRoot(group, childGroup);
+        }
+        this.updateGroupDepth(childGroup);
+        if (group.groupBehaviour?.afterNodeJoinedGroup != null) {
+            const groupNode = this.graphEditor.getNode(groupId);
+            const childNode = this.graphEditor.getNode(nodeId);
+            group.groupBehaviour.afterNodeJoinedGroup(groupNode, childNode, this.graphEditor, atPosition);
         }
     }
 
@@ -80,12 +177,20 @@ export class GroupingManager {
         return this.groupsById.get(groupId.toString())?.parents ?? new Set<string>();
     }
 
+    getGroupDepthOf(groupId: string|number) {
+        return this.groupsById.get(groupId.toString())?.groupDepth;
+    }
+
     getTreeParentOf(groupId: string|number) {
         return this.groupsById.get(groupId.toString())?.treeParent;
     }
 
     getTreeRootOf(groupId: string|number) {
         return this.groupsById.get(groupId.toString())?.treeRoot;
+    }
+
+    getTreeDepthOf(groupId: string|number) {
+        return this.groupsById.get(groupId.toString())?.treeDepth;
     }
 
     getAllChildrenOf(groupId: string|number) {
@@ -118,18 +223,42 @@ export class GroupingManager {
             return;
         }
         child.treeRoot = parent.treeRoot;
-        child.treeParent = parent.nodeId;
+        child.treeParent = parent.groupId;
         child.treeDepth = parent.treeDepth + 1;
         child.children.forEach(cId => this.propagateTreeRoot(child, this.getGroupForNode(cId)));
     }
 
+    private updateGroupDepth(group: NodeGroup) {
+        let newDepth = 0;
+        if (group.parents.size > 0) {
+            group.parents.forEach(parentId => {
+                const parentDepth = this.getGroupForNode(parentId).groupDepth;
+                newDepth = Math.max(newDepth, parentDepth + 1);
+            });
+        }
+        const depthChanged = group.groupDepth !== newDepth;
+        group.groupDepth = newDepth;
+        if (depthChanged) {
+            group.children.forEach(childId => this.updateGroupDepth(this.getGroupForNode(childId)));
+        }
+    }
+
     removeNodeFromGroup(groupId: string|number, nodeId: string|number) {
         const group = this.getGroupForNode(groupId);
+        if (!group.children.has(nodeId.toString())) {
+            return;
+        }
         const childGroup = this.getGroupForNode(nodeId);
-        group.children.delete(childGroup.nodeId);
-        childGroup.parents.delete(group.nodeId);
+        group.children.delete(childGroup.groupId);
+        childGroup.parents.delete(group.groupId);
         if (childGroup.treeRoot != null) {
             this._leaveTree(childGroup, childGroup.treeRoot, true);
+        }
+        this.updateGroupDepth(childGroup);
+        if (group.groupBehaviour?.afterNodeLeftGroup != null) {
+            const groupNode = this.graphEditor.getNode(groupId);
+            const childNode = this.graphEditor.getNode(nodeId);
+            group.groupBehaviour.afterNodeLeftGroup(groupNode, childNode, this.graphEditor);
         }
     }
 
@@ -168,11 +297,11 @@ export class GroupingManager {
     joinTreeOfParent(groupId: string|number, treeParentId: string|number) {
         const group = this.getGroupForNode(groupId);
         const parentGroup = this.getGroupForNode(treeParentId);
-        if (!group.parents.has(parentGroup.nodeId)) {
+        if (!group.parents.has(parentGroup.groupId)) {
             console.error(`Node ${groupId} cannot join the tree of ${treeParentId} because the Node is not a child of ${treeParentId}!`);
             return;
         }
-        if (group.treeRoot === parentGroup.treeRoot && group.treeParent === parentGroup.nodeId) {
+        if (group.treeRoot === parentGroup.treeRoot && group.treeParent === parentGroup.groupId) {
             return; // already in the right tree
         }
         if (group.treeRoot != null) {
@@ -184,39 +313,62 @@ export class GroupingManager {
 
     markAsTreeRoot(groupId: string|number) {
         const group = this.getGroupForNode(groupId);
-        if (group.treeRoot != null && group.treeRoot !== group.nodeId) {
+        if (group.treeRoot != null && group.treeRoot !== group.groupId) {
             console.error(`Node ${groupId} is already part of tree ${group.treeRoot} and cannot become a treeRoot itself!`);
             return;
         }
-        group.treeRoot = group.nodeId;
+        group.treeRoot = group.groupId;
         group.treeParent = null;
         group.treeDepth = 0;
         group.children.forEach(cId => this.propagateTreeRoot(group, this.getGroupForNode(cId)));
     }
 
     setGroupBehaviourOf(groupId: string|number, groupBehaviour: GroupBehaviour) {
+        if (groupBehaviour.afterNodeJoinedGroup == null) {
+            groupBehaviour.afterNodeJoinedGroup = defaultAfterNodeJoinedGroup;
+        }
+        if (groupBehaviour.afterNodeLeftGroup == null) {
+            groupBehaviour.afterNodeLeftGroup = defaultAfterNodeLeftGroup;
+        }
+        if (groupBehaviour.beforeNodeMove == null) {
+            groupBehaviour.beforeNodeMove = defaultBeforeNodeMove;
+        }
         this.getGroupForNode(groupId).groupBehaviour = groupBehaviour;
     }
 
     getGroupBehaviourOf(groupId: string|number): GroupBehaviour {
-        return this.groupsById.get(groupId.toString())?.groupBehaviour;
+        const group = this.groupsById.get(groupId.toString());
+        if (group == null) {
+            return null;
+        }
+        const groupBehaviour = group.groupBehaviour ?? {};
+        if (groupBehaviour.afterNodeJoinedGroup == null) {
+            groupBehaviour.afterNodeJoinedGroup = defaultAfterNodeJoinedGroup;
+        }
+        if (groupBehaviour.afterNodeLeftGroup == null) {
+            groupBehaviour.afterNodeLeftGroup = defaultAfterNodeLeftGroup;
+        }
+        if (groupBehaviour.beforeNodeMove == null) {
+            groupBehaviour.beforeNodeMove = defaultBeforeNodeMove;
+        }
+        return group.groupBehaviour;
     }
 
-    protected getGroupWithProperty(childNode: Node, groupProperty: string, groupDecisionCallback: string, strategy: 'closest-parent'|'largest-group', graphEditor: GraphEditor): string {
+    protected getGroupWithProperty(childNode: Node, groupProperty: string, groupDecisionCallback: string, strategy: 'closest-parent' | 'largest-group'): string {
         const childId = childNode.id.toString();
         let currentGroup: NodeGroup = this.groupsById.get(childId); // the child group is never checked
         let validGroup: string;
-        while (currentGroup?.treeParent != null && currentGroup.nodeId !== currentGroup.treeRoot) {
+        while (currentGroup?.treeParent != null && currentGroup.groupId !== currentGroup.treeRoot) {
             const parentGroup = this.getGroupForNode(currentGroup.treeParent);
             if (parentGroup.groupBehaviour[groupProperty]) {
                 const groupDecision: GroupBehaviourDecisionCallback = parentGroup.groupBehaviour[groupDecisionCallback];
-                if (groupDecision == null || groupDecision(graphEditor.getNode(parentGroup.nodeId), childNode, graphEditor)) {
+                if (groupDecision == null || groupDecision(this.graphEditor.getNode(parentGroup.groupId), childNode, this.graphEditor)) {
                     // groupBehaviour satisfies conditions
                     if (strategy === 'closest-parent') {
-                        return parentGroup.nodeId;
+                        return parentGroup.groupId;
                     }
                     if (strategy === 'largest-group') {
-                        validGroup = parentGroup.nodeId;
+                        validGroup = parentGroup.groupId;
                     }
                 }
             }
@@ -225,15 +377,87 @@ export class GroupingManager {
         return validGroup ?? childId;
     }
 
-    getGroupCapturingMovementOfChild(child: Node, graphEditor: GraphEditor) {
-        return this.getGroupWithProperty(child, 'captureChildMovement', 'captureChildMovementForNode', 'largest-group', graphEditor);
+    getGroupCapturingMovementOfChild(child: Node) {
+        return this.getGroupWithProperty(child, 'captureChildMovement', 'captureChildMovementForNode', 'largest-group');
     }
 
-    getGroupCapturingOutgoingEdge(child: Node, graphEditor: GraphEditor) {
-        return this.getGroupWithProperty(child, 'captureOutgoingEdges', 'captureOutgoingEdgesForNode', 'closest-parent', graphEditor);
+    getGroupCapturingOutgoingEdge(child: Node) {
+        return this.getGroupWithProperty(child, 'captureOutgoingEdges', 'captureOutgoingEdgesForNode', 'closest-parent');
     }
 
-    getGroupCapturingIncomingEdge(child: Node, graphEditor: GraphEditor) {
-        return this.getGroupWithProperty(child, 'captureIncomingEdges', 'captureIncomingEdgesForNode', 'closest-parent', graphEditor);
+    getGroupCapturingIncomingEdge(child: Node) {
+        return this.getGroupWithProperty(child, 'captureIncomingEdges', 'captureIncomingEdgesForNode', 'closest-parent');
+    }
+
+    getGroupCapturingDraggedNode(groupNode: Node, node: Node) {
+        const groupId = groupNode.id.toString();
+        let currentGroup: NodeGroup = this.groupsById.get(groupId);
+
+        const checkGroup = (group: NodeGroup, groupNode: Node, node: Node) => {
+            const behaviour = group?.groupBehaviour;
+            if (behaviour?.captureDraggedNodes ?? false) {
+                const groupDecision: GroupBehaviourDecisionCallback = group.groupBehaviour.captureThisDraggedNode;
+                if (groupDecision == null || groupDecision(groupNode, node, this.graphEditor)) {
+                    if (behaviour.allowFreePositioning) {
+                        return true;
+                    }
+                    const dropZones = this.graphEditor.getNodeDropZonesForNode(groupNode);
+                    for (const [key, zone] of dropZones.entries()) {
+                        if (behaviour.occupiedDropZones != null) {
+                            if (behaviour.occupiedDropZones.has(key)) {
+                                // drop zone is occupied
+                                if (behaviour.occupiedDropZones.get(key) === node.id.toString()) {
+                                    return true; // occupied by the node in question, this cannot happen normally...
+                                }
+                                continue;
+                            }
+                        }
+                        // dropZone is not occupied
+                        // TODO implement node type filters here
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+
+        const allChildren = this.getAllChildrenOf(node.id);
+
+        // check first group
+        if (checkGroup(currentGroup, groupNode, node)) {
+            // found a group
+            if (allChildren?.has(currentGroup.groupId) ?? false) {
+                return; // but cannot join the found group as it would create a cycle!
+            }
+            return currentGroup.groupId;
+        }
+
+        // check group tree
+        while (currentGroup?.treeParent != null && currentGroup.groupId !== currentGroup.treeRoot) {
+            currentGroup = this.getGroupForNode(currentGroup.treeParent);
+            const currentGroupNode = this.graphEditor.getNode(currentGroup.groupId);
+            if (checkGroup(currentGroup, currentGroupNode, node)) {
+                // found a group
+                if (allChildren?.has(currentGroup.groupId) ?? false) {
+                    return; // but cannot join the found group as it would create a cycle!
+                }
+                return currentGroup.groupId;
+            }
+        }
+
+        // no group found
+        return null;
+    }
+
+    getCanDraggedNodeLeaveGroup(groupId: string|number, childNode: Node) {
+        const groupBehaviour = this.getGroupBehaviourOf(groupId);
+        if (groupBehaviour?.allowDraggedNodesLeavingGroup ?? false) {
+            if (groupBehaviour.allowThisDraggedNodeLeavingGroup != null) {
+                const groupNode = this.graphEditor.getNode(groupId);
+                return groupBehaviour.allowThisDraggedNodeLeavingGroup(groupNode, childNode, this.graphEditor);
+            }
+            return true;
+        }
+        return false;
     }
 }
