@@ -975,17 +975,21 @@ export default class GraphEditor extends HTMLElement {
                         if (event.subject != null) {
                             const info: NodeMovementInformation = event.subject;
                             if (info.offset?.dx !== null) {
-                                x += info.offset.dx;
+                                x -= info.offset.dx;
                             }
                             if (info.offset?.dy !== null) {
-                                x += info.offset.dy;
+                                x -= info.offset.dy;
                             }
                         }
-                        this.tryToLeaveCurrentGroup(event.subject, x, y);
-                        this.tryJoinNodeIntoGroup(event.subject, x, y);
+                        let needsFullRender: boolean = false;
+                        needsFullRender = this.tryToLeaveCurrentGroup(event.subject, x, y) || needsFullRender;
+                        needsFullRender = this.tryJoinNodeIntoGroup(event.subject, x, y) || needsFullRender;
                         this._moveNode(event.subject, event.x, event.y, EventSource.USER_INTERACTION);
-                        this.updateGraphPositions();
-                        this.getNodesFromPoint(event.sourceEvent.clientX, event.sourceEvent.clientY);
+                        if (needsFullRender) {
+                            this.completeRender();
+                        } else {
+                            this.updateGraphPositions();
+                        }
                     })
             );
         } else {
@@ -1189,15 +1193,15 @@ export default class GraphEditor extends HTMLElement {
         return p.matrixTransform(ng.node().getScreenCTM());
     }
 
-    private tryToLeaveCurrentGroup(nodeMovementInformation: NodeMovementInformation, x: number, y: number) {
+    private tryToLeaveCurrentGroup(nodeMovementInformation: NodeMovementInformation, x: number, y: number): boolean {
         const node = nodeMovementInformation.node;
 
         const currentGroup = this.groupingManager.getTreeParentOf(node.id);
         if (currentGroup == null) {
-            return; // is not part of a group
+            return false; // is not part of a group
         }
         if (!(this.groupingManager.getGroupBehaviourOf(currentGroup)?.allowDraggedNodesLeavingGroup ?? false)) {
-            return; // group does not allow dragged nodes to leave
+            return false; // group does not allow dragged nodes to leave
         }
 
         const clientPoint = this.getClientPointFromGraphCoordinates({x: x, y: y});
@@ -1219,15 +1223,17 @@ export default class GraphEditor extends HTMLElement {
             if (this.groupingManager.getCanDraggedNodeLeaveGroup(currentGroup, node)) {
                 console.log('try leave group')
                 this.groupingManager.removeNodeFromGroup(currentGroup, node.id);
+                return true;
             }
         }
+        return false;
     }
 
-    private tryJoinNodeIntoGroup(nodeMovementInformation: NodeMovementInformation, x: number, y: number) {
+    private tryJoinNodeIntoGroup(nodeMovementInformation: NodeMovementInformation, x: number, y: number): boolean {
         const node = nodeMovementInformation.node;
 
         if (this.groupingManager.getTreeParentOf(node.id) != null) {
-            return;
+            return false;
         }
 
         const clientPoint = this.getClientPointFromGraphCoordinates({x: x, y: y});
@@ -1247,8 +1253,10 @@ export default class GraphEditor extends HTMLElement {
                     console.log('Join tree as subtree')
                     this.groupingManager.joinTreeOfParent(node.id, canJoinGroup);
                 }
+                return true;
             }
         }
+        return false;
     }
 
     /**
