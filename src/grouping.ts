@@ -150,6 +150,10 @@ export class GroupingManager {
         if (group.children.has(nodeId.toString())) {
             return;
         }
+        if (group.groupId === nodeId.toString()) {
+            console.error(`Node ${nodeId} tryed to join itself!`)
+            return;
+        }
         const children = this.getAllChildrenOf(nodeId);
         if (children.has(group.groupId)) {
             console.error(`Adding node ${nodeId} to group ${groupId} would create a cycle!`);
@@ -426,6 +430,9 @@ export class GroupingManager {
         // check first group
         if (checkGroup(currentGroup, groupNode, node)) {
             // found a group
+            if (currentGroup.groupId == node.id.toString()) {
+                return; // cannot join itself
+            }
             if (allChildren?.has(currentGroup.groupId) ?? false) {
                 return; // but cannot join the found group as it would create a cycle!
             }
@@ -438,6 +445,9 @@ export class GroupingManager {
             const currentGroupNode = this.graphEditor.getNode(currentGroup.groupId);
             if (checkGroup(currentGroup, currentGroupNode, node)) {
                 // found a group
+                if (currentGroup.groupId == node.id.toString()) {
+                    return; // cannot join itself
+                }
                 if (allChildren?.has(currentGroup.groupId) ?? false) {
                     return; // but cannot join the found group as it would create a cycle!
                 }
