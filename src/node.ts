@@ -28,7 +28,7 @@ export interface Node {
     /** Y coordinate of Node(center). */
     y: number;
     /** Node type. Can be used for styling. */
-    type?: any;
+    type?: string;
     /** The id of the dynamic node template to use for this node. */
     dynamicTemplate?: string;
     [prop: string]: any;
