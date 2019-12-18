@@ -1529,9 +1529,26 @@ export default class GraphEditor extends HTMLElement {
             select(this)
                 .selectAll<SVGGraphicsElement, NodeDropZone>('[data-node-drop-zone]')
                 .datum(function() {
-                    const id = select(this).attr('data-node-drop-zone');
+                    const dropZoneSelection = select(this);
+                    const id = dropZoneSelection.attr('data-node-drop-zone');
                     const bbox = this.getBBox();
-                    return {id: id, bbox: bbox};
+                    const whitelist = new Set<string>();
+                    const blacklist = new Set<string>();
+                    dropZoneSelection.attr('data-node-type-filter').split(' ').forEach((type: string) => {
+                        if (type !== '') {
+                            if (type.startsWith('!')) {
+                                blacklist.add(type.substring(1));
+                            } else {
+                                whitelist.add(type);
+                            }
+                        }
+                    });
+                    return {
+                        id: id,
+                        bbox: bbox,
+                        whitelist: whitelist,
+                        blacklist: blacklist,
+                    };
                 })
                 .each(function (dropZone) {
                     dropZones.set(dropZone.id, dropZone);

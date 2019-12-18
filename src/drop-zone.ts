@@ -8,4 +8,6 @@ export interface Rect {
 export interface NodeDropZone {
     id: string;
     bbox: Rect;
+    whitelist: Set<string>;
+    blacklist: Set<string>;
 }
