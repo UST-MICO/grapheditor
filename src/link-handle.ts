@@ -64,6 +64,7 @@ export function calculateLinkHandleNormal(handle: LinkHandle) {
  * @param heightof the rectangle
  * @param linkHandles one of ['all', 'edges', 'corners', 'minimal'] 'minimal' is an alias for 'edges'
  */
+// eslint-disable-next-line complexity
 export function handlesForRectangle(x: number, y: number, width: number, height: number, linkHandles: string): LinkHandle[] {
     const handles: LinkHandle[] = [];
     if (linkHandles === 'all' || linkHandles === 'corners') {

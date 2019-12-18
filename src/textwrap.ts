@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {select} from 'd3-selection';
+import {select, Selection} from 'd3-selection';
 
 /**
  * Wrap text in an svg text element.
@@ -33,7 +33,8 @@ import {select} from 'd3-selection';
  * @param newText text to wrap
  * @param force force rewrap
  */
-export function wrapText(element: SVGTextElement, newText, force: boolean= false) {
+// eslint-disable-next-line complexity
+export function wrapText(element: SVGTextElement, newText, force: boolean= false): void {
     const text = select(element);
     let x = parseFloat(text.attr('x'));
     if (isNaN(x)) {
@@ -113,7 +114,7 @@ function lTrim(text: string) {
  * @param force force rewrap
  * @param linespacing 'auto' or number (default: 'auto')
  */
-function calculateMultiline(text, height, x, y, force: boolean= false, linespacing: string= 'auto') {
+function calculateMultiline(text: Selection<SVGTextElement, unknown, null, undefined>, height: number, x: number, y: number, force: boolean= false, linespacing: string= 'auto') {
     let lineheight = parseFloat(text.attr('data-lineheight'));
     if (force || isNaN(lineheight)) {
         lineheight = parseFloat(text.style('line-height'));
@@ -148,7 +149,7 @@ function calculateMultiline(text, height, x, y, force: boolean= false, linespaci
         currentY += lineheight * factor;
     }
 
-    const spanSelection = text.selectAll('tspan').data(lines);
+    const spanSelection = text.selectAll<SVGTSpanElement, unknown>('tspan').data(lines);
     spanSelection.exit().remove();
     return spanSelection.enter().append('tspan')
         .attr('x', x)
@@ -167,9 +168,10 @@ function calculateMultiline(text, height, x, y, force: boolean= false, linespaci
  * @param wordBreak break mode
  * @param force force rewrap
  */
+// eslint-disable-next-line complexity
 function wrapSingleLine(element: SVGTextElement|SVGTSpanElement, width: number,
-                        newText: string, mode: string = 'ellipsis',
-                        wordBreak: string = 'break-word', force: boolean= false): string {
+    newText: string, mode: string = 'ellipsis', wordBreak: string = 'break-word', force: boolean= false
+): string {
 
     const text = select(element);
     const oldText = text.text();
@@ -188,7 +190,7 @@ function wrapSingleLine(element: SVGTextElement|SVGTSpanElement, width: number,
         if (oldText.startsWith(newText)) {
             // newText is shorter
             text.text(newText);
-            return '' + suffix;
+            return suffix;
         } else if (mode === 'clip') {
             if (text.attr('data-wrapped') === 'true' && newText.startsWith(oldText)) {
                 // odlText was wrapped and newText begins with oldText
@@ -208,7 +210,7 @@ function wrapSingleLine(element: SVGTextElement|SVGTSpanElement, width: number,
     // Try naive without wrapping
     text.text(newText);
     if (text.node().getComputedTextLength() <= width) {
-        return '' + suffix;
+        return suffix;
     }
 
     if (wordBreak === 'break-all' || newText.indexOf(' ') < 0) {

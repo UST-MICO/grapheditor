@@ -17,7 +17,7 @@
 
 import { Node } from './node';
 import { Edge, edgeId } from './edge';
-import { NodeDropZone } from './drop-zone';
+import { NodeDropZone, Rect } from './drop-zone';
 
 /**
  * A cache for fast access of graph objects.
@@ -25,7 +25,7 @@ import { NodeDropZone } from './drop-zone';
 export class GraphObjectCache {
 
     private nodes: Map<string, Node>;
-    private nodeBBoxes: Map<string, DOMRect>;
+    private nodeBBoxes: Map<string, Rect>;
     private nodeDropZones: Map<string, Map<string, NodeDropZone>>;
     private edges: Map<string, Edge>;
     private edgesBySource: Map<string, Set<Edge>>;
@@ -33,7 +33,7 @@ export class GraphObjectCache {
 
     constructor() {
         this.nodes = new Map<string, Node>();
-        this.nodeBBoxes = new Map<string, DOMRect>();
+        this.nodeBBoxes = new Map<string, Rect>();
         this.nodeDropZones = new Map<string, Map<string, NodeDropZone>>();
         this.edges = new Map<string, Edge>();
         this.edgesBySource = new Map<string, Set<Edge>>();
@@ -45,11 +45,11 @@ export class GraphObjectCache {
      *
      * @param nodes the new node list
      */
-    updateNodeCache(nodes: Node[]) {
+    updateNodeCache(nodes: Node[]): void {
         const nodeMap = new Map();
         nodes.forEach((node) => nodeMap.set(node.id.toString(), node));
         this.nodes = nodeMap;
-        this.nodeBBoxes = new Map<string, DOMRect>();
+        this.nodeBBoxes = new Map<string, Rect>();
         this.nodeDropZones = new Map<string, Map<string, NodeDropZone>>();
     }
 
@@ -58,7 +58,7 @@ export class GraphObjectCache {
      *
      * @param edges the new edge list
      */
-    updateEdgeCache(edges: Edge[]) {
+    updateEdgeCache(edges: Edge[]): void {
         const edgeMap = new Map();
         const bySourceMap = new Map();
         const byTargetMap = new Map();
@@ -87,7 +87,7 @@ export class GraphObjectCache {
      *
      * @param id the node id
      */
-    getNode(id: number|string) {
+    getNode(id: number|string): Node {
         return this.nodes.get(id.toString());
     }
 
@@ -97,8 +97,8 @@ export class GraphObjectCache {
      * @param id the node id to store the bbox for
      * @param bbox the bbox of the node
      */
-    setNodeBBox(id: number|string, bbox: DOMRect) {
-        return this.nodeBBoxes.set(id.toString(), bbox);
+    setNodeBBox(id: number|string, bbox: DOMRect): void {
+        this.nodeBBoxes.set(id.toString(), bbox);
     }
 
     /**
@@ -106,19 +106,19 @@ export class GraphObjectCache {
      *
      * @param id the node id
      */
-    getNodeBBox(id: number|string) {
+    getNodeBBox(id: number|string): Rect {
         return this.nodeBBoxes.get(id.toString());
     }
 
-    setNodeDropZones(id: number|string, dropZones: Map<string, NodeDropZone>) {
+    setNodeDropZones(id: number|string, dropZones: Map<string, NodeDropZone>): void {
         this.nodeDropZones.set(id.toString(), dropZones);
     }
 
-    getAllDropZones(id: number|string) {
+    getAllDropZones(id: number|string): Map<string, NodeDropZone> {
         return this.nodeDropZones.get(id.toString());
     }
 
-    getDropZone(id: number|string, dropZoneId: string) {
+    getDropZone(id: number|string, dropZoneId: string): NodeDropZone {
         return this.nodeDropZones.get(id.toString())?.get(dropZoneId);
     }
 
@@ -127,7 +127,7 @@ export class GraphObjectCache {
      *
      * @param id the edge id
      */
-    getEdge(id: number|string) {
+    getEdge(id: number|string): Edge {
         return this.edges.get(id.toString());
     }
 

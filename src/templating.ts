@@ -22,6 +22,7 @@ import { LineAttachementInfo, Marker } from './marker';
 import { DynamicTemplate } from './dynamic-templates/dynamic-template';
 import { Node } from './node';
 import { EdgePathGenerator } from './dynamic-templates/edge-path-generators';
+import { Rect } from './drop-zone';
 
 /**
  * Registry for edge path generators.
@@ -39,7 +40,7 @@ export class EdgePathGeneratorRegistry {
     /**
      * Clears all path generators (including the default path generator).
      */
-    clearAllPathGenerators() {
+    clearAllPathGenerators(): void {
         this.pathGenerators  = new Map<string, EdgePathGenerator>();
     }
 
@@ -49,7 +50,7 @@ export class EdgePathGeneratorRegistry {
      * @param pathGeneratorId the key to register the path generator with
      * @param pathGenerator the path generator to register (`null` will remove the path generator with `pathGeneratorId`)
      */
-    addEdgePathGenerator(pathGeneratorId: string, pathGenerator: EdgePathGenerator) {
+    addEdgePathGenerator(pathGeneratorId: string, pathGenerator: EdgePathGenerator): void {
         if (pathGenerator == null) {
             this.removePathGenerator(pathGeneratorId);
             return;
@@ -65,7 +66,7 @@ export class EdgePathGeneratorRegistry {
      *
      * @param pathGeneratorId the id to remove
      */
-    removePathGenerator(pathGeneratorId: string) {
+    removePathGenerator(pathGeneratorId: string): void {
         this.pathGenerators.delete(pathGeneratorId);
     }
 
@@ -75,7 +76,7 @@ export class EdgePathGeneratorRegistry {
      * If the id was not found the id 'default' will be used instead.
      * @param pathGeneratorId the id to retrieve
      */
-    getEdgePathGenerator(pathGeneratorId: string) {
+    getEdgePathGenerator(pathGeneratorId: string): EdgePathGenerator {
         if (pathGeneratorId == null || !this.pathGenerators.has(pathGeneratorId)) {
             return this.pathGenerators.get('default');
         }
@@ -94,14 +95,14 @@ export class StaticTemplateRegistry {
     private nodeTemplateLinkHandles: Map<string, LinkHandle[]>;
     private markerTemplates: Map<string, Selection<SVGGElement, unknown, any, unknown>>;
     private markerTemplateLineAttachements: Map<string, LineAttachementInfo>;
-    private templateBBoxes: Map<string, DOMRect>;
+    private templateBBoxes: Map<string, Rect>;
 
     constructor() {
         this.nodeTemplates = new Map<string, Selection<SVGGElement, unknown, any, unknown>>();
         this.nodeTemplateLinkHandles = new Map<string, LinkHandle[]>();
         this.markerTemplates = new Map<string, Selection<SVGGElement, unknown, any, unknown>>();
         this.markerTemplateLineAttachements = new Map<string, LineAttachementInfo>();
-        this.templateBBoxes = new Map<string, DOMRect>();
+        this.templateBBoxes = new Map<string, Rect>();
     }
 
     /**
@@ -111,7 +112,7 @@ export class StaticTemplateRegistry {
      *
      * @param svg the svg to search for templates
      */
-    updateTemplateCache(svg: Selection<SVGSVGElement, unknown, any, unknown>) {
+    updateTemplateCache(svg: Selection<SVGSVGElement, unknown, any, unknown>): void {
         const nodeTemplates = new Map<string, Selection<SVGGElement, unknown, any, unknown>>();
         const nodeTemplateLinkHandles = new Map<string, LinkHandle[]>();
         const markerTemplates = new Map<string, Selection<SVGGElement, unknown, any, unknown>>();
@@ -174,7 +175,7 @@ export class StaticTemplateRegistry {
      *
      * @param id the template id
      */
-    getTemplateBBox(id: string) {
+    getTemplateBBox(id: string): Rect {
         return this.templateBBoxes.get(id);
     }
 
@@ -185,7 +186,7 @@ export class StaticTemplateRegistry {
      *
      * @param nodeType the type of the node
      */
-    getNodeTemplateId(nodeType: string) {
+    getNodeTemplateId(nodeType: string): string {
         if (nodeType == null || !this.nodeTemplates.has(nodeType)) {
             return 'default';
         } else {
@@ -199,7 +200,7 @@ export class StaticTemplateRegistry {
      * This method uses `getNodeTemplateId`.
      * @param id the template id (normally the node type)
      */
-    getNodeTemplate(id: string) {
+    getNodeTemplate(id: string): Selection<SVGGElement, unknown, any, unknown> {
         return this.nodeTemplates.get(this.getNodeTemplateId(id));
     }
 
@@ -224,7 +225,7 @@ export class StaticTemplateRegistry {
      *
      * @param nodeType the type of the marker
      */
-    getMarkerTemplateId(markerType: string) {
+    getMarkerTemplateId(markerType: string): string {
         if (markerType == null || !this.markerTemplates.has(markerType)) {
             return 'default-marker';
         } else {
@@ -238,7 +239,7 @@ export class StaticTemplateRegistry {
      * This method uses `getMarkerTemplateId`.
      * @param id the template id (normally the marker type)
      */
-    getMarkerTemplate(markerType: string) {
+    getMarkerTemplate(markerType: string): Selection<SVGGElement, unknown, any, unknown> {
         return this.markerTemplates.get(this.getMarkerTemplateId(markerType));
     }
 
@@ -248,7 +249,7 @@ export class StaticTemplateRegistry {
      * This method uses `getMarkerTemplateId`.
      * @param id the template id (normally the marker type)
      */
-    getMarkerAttachementPointInfo(markerType: string) {
+    getMarkerAttachementPointInfo(markerType: string): LineAttachementInfo {
         return this.markerTemplateLineAttachements.get(this.getMarkerTemplateId(markerType));
     }
 
@@ -270,7 +271,7 @@ export class DynymicTemplateRegistry {
     /**
      * Clears all dynamic templates (including any default templates).
      */
-    public clearAllTemplates() {
+    public clearAllTemplates(): void {
         this.templates = new Map<string, DynamicTemplate<Node|Marker|LinkHandle|TextComponent>>();
     }
 
@@ -282,7 +283,7 @@ export class DynymicTemplateRegistry {
      * @param templateId the id of the new template
      * @param template the new dynamic template (`null` will remove the template with `templateId`)
      */
-    public addDynamicTemplate(templateId: string, template: DynamicTemplate<Node|Marker|LinkHandle|TextComponent>) {
+    public addDynamicTemplate(templateId: string, template: DynamicTemplate<Node|Marker|LinkHandle|TextComponent>): void {
         if (template == null) {
             this.removeDynamicTemplate(templateId);
             return;
@@ -309,7 +310,7 @@ export class DynymicTemplateRegistry {
      *
      * @param templateId the template id
      */
-    public removeDynamicTemplate(templateId: string) {
+    public removeDynamicTemplate(templateId: string): void {
         this.templates.delete(templateId);
     }
 }
@@ -319,6 +320,7 @@ export class DynymicTemplateRegistry {
  *
  * @param nodeTemplate the template to calculate link handles for
  */
+// eslint-disable-next-line complexity
 function calculateLinkHandles(nodeTemplate: Selection<SVGGElement, unknown, any, unknown>): LinkHandle[] {
     let backgroundSelection: Selection<SVGGeometryElement, unknown, any, unknown> = nodeTemplate.select('.outline');
     if (backgroundSelection.empty()) {
@@ -392,7 +394,7 @@ function getExplicitLinkHandles(backgroundSelection: Selection<SVGGeometryElemen
         try {
             return JSON.parse(linkHandles as string) as LinkHandle[];
         } catch (error) {
-            console.warn('Could not parse "data-link-handles" attribute: ' + linkHandles);
+            console.warn(`Could not parse "data-link-handles" attribute: ${linkHandles}`);
         }
     }
     return null;

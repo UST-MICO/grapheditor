@@ -1,6 +1,6 @@
-import { Node } from "./node";
-import GraphEditor from "./grapheditor";
-import { Edge, Point } from "./edge";
+import { Node } from './node';
+import GraphEditor from './grapheditor';
+import { Edge, Point } from './edge';
 
 
 class NodeGroup {
@@ -58,6 +58,7 @@ export interface GroupBehaviour {
     childNodePositions?: Map<string, string|Point>;
 }
 
+// eslint-disable-next-line complexity
 export function defaultBeforeNodeMove(this: GroupBehaviour, groupNode: Node, childNode: Node, newPosition: Point, graphEditor: GraphEditor) {
     const dropZones = graphEditor.getNodeDropZonesForNode(groupNode);
     if (dropZones != null) {
@@ -65,7 +66,7 @@ export function defaultBeforeNodeMove(this: GroupBehaviour, groupNode: Node, chi
             this.occupiedDropZones = new Map();
         }
         if (this.childNodePositions == null) {
-            this.childNodePositions= new Map();
+            this.childNodePositions = new Map();
         }
         let bestDropZone: string;
         let bestDistance: number;
@@ -80,8 +81,8 @@ export function defaultBeforeNodeMove(this: GroupBehaviour, groupNode: Node, chi
             }
             // TODO filter for dropzone type(s)
             const dropZonePos = {
-                x: groupNode.x + dropZone.bbox.x + dropZone.bbox.width/2,
-                y: groupNode.y + dropZone.bbox.y + dropZone.bbox.height/2,
+                x: groupNode.x + dropZone.bbox.x + dropZone.bbox.width / 2,
+                y: groupNode.y + dropZone.bbox.y + dropZone.bbox.height / 2,
             };
             const distance = ((newPosition.x - dropZonePos.x) ** 2) + ((newPosition.y - dropZonePos.y) ** 2);
             if (bestDistance == null || bestDistance > distance) {
@@ -140,7 +141,7 @@ export class GroupingManager {
             afterNodeJoinedGroup: defaultAfterNodeJoinedGroup,
             afterNodeLeftGroup: defaultAfterNodeLeftGroup,
             beforeNodeMove: defaultBeforeNodeMove,
-        }
+        };
         this.groupsById.set(groupId, newGroup);
         return newGroup;
     }
@@ -151,7 +152,7 @@ export class GroupingManager {
             return;
         }
         if (group.groupId === nodeId.toString()) {
-            console.error(`Node ${nodeId} tryed to join itself!`)
+            console.error(`Node ${nodeId} tryed to join itself!`);
             return;
         }
         const children = this.getAllChildrenOf(nodeId);
@@ -393,10 +394,12 @@ export class GroupingManager {
         return this.getGroupWithProperty(child, 'captureIncomingEdges', 'captureIncomingEdgesForNode', 'closest-parent');
     }
 
+    // eslint-disable-next-line complexity
     getGroupCapturingDraggedNode(groupNode: Node, node: Node) {
         const groupId = groupNode.id.toString();
         let currentGroup: NodeGroup = this.groupsById.get(groupId);
 
+        // eslint-disable-next-line no-shadow
         const checkGroup = (group: NodeGroup, groupNode: Node, node: Node) => {
             const behaviour = group?.groupBehaviour;
             if (behaviour?.captureDraggedNodes ?? false) {
@@ -410,6 +413,7 @@ export class GroupingManager {
                         if (behaviour.occupiedDropZones != null) {
                             if (behaviour.occupiedDropZones.has(key)) {
                                 // drop zone is occupied
+                                // eslint-disable-next-line max-depth
                                 if (behaviour.occupiedDropZones.get(key) === node.id.toString()) {
                                     return true; // occupied by the node in question, this cannot happen normally...
                                 }
@@ -430,7 +434,7 @@ export class GroupingManager {
         // check first group
         if (checkGroup(currentGroup, groupNode, node)) {
             // found a group
-            if (currentGroup.groupId == node.id.toString()) {
+            if (currentGroup.groupId === node.id.toString()) {
                 return; // cannot join itself
             }
             if (allChildren?.has(currentGroup.groupId) ?? false) {
@@ -445,7 +449,7 @@ export class GroupingManager {
             const currentGroupNode = this.graphEditor.getNode(currentGroup.groupId);
             if (checkGroup(currentGroup, currentGroupNode, node)) {
                 // found a group
-                if (currentGroup.groupId == node.id.toString()) {
+                if (currentGroup.groupId === node.id.toString()) {
                     return; // cannot join itself
                 }
                 if (allChildren?.has(currentGroup.groupId) ?? false) {
