@@ -28,7 +28,8 @@
   "homepage": "https://github.com/UST-MICO/grapheditor#readme",
   "scripts": {
     "start": "webpack-dev-server --config webpack-dev.config.js",
-    "lint": "eslint src/**/*",
+    "lint": "eslint --ext=.ts",
+    "lint-all": "eslint --ext=.ts .",
     "doc": "typedoc --exclude **/node_modules/**/*.* --externalPattern **/node_modules/**/* --excludeExternals --ignoreCompilerErrors",
     "clean": "rm -rf _bundles lib lib-esm",
     "package": "tsc",
