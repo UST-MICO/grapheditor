@@ -1,4 +1,4 @@
-import { RotationVector } from "./rotation-vector";
+import { RotationVector } from './rotation-vector';
 
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more

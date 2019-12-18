@@ -107,7 +107,7 @@ export class LineAttachementInfo {
      * @param angle the angle the marker is currently rotated
      * @param scale the current scale of the marker
      */
-    getRotationVector(angle: number, scale?: number) {
+    getRotationVector(angle: number, scale?: number): RotationVector {
         let attachementAngle;
         if (this.isDirectional) {
             attachementAngle = angle + this.lineAttachementAngle;

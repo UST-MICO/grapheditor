@@ -68,8 +68,9 @@ export function applyUserLinkHandleCalculationCallback(
     source: Node,
     targetHandles: LinkHandle[],
     target: Node | Point,
-    callback?: (edge: Edge | DraggedEdge, sourceHandles: LinkHandle[], source: Node, targetHandles: LinkHandle[], target: Node | Point) => { sourceHandles: LinkHandle[], targetHandles: LinkHandle[] }
-): { sourceHandles: LinkHandle[], targetHandles: LinkHandle[] } {
+    // eslint-disable-next-line max-len
+    callback?: (edge: Edge | DraggedEdge, sourceHandles: LinkHandle[], source: Node, targetHandles: LinkHandle[], target: Node | Point) => { sourceHandles: LinkHandle[]; targetHandles: LinkHandle[] }
+): { sourceHandles: LinkHandle[]; targetHandles: LinkHandle[] } {
     const initialSourceHandles = sanitizeHandleList(sourceHandles);
     const initialTargetHandles = sanitizeHandleList(targetHandles);
     let newSourceHandles = initialSourceHandles;
