@@ -57,7 +57,7 @@
                     .edge .marker {fill: black;}
                 </style>
                 <defs class="templates">
-                    <g id="simple-node" data-template-type="node">
+                    <g id="default" data-template-type="node">
                         <rect width="100" height="40" x="-50" y="-20" data-link-handles="edges"></rect>
                         <text class="title text" data-content="title" data-click="title" x="-40" y="-3" width="80"></text>
                         <text class="text" data-content="type" x="-40" y="12" width="80"></text>
@@ -65,9 +65,9 @@
                     <g id="group-node" data-template-type="node">
                         <rect class="group-background" width="110" height="150" x="-55" y="-75" data-link-handles="edges"></rect>
                         <text class="text" data-content="title" x="-50" y="-63" width="100"></text>
-                        <rect class="drop-zone" width="95" height="35" x="-47.5" y="-57.5" data-node-drop-zone="a"></rect>
-                        <rect class="drop-zone" width="95" height="35" x="-47.5" y="-12.5" data-node-drop-zone="b"></rect>
-                        <rect class="drop-zone" width="95" height="35" x="-47.5" y="32.5" data-node-drop-zone="c"></rect>
+                        <rect class="drop-zone" width="95" height="35" x="-47.5" y="-57.5" data-node-drop-zone="a" data-node-type-filter="!group-node"></rect>
+                        <rect class="drop-zone" width="95" height="35" x="-47.5" y="-12.5" data-node-drop-zone="b" data-node-type-filter="simple-node simple-node-b"></rect>
+                        <rect class="drop-zone" width="95" height="35" x="-47.5" y="32.5" data-node-drop-zone="c" data-node-type-filter="simple-node-b"></rect>
                     </g>
                     <g id="arrow" data-template-type="marker" data-line-attachement-point="-9 0">
                         <path d="M -9 -4 L 0 0 L -9 4 z" />
@@ -110,8 +110,8 @@
                     { id: 2, title: 'B', type: 'group-node', x: 250, y: 0 },
                     { id: 3, title: 'C', type: 'group-node', x: 100, y: 200 },
                     { id: 4, title: 'i', type: 'simple-node', x: 110, y: -50 },
-                    { id: 5, title: 'ii', type: 'simple-node', x: 110, y: 50 },
-                    { id: 6, title: 'iii', type: 'simple-node', x: 250, y: 100 },
+                    { id: 5, title: 'ii', type: 'simple-node-b', x: 110, y: 50 },
+                    { id: 6, title: 'iii', type: 'simple-node-b', x: 250, y: 100 },
                     { id: 7, title: 'iv', type: 'simple-node', x: 230, y: 150 },
                 ];
 

@@ -79,7 +79,16 @@ export function defaultBeforeNodeMove(this: GroupBehaviour, groupNode: Node, chi
                     continue;
                 }
             }
-            // TODO filter for dropzone type(s)
+            const nodeType = childNode.type || 'default';
+            if (!dropZone.whitelist.has(nodeType)) {
+                // nodeType is not in whitelist
+                if (dropZone.whitelist.size > 0) {
+                    continue; // whitelist is not empty
+                }
+                if (dropZone.blacklist.has(nodeType)) {
+                    continue; // nodeType is in blacklist
+                }
+            }
             const dropZonePos = {
                 x: groupNode.x + dropZone.bbox.x + dropZone.bbox.width / 2,
                 y: groupNode.y + dropZone.bbox.y + dropZone.bbox.height / 2,
@@ -146,7 +155,7 @@ export class GroupingManager {
         return newGroup;
     }
 
-    addNodeToGroup(groupId: string|number, nodeId: string|number, atPosition?: Point) {
+    addNodeToGroup(groupId: string|number, nodeId: string|number, atPosition?: Point): void {
         const group = this.getGroupForNode(groupId);
         if (group.children.has(nodeId.toString())) {
             return;
@@ -174,31 +183,31 @@ export class GroupingManager {
         }
     }
 
-    getChildrenOf(groupId: string|number) {
+    getChildrenOf(groupId: string|number): Set<string> {
         return this.groupsById.get(groupId.toString())?.children ?? new Set<string>();
     }
 
-    getParentsOf(groupId: string|number) {
+    getParentsOf(groupId: string|number): Set<string> {
         return this.groupsById.get(groupId.toString())?.parents ?? new Set<string>();
     }
 
-    getGroupDepthOf(groupId: string|number) {
+    getGroupDepthOf(groupId: string|number): number {
         return this.groupsById.get(groupId.toString())?.groupDepth;
     }
 
-    getTreeParentOf(groupId: string|number) {
+    getTreeParentOf(groupId: string|number): string {
         return this.groupsById.get(groupId.toString())?.treeParent;
     }
 
-    getTreeRootOf(groupId: string|number) {
+    getTreeRootOf(groupId: string|number): string {
         return this.groupsById.get(groupId.toString())?.treeRoot;
     }
 
-    getTreeDepthOf(groupId: string|number) {
+    getTreeDepthOf(groupId: string|number): number {
         return this.groupsById.get(groupId.toString())?.treeDepth;
     }
 
-    getAllChildrenOf(groupId: string|number) {
+    getAllChildrenOf(groupId: string|number): Set<string> {
         const children = new Set<string>();
         const expanded = new Set<string>();
         const toExpand = [groupId.toString()];
@@ -248,7 +257,7 @@ export class GroupingManager {
         }
     }
 
-    removeNodeFromGroup(groupId: string|number, nodeId: string|number) {
+    removeNodeFromGroup(groupId: string|number, nodeId: string|number): void {
         const group = this.getGroupForNode(groupId);
         if (!group.children.has(nodeId.toString())) {
             return;
@@ -267,7 +276,7 @@ export class GroupingManager {
         }
     }
 
-    leaveTree(groupId: string|number, treeRootId: string|number) {
+    leaveTree(groupId: string|number, treeRootId: string|number): void {
         this._leaveTree(this.getGroupForNode(groupId), treeRootId.toString());
     }
 
@@ -299,7 +308,7 @@ export class GroupingManager {
         }
     }
 
-    joinTreeOfParent(groupId: string|number, treeParentId: string|number) {
+    joinTreeOfParent(groupId: string|number, treeParentId: string|number): void {
         const group = this.getGroupForNode(groupId);
         const parentGroup = this.getGroupForNode(treeParentId);
         if (!group.parents.has(parentGroup.groupId)) {
@@ -316,7 +325,7 @@ export class GroupingManager {
         this.propagateTreeRoot(parentGroup, group);
     }
 
-    markAsTreeRoot(groupId: string|number) {
+    markAsTreeRoot(groupId: string|number): void {
         const group = this.getGroupForNode(groupId);
         if (group.treeRoot != null && group.treeRoot !== group.groupId) {
             console.error(`Node ${groupId} is already part of tree ${group.treeRoot} and cannot become a treeRoot itself!`);
@@ -328,7 +337,7 @@ export class GroupingManager {
         group.children.forEach(cId => this.propagateTreeRoot(group, this.getGroupForNode(cId)));
     }
 
-    setGroupBehaviourOf(groupId: string|number, groupBehaviour: GroupBehaviour) {
+    setGroupBehaviourOf(groupId: string|number, groupBehaviour: GroupBehaviour): void {
         if (groupBehaviour.afterNodeJoinedGroup == null) {
             groupBehaviour.afterNodeJoinedGroup = defaultAfterNodeJoinedGroup;
         }
@@ -382,24 +391,24 @@ export class GroupingManager {
         return validGroup ?? childId;
     }
 
-    getGroupCapturingMovementOfChild(child: Node) {
+    getGroupCapturingMovementOfChild(child: Node): string {
         return this.getGroupWithProperty(child, 'captureChildMovement', 'captureChildMovementForNode', 'largest-group');
     }
 
-    getGroupCapturingOutgoingEdge(child: Node) {
+    getGroupCapturingOutgoingEdge(child: Node): string {
         return this.getGroupWithProperty(child, 'captureOutgoingEdges', 'captureOutgoingEdgesForNode', 'closest-parent');
     }
 
-    getGroupCapturingIncomingEdge(child: Node) {
+    getGroupCapturingIncomingEdge(child: Node): string {
         return this.getGroupWithProperty(child, 'captureIncomingEdges', 'captureIncomingEdgesForNode', 'closest-parent');
     }
 
     // eslint-disable-next-line complexity
-    getGroupCapturingDraggedNode(groupNode: Node, node: Node) {
+    getGroupCapturingDraggedNode(groupNode: Node, node: Node): string {
         const groupId = groupNode.id.toString();
         let currentGroup: NodeGroup = this.groupsById.get(groupId);
 
-        // eslint-disable-next-line no-shadow
+        // eslint-disable-next-line no-shadow, complexity
         const checkGroup = (group: NodeGroup, groupNode: Node, node: Node) => {
             const behaviour = group?.groupBehaviour;
             if (behaviour?.captureDraggedNodes ?? false) {
@@ -420,8 +429,17 @@ export class GroupingManager {
                                 continue;
                             }
                         }
-                        // dropZone is not occupied
-                        // TODO implement node type filters here
+                        // dropZone is not occupied, check if node type is allowed
+                        const nodeType = node.type || 'default';
+                        if (!zone.whitelist.has(nodeType)) {
+                            // nodeType is not in whitelist
+                            if (zone.whitelist.size > 0) {
+                                continue; // whitelist is not empty
+                            }
+                            if (zone.blacklist.has(nodeType)) {
+                                continue; // nodeType is in blacklist
+                            }
+                        }
                         return true;
                     }
                 }
@@ -463,7 +481,7 @@ export class GroupingManager {
         return null;
     }
 
-    getCanDraggedNodeLeaveGroup(groupId: string|number, childNode: Node) {
+    getCanDraggedNodeLeaveGroup(groupId: string|number, childNode: Node): boolean {
         const groupBehaviour = this.getGroupBehaviourOf(groupId);
         if (groupBehaviour?.allowDraggedNodesLeavingGroup ?? false) {
             if (groupBehaviour.allowThisDraggedNodeLeavingGroup != null) {
