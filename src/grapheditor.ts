@@ -32,7 +32,8 @@ import { DynamicNodeTemplate, DynamicMarkerTemplate, DynamicTextComponentTemplat
 import { getNodeLinkHandles, applyUserLinkHandleCalculationCallback, calculateNearestHandles } from './link-handle-helper';
 import { SmoothedEdgePathGenerator, EdgePathGenerator } from './dynamic-templates/edge-path-generators';
 import { GroupingManager } from './grouping';
-import { NodeDropZone, Rect } from './drop-zone';
+import { NodeDropZone } from './drop-zone';
+import { Rect } from './util';
 
 const SHADOW_DOM_TEMPLATE = `
 <slot name="style"></slot>

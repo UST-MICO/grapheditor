@@ -17,7 +17,8 @@
 
 import { Node } from './node';
 import { Edge, edgeId } from './edge';
-import { NodeDropZone, Rect } from './drop-zone';
+import { NodeDropZone } from './drop-zone';
+import { Rect } from './util';
 
 /**
  * A cache for fast access of graph objects.
