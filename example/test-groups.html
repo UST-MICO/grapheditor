@@ -126,7 +126,7 @@
                     moveChildrenAlongGoup: true,
                     captureChildMovement: true,
                     captureOutgoingEdges: true,
-                    delegateOutgoingEdgeSourceToNode: (groupNode, edge, graph) => {
+                    delegateOutgoingEdgeSourceToNode: (group, groupNode, edge, graph) => {
                         if (edge.target != null) {
                             if (!gm.getChildrenOf(groupNode.id).has(edge.target)) { // target is not path of this group
                                 if (gm.getParentsOf(edge.target).size > 0) { // target is a child node (has a parent)
@@ -142,7 +142,7 @@
                     moveChildrenAlongGoup: false,
                     captureChildMovement: false,
                     captureIncomingEdges: true,
-                    delegateIncomingEdgeTargetToNode: (groupNode, edge, graph) => {
+                    delegateIncomingEdgeTargetToNode: (group, groupNode, edge, graph) => {
                         // always delegate to child
                         return gm.getChildrenOf(groupNode.id.toString()).values().next().value;
                     }
