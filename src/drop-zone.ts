@@ -1,9 +1,5 @@
-export interface Rect {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-}
+import { Rect } from './util';
+
 
 export interface NodeDropZone {
     id: string;

@@ -22,7 +22,7 @@ import { LineAttachementInfo, Marker } from './marker';
 import { DynamicTemplate } from './dynamic-templates/dynamic-template';
 import { Node } from './node';
 import { EdgePathGenerator } from './dynamic-templates/edge-path-generators';
-import { Rect } from './drop-zone';
+import { Rect } from './util';
 
 /**
  * Registry for edge path generators.
