@@ -141,10 +141,18 @@
                     captureChildMovement: false,
                     captureDraggedNodes: true,
                     allowDraggedNodesLeavingGroup: true,
+                    onNodeMoveStart: (groupNode, node, grapheditor) => {
+                        console.log('Start move node', node);
+                    },
+                    onNodeMoveEnd: (groupNode, node, grapheditor) => {
+                        console.log('End move node', node);
+                    }
                 });
 
                 graph.completeRender();
                 graph.zoomToBoundingBox();
+
+                graph.moveNode(7, 130, 150, true);
         </script>
     </body>
 </html>

@@ -26,8 +26,8 @@ class NodeGroup {
 }
 
 
-type GroupBehaviourDecisionCallback = (groupNode: Node, childNode: Node, graphEditor: GraphEditor) => boolean;
-type GroupBehaviourEdgeDelegationCallback = (groupNode: Node, edge: Edge, graphEditor: GraphEditor) => string;
+type GroupBehaviourDecisionCallback = (group: string, childGroup: string, groupNode: Node, childNode: Node, graphEditor: GraphEditor) => boolean;
+type GroupBehaviourEdgeDelegationCallback = (group: string, groupNode: Node, edge: Edge, graphEditor: GraphEditor) => string;
 
 
 export interface GroupBehaviour {
@@ -51,16 +51,23 @@ export interface GroupBehaviour {
     allowDraggedNodesLeavingGroup?: boolean;
     allowThisDraggedNodeLeavingGroup?: GroupBehaviourDecisionCallback;
 
-    afterNodeJoinedGroup?: (groupNode: Node, childNode: Node, graphEditor: GraphEditor, atPosition?: Point) => void;
-    afterNodeLeftGroup?: (groupNode: Node, childNode: Node, graphEditor: GraphEditor) => void;
-    beforeNodeMove?: (groupNode: Node, childNode: Node, newPosition: Point, graphEditor: GraphEditor) => void;
+    afterNodeJoinedGroup?: (group: string, childGroup: string, groupNode: Node, childNode: Node, graphEditor: GraphEditor, atPosition?: Point) => void;
+    afterNodeLeftGroup?: (group: string, childGroup: string, groupNode: Node, childNode: Node, graphEditor: GraphEditor) => void;
+
+    onNodeMoveStart?: (group: string, childGroup: string, groupNode: Node, childNode: Node, graphEditor: GraphEditor) => void;
+    beforeNodeMove?: (group: string, childGroup: string, groupNode: Node, childNode: Node, newPosition: Point, graphEditor: GraphEditor) => void;
+    onNodeMoveEnd?: (group: string, childGroup: string, groupNode: Node, childNode: Node, graphEditor: GraphEditor) => void;
 
     occupiedDropZones?: Map<string, string>;
     childNodePositions?: Map<string, string|Point>;
 }
 
 // eslint-disable-next-line complexity
-export function defaultBeforeNodeMove(this: GroupBehaviour, groupNode: Node, childNode: Node, newPosition: Point, graphEditor: GraphEditor) {
+export function defaultBeforeNodeMove(this: GroupBehaviour, group: string, childGroup: string, groupNode: Node, childNode: Node, newPosition: Point, graphEditor: GraphEditor) {
+    if (groupNode == null || childNode == null) {
+        return;
+    }
+
     const dropZones = graphEditor.getNodeDropZonesForNode(groupNode);
     if (dropZones != null) {
         if (this.occupiedDropZones == null) {
@@ -104,20 +111,21 @@ export function defaultBeforeNodeMove(this: GroupBehaviour, groupNode: Node, chi
 }
 
 
-export function defaultAfterNodeJoinedGroup(this: GroupBehaviour, groupNode: Node, childNode: Node, graphEditor: GraphEditor, atPosition?: Point) {
+// eslint-disable-next-line max-len
+export function defaultAfterNodeJoinedGroup(this: GroupBehaviour, group: string, childGroup: string, groupNode: Node, childNode: Node, graphEditor: GraphEditor, atPosition?: Point) {
     if (this.beforeNodeMove != null) {
-        this.beforeNodeMove(groupNode, childNode, atPosition ?? childNode, graphEditor);
+        this.beforeNodeMove(group, childGroup, groupNode, childNode, atPosition ?? childNode, graphEditor);
     }
 }
 
 
-export function defaultAfterNodeLeftGroup(this: GroupBehaviour, groupNode: Node, childNode: Node, graphEditor: GraphEditor) {
+export function defaultAfterNodeLeftGroup(this: GroupBehaviour, group: string, childGroup: string, groupNode: Node, childNode: Node, graphEditor: GraphEditor) {
     if (this.childNodePositions != null) {
-        const position = this.childNodePositions.get(childNode.id.toString());
+        const position = this.childNodePositions.get(childGroup);
         if (typeof(position) === 'string') {
             this.occupiedDropZones?.delete(position);
         }
-        this.childNodePositions.delete(childNode.id.toString());
+        this.childNodePositions.delete(childGroup);
     }
 }
 
@@ -171,7 +179,7 @@ export class GroupingManager {
         if (group.groupBehaviour?.afterNodeJoinedGroup != null) {
             const groupNode = this.graphEditor.getNode(groupId);
             const childNode = this.graphEditor.getNode(nodeId);
-            group.groupBehaviour.afterNodeJoinedGroup(groupNode, childNode, this.graphEditor, atPosition);
+            group.groupBehaviour.afterNodeJoinedGroup(group.groupId, childGroup.groupId, groupNode, childNode, this.graphEditor, atPosition);
         }
     }
 
@@ -264,7 +272,7 @@ export class GroupingManager {
         if (group.groupBehaviour?.afterNodeLeftGroup != null) {
             const groupNode = this.graphEditor.getNode(groupId);
             const childNode = this.graphEditor.getNode(nodeId);
-            group.groupBehaviour.afterNodeLeftGroup(groupNode, childNode, this.graphEditor);
+            group.groupBehaviour.afterNodeLeftGroup(group.groupId, childGroup.groupId, groupNode, childNode, this.graphEditor);
         }
     }
 
@@ -368,7 +376,7 @@ export class GroupingManager {
             const parentGroup = this.getGroupForNode(currentGroup.treeParent);
             if (parentGroup.groupBehaviour[groupProperty]) {
                 const groupDecision: GroupBehaviourDecisionCallback = parentGroup.groupBehaviour[groupDecisionCallback];
-                if (groupDecision == null || groupDecision(this.graphEditor.getNode(parentGroup.groupId), childNode, this.graphEditor)) {
+                if (groupDecision == null || groupDecision(parentGroup.groupId, childId, this.graphEditor.getNode(parentGroup.groupId), childNode, this.graphEditor)) {
                     // groupBehaviour satisfies conditions
                     if (strategy === 'closest-parent') {
                         return parentGroup.groupId;
@@ -396,16 +404,15 @@ export class GroupingManager {
     }
 
     // eslint-disable-next-line complexity
-    getGroupCapturingDraggedNode(groupNode: Node, node: Node): string {
-        const groupId = groupNode.id.toString();
-        let currentGroup: NodeGroup = this.groupsById.get(groupId);
+    getGroupCapturingDraggedNode(groupId: string|number, childGroupId: string|number, groupNode: Node, node: Node): string {
+        let currentGroup: NodeGroup = this.groupsById.get(groupId.toString());
 
         // eslint-disable-next-line no-shadow
-        const checkGroup = (group: NodeGroup, groupNode: Node, node: Node) => {
+        const checkGroup = (groupId: string, childId: string, group: NodeGroup, groupNode: Node, node: Node) => {
             const behaviour = group?.groupBehaviour;
             if (behaviour?.captureDraggedNodes ?? false) {
                 const groupDecision: GroupBehaviourDecisionCallback = group.groupBehaviour.captureThisDraggedNode;
-                if (groupDecision == null || groupDecision(groupNode, node, this.graphEditor)) {
+                if (groupDecision == null || groupDecision(groupId, childId, groupNode, node, this.graphEditor)) {
                     if (behaviour.allowFreePositioning) {
                         return true;
                     }
@@ -431,7 +438,7 @@ export class GroupingManager {
         const allChildren = this.getAllChildrenOf(node.id);
 
         // check first group
-        if (checkGroup(currentGroup, groupNode, node)) {
+        if (checkGroup(currentGroup?.groupId, childGroupId.toString(), currentGroup, groupNode, node)) {
             // found a group
             if (currentGroup.groupId === node.id.toString()) {
                 return; // cannot join itself
@@ -446,7 +453,7 @@ export class GroupingManager {
         while (currentGroup?.treeParent != null && currentGroup.groupId !== currentGroup.treeRoot) {
             currentGroup = this.getGroupForNode(currentGroup.treeParent);
             const currentGroupNode = this.graphEditor.getNode(currentGroup.groupId);
-            if (checkGroup(currentGroup, currentGroupNode, node)) {
+            if (checkGroup(currentGroup.groupId, childGroupId.toString(), currentGroup, currentGroupNode, node)) {
                 // found a group
                 if (currentGroup.groupId === node.id.toString()) {
                     return; // cannot join itself
@@ -462,12 +469,12 @@ export class GroupingManager {
         return null;
     }
 
-    getCanDraggedNodeLeaveGroup(groupId: string|number, childNode: Node): boolean {
+    getCanDraggedNodeLeaveGroup(groupId: string|number, childGroupId: string|number, childNode: Node): boolean {
         const groupBehaviour = this.getGroupBehaviourOf(groupId);
         if (groupBehaviour?.allowDraggedNodesLeavingGroup ?? false) {
             if (groupBehaviour.allowThisDraggedNodeLeavingGroup != null) {
                 const groupNode = this.graphEditor.getNode(groupId);
-                return groupBehaviour.allowThisDraggedNodeLeavingGroup(groupNode, childNode, this.graphEditor);
+                return groupBehaviour.allowThisDraggedNodeLeavingGroup(groupId.toString(), childGroupId.toString(), groupNode, childNode, this.graphEditor);
             }
             return true;
         }

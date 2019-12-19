@@ -973,7 +973,17 @@ export default class GraphEditor extends HTMLElement {
         if (this.isInteractive) {
             nodeSelection.call(
                 drag<SVGGElement, Node, NodeMovementInformation>()
-                    .subject((node) => this.getNodeMovementInformation(node, event.x, event.y))
+                    .subject((node) => {
+                        const movementInfo = this.getNodeMovementInformation(node, event.x, event.y);
+                        const startTreeParent = this.groupingManager.getTreeParentOf(movementInfo.node.id);
+                        if (startTreeParent != null) {
+                            const behaviour = this.groupingManager.getGroupBehaviourOf(startTreeParent);
+                            if (behaviour.onNodeMoveStart != null) {
+                                behaviour.onNodeMoveStart(startTreeParent, movementInfo.node.id.toString(), this.objectCache.getNode(startTreeParent), movementInfo.node, this);
+                            }
+                        }
+                        return movementInfo;
+                    })
                     .on('drag', () => {
                         let x = event.x;
                         let y = event.y;
@@ -994,6 +1004,16 @@ export default class GraphEditor extends HTMLElement {
                             this.completeRender();
                         } else {
                             this.updateGraphPositions();
+                        }
+                    })
+                    .on('end', () => {
+                        const node = event.subject.node;
+                        const endTreeParent = this.groupingManager.getTreeParentOf(node.id);
+                        if (endTreeParent != null) {
+                            const behaviour = this.groupingManager.getGroupBehaviourOf(endTreeParent);
+                            if (behaviour.onNodeMoveEnd != null) {
+                                behaviour.onNodeMoveEnd(endTreeParent, node.id.toString(), this.objectCache.getNode(endTreeParent), node, this);
+                            }
                         }
                     })
             );
@@ -1101,9 +1121,30 @@ export default class GraphEditor extends HTMLElement {
     public moveNode(nodeId: string | number, x: number, y: number, updatePositions: boolean= false): void {
         const node = this.objectCache.getNode(nodeId);
         const nodeMovementInfo = this.getNodeMovementInformation(node, node.x, node.y);
+        const startTreeParent = this.groupingManager.getTreeParentOf(nodeMovementInfo.node.id);
+        if (startTreeParent != null) {
+            const behaviour = this.groupingManager.getGroupBehaviourOf(startTreeParent);
+            if (behaviour.onNodeMoveStart != null) {
+                behaviour.onNodeMoveStart(startTreeParent, nodeMovementInfo.node.id.toString(), this.objectCache.getNode(startTreeParent), nodeMovementInfo.node, this);
+            }
+        }
+        let needsFullRender: boolean = false;
+        needsFullRender = this.tryToLeaveCurrentGroup(nodeMovementInfo, x, y, EventSource.API) || needsFullRender;
+        needsFullRender = this.tryJoinNodeIntoGroup(nodeMovementInfo, x, y, EventSource.API) || needsFullRender;
         this._moveNode(nodeMovementInfo, x, y, EventSource.API);
+        const endTreeParent = this.groupingManager.getTreeParentOf(nodeMovementInfo.node.id);
+        if (endTreeParent != null) {
+            const behaviour = this.groupingManager.getGroupBehaviourOf(endTreeParent);
+            if (behaviour.onNodeMoveEnd != null) {
+                behaviour.onNodeMoveEnd(endTreeParent, nodeMovementInfo.node.id.toString(), this.objectCache.getNode(endTreeParent), nodeMovementInfo.node, this);
+            }
+        }
         if (updatePositions) {
-            this.updateGraphPositions();
+            if (needsFullRender) {
+                this.completeRender();
+            } else {
+                this.updateGraphPositions();
+            }
         }
     }
 
@@ -1161,7 +1202,7 @@ export default class GraphEditor extends HTMLElement {
             const groupBehaviour = this.groupingManager.getGroupBehaviourOf(currentTreeParent);
             if (groupBehaviour.beforeNodeMove != null) {
                 const groupNode = this.objectCache.getNode(currentTreeParent);
-                groupBehaviour.beforeNodeMove(groupNode, node, {x: x, y: y}, this);
+                groupBehaviour.beforeNodeMove(currentTreeParent, node.id.toString(), groupNode, node, {x: x, y: y}, this);
             }
         }
         // check for fixed group positions
@@ -1198,7 +1239,7 @@ export default class GraphEditor extends HTMLElement {
         return p.matrixTransform(ng.node().getScreenCTM());
     }
 
-    private tryToLeaveCurrentGroup(nodeMovementInformation: NodeMovementInformation, x: number, y: number): boolean {
+    private tryToLeaveCurrentGroup(nodeMovementInformation: NodeMovementInformation, x: number, y: number, eventSource: EventSource= EventSource.USER_INTERACTION): boolean {
         const node = nodeMovementInformation.node;
 
         const currentGroup = this.groupingManager.getTreeParentOf(node.id);
@@ -1225,7 +1266,7 @@ export default class GraphEditor extends HTMLElement {
         });
 
         if (isOutsideGroup) {
-            if (this.groupingManager.getCanDraggedNodeLeaveGroup(currentGroup, node)) {
+            if (this.groupingManager.getCanDraggedNodeLeaveGroup(currentGroup, node.id, node)) {
                 console.log('try leave group')
                 this.groupingManager.removeNodeFromGroup(currentGroup, node.id);
                 return true;
@@ -1234,7 +1275,7 @@ export default class GraphEditor extends HTMLElement {
         return false;
     }
 
-    private tryJoinNodeIntoGroup(nodeMovementInformation: NodeMovementInformation, x: number, y: number): boolean {
+    private tryJoinNodeIntoGroup(nodeMovementInformation: NodeMovementInformation, x: number, y: number, eventSource: EventSource= EventSource.USER_INTERACTION): boolean {
         const node = nodeMovementInformation.node;
 
         if (this.groupingManager.getTreeParentOf(node.id) != null) {
@@ -1246,7 +1287,7 @@ export default class GraphEditor extends HTMLElement {
         const possibleTargetNodes = this.getNodesFromPoint(clientPoint.x, clientPoint.y);
         const targetNode = possibleTargetNodes.find(target => target.id !== node.id);
         if (targetNode != null) {
-            const canJoinGroup = this.groupingManager.getGroupCapturingDraggedNode(targetNode, node);
+            const canJoinGroup = this.groupingManager.getGroupCapturingDraggedNode(targetNode.id, node.id, targetNode, node);
             if (canJoinGroup != null) {
                 console.log(node.id, 'joined group', canJoinGroup)
                 if (this.groupingManager.getTreeRootOf(canJoinGroup) == null) {
@@ -2715,7 +2756,7 @@ export default class GraphEditor extends HTMLElement {
                                 const targetGroupNode = this.getNode(targetGroupCapturingEdge);
                                 // eslint-disable-next-line max-depth
                                 if (targetGroupBehaviour?.delegateIncomingEdgeTargetToNode != null && targetGroupNode != null) {
-                                    const newTarget = targetGroupBehaviour.delegateIncomingEdgeTargetToNode(targetGroupNode, edge, this);
+                                    const newTarget = targetGroupBehaviour.delegateIncomingEdgeTargetToNode(targetGroupCapturingEdge, targetGroupNode, edge, this);
                                     // eslint-disable-next-line max-depth
                                     if (newTarget != null && newTarget !== '' && this.getNode(newTarget) !== null) {
                                         edge.target = newTarget;
@@ -2739,7 +2780,7 @@ export default class GraphEditor extends HTMLElement {
                 const groupBehaviour = this.groupingManager.getGroupBehaviourOf(capturingGroup);
                 const groupNode = this.getNode(capturingGroup);
                 if (groupBehaviour != null && groupNode != null && groupBehaviour.delegateOutgoingEdgeSourceToNode != null) {
-                    const newSource = groupBehaviour.delegateOutgoingEdgeSourceToNode(groupNode, edge, this);
+                    const newSource = groupBehaviour.delegateOutgoingEdgeSourceToNode(capturingGroup, groupNode, edge, this);
                     if (newSource != null && newSource !== '' && this.getNode(newSource) !== null) {
                         edge.source = newSource;
                     }
