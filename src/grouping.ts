@@ -1,6 +1,7 @@
 import { Node } from './node';
 import GraphEditor from './grapheditor';
 import { Edge, Point } from './edge';
+import { filterDropzonesByType, calculateSquaredDistanceFromNodeToDropZone } from './drop-zone';
 
 
 class NodeGroup {
@@ -68,40 +69,31 @@ export function defaultBeforeNodeMove(this: GroupBehaviour, groupNode: Node, chi
         if (this.childNodePositions == null) {
             this.childNodePositions = new Map();
         }
+
+        // find nearest dropZone
         let bestDropZone: string;
         let bestDistance: number;
         let lastDropZone: string;
-        for (const [key, dropZone] of dropZones) {
-            if (this.occupiedDropZones.has(key)) {
-                if (this.occupiedDropZones.get(key) === childNode.id.toString()) {
-                    lastDropZone = key;
+        for (const dropZone of filterDropzonesByType(dropZones, childNode.type)) {
+            if (this.occupiedDropZones.has(dropZone.id)) {
+                if (this.occupiedDropZones.get(dropZone.id) === childNode.id.toString()) {
+                    lastDropZone = dropZone.id;
                 } else {
                     continue;
                 }
             }
-            const nodeType = childNode.type || 'default';
-            if (!dropZone.whitelist.has(nodeType)) {
-                // nodeType is not in whitelist
-                if (dropZone.whitelist.size > 0) {
-                    continue; // whitelist is not empty
-                }
-                if (dropZone.blacklist.has(nodeType)) {
-                    continue; // nodeType is in blacklist
-                }
-            }
-            const dropZonePos = {
-                x: groupNode.x + dropZone.bbox.x + dropZone.bbox.width / 2,
-                y: groupNode.y + dropZone.bbox.y + dropZone.bbox.height / 2,
-            };
-            const distance = ((newPosition.x - dropZonePos.x) ** 2) + ((newPosition.y - dropZonePos.y) ** 2);
+            const distance = calculateSquaredDistanceFromNodeToDropZone(groupNode, dropZone, newPosition);
             if (bestDistance == null || bestDistance > distance) {
                 bestDistance = distance;
-                bestDropZone = key;
+                bestDropZone = dropZone.id;
             }
         }
         if (lastDropZone != null && lastDropZone !== bestDropZone) {
+            // old dropZone is no longer occupied
             this.occupiedDropZones.delete(lastDropZone);
         }
+
+        // fix node to nearest dropzone
         if (bestDropZone != null) {
             this.occupiedDropZones.set(bestDropZone, childNode.id.toString());
             this.childNodePositions.set(childNode.id.toString(), bestDropZone);
@@ -408,7 +400,7 @@ export class GroupingManager {
         const groupId = groupNode.id.toString();
         let currentGroup: NodeGroup = this.groupsById.get(groupId);
 
-        // eslint-disable-next-line no-shadow, complexity
+        // eslint-disable-next-line no-shadow
         const checkGroup = (group: NodeGroup, groupNode: Node, node: Node) => {
             const behaviour = group?.groupBehaviour;
             if (behaviour?.captureDraggedNodes ?? false) {
@@ -418,26 +410,15 @@ export class GroupingManager {
                         return true;
                     }
                     const dropZones = this.graphEditor.getNodeDropZonesForNode(groupNode);
-                    for (const [key, zone] of dropZones.entries()) {
+                    for (const zone of filterDropzonesByType(dropZones, node.type)) {
                         if (behaviour.occupiedDropZones != null) {
-                            if (behaviour.occupiedDropZones.has(key)) {
+                            if (behaviour.occupiedDropZones.has(zone.id)) {
                                 // drop zone is occupied
                                 // eslint-disable-next-line max-depth
-                                if (behaviour.occupiedDropZones.get(key) === node.id.toString()) {
+                                if (behaviour.occupiedDropZones.get(zone.id) === node.id.toString()) {
                                     return true; // occupied by the node in question, this cannot happen normally...
                                 }
                                 continue;
-                            }
-                        }
-                        // dropZone is not occupied, check if node type is allowed
-                        const nodeType = node.type || 'default';
-                        if (!zone.whitelist.has(nodeType)) {
-                            // nodeType is not in whitelist
-                            if (zone.whitelist.size > 0) {
-                                continue; // whitelist is not empty
-                            }
-                            if (zone.blacklist.has(nodeType)) {
-                                continue; // nodeType is in blacklist
                             }
                         }
                         return true;
