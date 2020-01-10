@@ -115,6 +115,22 @@
                     { id: 7, title: 'iv', type: 'simple-node', x: 230, y: 150 },
                 ];
 
+                graph.addEventListener('groupjoin', function test(event) {
+                    console.log(event.type, event.detail);
+                });
+
+                graph.addEventListener('groupleave', function test(event) {
+                    console.log(event.type, event.detail);
+                });
+
+                graph.addEventListener('groupdepthchange', function test(event) {
+                    console.log(event.type, event.detail);
+                });
+
+                graph.addEventListener('grouptreechange', function test(event) {
+                    console.log(event.type, event.detail);
+                });
+
                 var gm = graph.groupingManager;
                 gm.markAsTreeRoot(1);
 

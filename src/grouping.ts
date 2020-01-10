@@ -1,10 +1,17 @@
 import { Node } from './node';
-import GraphEditor from './grapheditor';
+import GraphEditor, { EventSource } from './grapheditor';
 import { Edge, Point } from './edge';
 import { filterDropzonesByType, calculateSquaredDistanceFromNodeToDropZone } from './drop-zone';
 
 
-class NodeGroup {
+export interface TreeInformation {
+    treeRoot: string;
+    treeParent: string;
+    treeDepth: number;
+}
+
+
+export class NodeGroup implements TreeInformation {
     readonly groupId: string;
 
     readonly parents: Set<string>;
@@ -26,8 +33,8 @@ class NodeGroup {
 }
 
 
-type GroupBehaviourDecisionCallback = (group: string, childGroup: string, groupNode: Node, childNode: Node, graphEditor: GraphEditor) => boolean;
-type GroupBehaviourEdgeDelegationCallback = (group: string, groupNode: Node, edge: Edge, graphEditor: GraphEditor) => string;
+export type GroupBehaviourDecisionCallback = (group: string, childGroup: string, groupNode: Node, childNode: Node, graphEditor: GraphEditor) => boolean;
+export type GroupBehaviourEdgeDelegationCallback = (group: string, groupNode: Node, edge: Edge, graphEditor: GraphEditor) => string;
 
 
 export interface GroupBehaviour {
@@ -155,7 +162,7 @@ export class GroupingManager {
         return newGroup;
     }
 
-    addNodeToGroup(groupId: string|number, nodeId: string|number, atPosition?: Point): void {
+    addNodeToGroup(groupId: string|number, nodeId: string|number, atPosition?: Point, eventSource: EventSource = EventSource.API, sourceEvent?: Event): void {
         const group = this.getGroupForNode(groupId);
         if (group.children.has(nodeId.toString())) {
             return;
@@ -172,15 +179,16 @@ export class GroupingManager {
         const childGroup = this.getGroupForNode(nodeId);
         group.children.add(childGroup.groupId);
         childGroup.parents.add(group.groupId);
+        this.updateGroupDepth(childGroup, eventSource, sourceEvent);
         if (group.treeRoot != null) {
-            this.propagateTreeRoot(group, childGroup);
+            this.propagateTreeRoot(group, childGroup, eventSource, sourceEvent);
         }
-        this.updateGroupDepth(childGroup);
+        const groupNode = this.graphEditor.getNode(groupId);
+        const childNode = this.graphEditor.getNode(nodeId);
         if (group.groupBehaviour?.afterNodeJoinedGroup != null) {
-            const groupNode = this.graphEditor.getNode(groupId);
-            const childNode = this.graphEditor.getNode(nodeId);
             group.groupBehaviour.afterNodeJoinedGroup(group.groupId, childGroup.groupId, groupNode, childNode, this.graphEditor, atPosition);
         }
+        this.afterGroupJoin(group.groupId, childGroup.groupId, groupNode, childNode, eventSource, sourceEvent);
     }
 
     getChildrenOf(groupId: string|number): Set<string> {
@@ -227,7 +235,7 @@ export class GroupingManager {
         return children;
     }
 
-    private propagateTreeRoot(parent: NodeGroup, child: NodeGroup) {
+    private propagateTreeRoot(parent: NodeGroup, child: NodeGroup, eventSource: EventSource, sourceEvent?: Event) {
         if (parent.treeRoot == null) {
             // parent is not part of a tree
             return;
@@ -236,13 +244,19 @@ export class GroupingManager {
             // child is already part of a tree
             return;
         }
+        const oldTreeInfo: TreeInformation = {
+            treeRoot: child.treeRoot,
+            treeParent: child.treeParent,
+            treeDepth: child.treeDepth,
+        };
         child.treeRoot = parent.treeRoot;
         child.treeParent = parent.groupId;
         child.treeDepth = parent.treeDepth + 1;
-        child.children.forEach(cId => this.propagateTreeRoot(child, this.getGroupForNode(cId)));
+        this.dispatchTreeChangedEvent(child.groupId, oldTreeInfo, child, eventSource, sourceEvent);
+        child.children.forEach(cId => this.propagateTreeRoot(child, this.getGroupForNode(cId), eventSource, sourceEvent));
     }
 
-    private updateGroupDepth(group: NodeGroup) {
+    private updateGroupDepth(group: NodeGroup, eventSource: EventSource, sourceEvent?: Event) {
         let newDepth = 0;
         if (group.parents.size > 0) {
             group.parents.forEach(parentId => {
@@ -250,14 +264,16 @@ export class GroupingManager {
                 newDepth = Math.max(newDepth, parentDepth + 1);
             });
         }
+        const oldDepth = group.groupDepth;
         const depthChanged = group.groupDepth !== newDepth;
         group.groupDepth = newDepth;
         if (depthChanged) {
-            group.children.forEach(childId => this.updateGroupDepth(this.getGroupForNode(childId)));
+            this.dispatchGroupDepthChangedEvent(group.groupId, oldDepth, newDepth, eventSource, sourceEvent);
+            group.children.forEach(childId => this.updateGroupDepth(this.getGroupForNode(childId), eventSource, sourceEvent));
         }
     }
 
-    removeNodeFromGroup(groupId: string|number, nodeId: string|number): void {
+    removeNodeFromGroup(groupId: string|number, nodeId: string|number, eventSource: EventSource = EventSource.API, sourceEvent?: Event): void {
         const group = this.getGroupForNode(groupId);
         if (!group.children.has(nodeId.toString())) {
             return;
@@ -265,29 +281,36 @@ export class GroupingManager {
         const childGroup = this.getGroupForNode(nodeId);
         group.children.delete(childGroup.groupId);
         childGroup.parents.delete(group.groupId);
+        this.updateGroupDepth(childGroup, eventSource, sourceEvent);
         if (childGroup.treeRoot != null) {
-            this._leaveTree(childGroup, childGroup.treeRoot, true);
+            this._leaveTree(childGroup, childGroup.treeRoot, true, eventSource, sourceEvent);
         }
-        this.updateGroupDepth(childGroup);
+        const groupNode = this.graphEditor.getNode(groupId);
+        const childNode = this.graphEditor.getNode(nodeId);
         if (group.groupBehaviour?.afterNodeLeftGroup != null) {
-            const groupNode = this.graphEditor.getNode(groupId);
-            const childNode = this.graphEditor.getNode(nodeId);
             group.groupBehaviour.afterNodeLeftGroup(group.groupId, childGroup.groupId, groupNode, childNode, this.graphEditor);
         }
+        this.afterGroupLeave(group.groupId, childGroup.groupId, groupNode, childNode, eventSource, sourceEvent);
     }
 
-    leaveTree(groupId: string|number, treeRootId: string|number): void {
-        this._leaveTree(this.getGroupForNode(groupId), treeRootId.toString());
+    leaveTree(groupId: string|number, treeRootId: string|number, eventSource: EventSource = EventSource.API, sourceEvent?: Event): void {
+        this._leaveTree(this.getGroupForNode(groupId), treeRootId.toString(), false, eventSource, sourceEvent);
     }
 
-    private _leaveTree(group: NodeGroup, treeRootId: string, rejoin: boolean= false) {
+    private _leaveTree(group: NodeGroup, treeRootId: string, rejoin: boolean= false, eventSource: EventSource, sourceEvent?: Event) {
         if (group.treeRoot == null || group.treeRoot !== treeRootId) {
             return;
         }
+        const oldTreeInfo: TreeInformation = {
+            treeRoot: group.treeRoot,
+            treeParent: group.treeParent,
+            treeDepth: group.treeDepth,
+        };
         group.treeRoot = null;
         group.treeParent = null;
         group.treeDepth = null;
-        group.children.forEach(cId => this._leaveTree(this.getGroupForNode(cId), treeRootId));
+        this.dispatchTreeChangedEvent(group.groupId, oldTreeInfo, group, eventSource, sourceEvent);
+        group.children.forEach(cId => this._leaveTree(this.getGroupForNode(cId), treeRootId, false, eventSource, sourceEvent));
         if (rejoin) {
             // rejoin the same tree if possible
             let closestParent: NodeGroup;
@@ -303,12 +326,12 @@ export class GroupingManager {
                 }
             });
             if (closestParent != null) {
-                this.propagateTreeRoot(closestParent, group);
+                this.propagateTreeRoot(closestParent, group, eventSource, sourceEvent);
             }
         }
     }
 
-    joinTreeOfParent(groupId: string|number, treeParentId: string|number): void {
+    joinTreeOfParent(groupId: string|number, treeParentId: string|number, eventSource: EventSource = EventSource.API, sourceEvent?: Event): void {
         const group = this.getGroupForNode(groupId);
         const parentGroup = this.getGroupForNode(treeParentId);
         if (!group.parents.has(parentGroup.groupId)) {
@@ -320,21 +343,27 @@ export class GroupingManager {
         }
         if (group.treeRoot != null) {
             // leave old tree
-            this._leaveTree(group, group.treeRoot);
+            this._leaveTree(group, group.treeRoot, false, eventSource, sourceEvent);
         }
-        this.propagateTreeRoot(parentGroup, group);
+        this.propagateTreeRoot(parentGroup, group, eventSource, sourceEvent);
     }
 
-    markAsTreeRoot(groupId: string|number): void {
+    markAsTreeRoot(groupId: string|number, eventSource: EventSource = EventSource.API, sourceEvent?: Event): void {
         const group = this.getGroupForNode(groupId);
         if (group.treeRoot != null && group.treeRoot !== group.groupId) {
             console.error(`Node ${groupId} is already part of tree ${group.treeRoot} and cannot become a treeRoot itself!`);
             return;
         }
+        const oldTreeInfo: TreeInformation = {
+            treeRoot: group.treeRoot,
+            treeParent: group.treeParent,
+            treeDepth: group.treeDepth,
+        };
         group.treeRoot = group.groupId;
         group.treeParent = null;
         group.treeDepth = 0;
-        group.children.forEach(cId => this.propagateTreeRoot(group, this.getGroupForNode(cId)));
+        this.dispatchTreeChangedEvent(group.groupId, oldTreeInfo, group, eventSource, sourceEvent);
+        group.children.forEach(cId => this.propagateTreeRoot(group, this.getGroupForNode(cId), eventSource, sourceEvent));
     }
 
     setGroupBehaviourOf(groupId: string|number, groupBehaviour: GroupBehaviour): void {
@@ -479,5 +508,80 @@ export class GroupingManager {
             return true;
         }
         return false;
+    }
+
+    private afterGroupJoin(parentGroupId: string, childGroupId: string, parentNode?: Node, childNode?: Node, eventSource: EventSource = EventSource.API, sourceEvent?: Event) {
+        this.dispatchGroupChangeEvent('groupjoin', eventSource, parentGroupId, childGroupId, parentNode, childNode, sourceEvent);
+    }
+
+    private afterGroupLeave(parentGroupId: string, childGroupId: string, parentNode?: Node, childNode?: Node, eventSource: EventSource = EventSource.API, sourceEvent?: Event) {
+        this.dispatchGroupChangeEvent('groupleave', eventSource, parentGroupId, childGroupId, parentNode, childNode, sourceEvent);
+    }
+
+    // eslint-disable-next-line max-len
+    private dispatchGroupChangeEvent(eventType: 'groupjoin'|'groupleave', eventSource: EventSource, parentGroupId: string, childGroupId: string, parentNode: Node, childNode: Node, sourceEvent: Event) {
+        const details: any = {
+            eventSource: eventSource,
+            parentGroup: parentGroupId,
+            childGroup: childGroupId,
+        };
+        if (parentNode != null) {
+            details.parentNode = parentNode;
+        }
+        if (childNode != null) {
+            details.childNode = childNode;
+        }
+        if (sourceEvent != null) {
+            details.sourceEvent = sourceEvent;
+        }
+        const event = new CustomEvent(eventType, {
+            bubbles: true,
+            composed: true,
+            cancelable: false,
+            detail: details,
+        });
+        this.graphEditor.dispatchEvent(event);
+    }
+
+    private dispatchGroupDepthChangedEvent(groupId, oldDepth: number, newDepth: number, eventSource: EventSource, sourceEvent?: Event) {
+        const details: any = {
+            eventSource: eventSource,
+            group: groupId,
+            oldDepth: oldDepth,
+            newDepth: newDepth,
+        };
+        if (sourceEvent != null) {
+            details.sourceEvent = sourceEvent;
+        }
+        const event = new CustomEvent('groupdepthchange', {
+            bubbles: true,
+            composed: true,
+            cancelable: false,
+            detail: details,
+        });
+        this.graphEditor.dispatchEvent(event);
+    }
+
+    private dispatchTreeChangedEvent(groupId, oldInfo: TreeInformation, newInfo: TreeInformation, eventSource: EventSource, sourceEvent?: Event) {
+        const details: any = {
+            eventSource: eventSource,
+            group: groupId,
+            oldTreeRoot: oldInfo.treeRoot,
+            oldTreeParent: oldInfo.treeParent,
+            oldTreeDepth: oldInfo.treeDepth,
+            newTreeRoot: newInfo.treeRoot,
+            newTreeParent: newInfo.treeParent,
+            newTreeDepth: newInfo.treeDepth,
+        };
+        if (sourceEvent != null) {
+            details.sourceEvent = sourceEvent;
+        }
+        const event = new CustomEvent('grouptreechange', {
+            bubbles: true,
+            composed: true,
+            cancelable: false,
+            detail: details,
+        });
+        this.graphEditor.dispatchEvent(event);
     }
 }

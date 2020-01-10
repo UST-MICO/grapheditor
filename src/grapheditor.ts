@@ -997,8 +997,8 @@ export default class GraphEditor extends HTMLElement {
                             }
                         }
                         let needsFullRender: boolean = false;
-                        needsFullRender = this.tryToLeaveCurrentGroup(event.subject, x, y) || needsFullRender;
-                        needsFullRender = this.tryJoinNodeIntoGroup(event.subject, x, y) || needsFullRender;
+                        needsFullRender = this.tryToLeaveCurrentGroup(event.subject, x, y, EventSource.USER_INTERACTION, event) || needsFullRender;
+                        needsFullRender = this.tryJoinNodeIntoGroup(event.subject, x, y, EventSource.USER_INTERACTION, event) || needsFullRender;
                         this._moveNode(event.subject, event.x, event.y, EventSource.USER_INTERACTION);
                         if (needsFullRender) {
                             this.completeRender();
@@ -1239,7 +1239,7 @@ export default class GraphEditor extends HTMLElement {
         return p.matrixTransform(ng.node().getScreenCTM());
     }
 
-    private tryToLeaveCurrentGroup(nodeMovementInformation: NodeMovementInformation, x: number, y: number, eventSource: EventSource= EventSource.USER_INTERACTION): boolean {
+    private tryToLeaveCurrentGroup(nodeMovementInformation: NodeMovementInformation, x: number, y: number, eventSource: EventSource, sourceEvent?: Event): boolean {
         const node = nodeMovementInformation.node;
 
         const currentGroup = this.groupingManager.getTreeParentOf(node.id);
@@ -1267,15 +1267,14 @@ export default class GraphEditor extends HTMLElement {
 
         if (isOutsideGroup) {
             if (this.groupingManager.getCanDraggedNodeLeaveGroup(currentGroup, node.id, node)) {
-                console.log('try leave group')
-                this.groupingManager.removeNodeFromGroup(currentGroup, node.id);
+                this.groupingManager.removeNodeFromGroup(currentGroup, node.id, eventSource, sourceEvent);
                 return true;
             }
         }
         return false;
     }
 
-    private tryJoinNodeIntoGroup(nodeMovementInformation: NodeMovementInformation, x: number, y: number, eventSource: EventSource= EventSource.USER_INTERACTION): boolean {
+    private tryJoinNodeIntoGroup(nodeMovementInformation: NodeMovementInformation, x: number, y: number, eventSource: EventSource, sourceEvent?: Event): boolean {
         const node = nodeMovementInformation.node;
 
         if (this.groupingManager.getTreeParentOf(node.id) != null) {
@@ -1289,15 +1288,13 @@ export default class GraphEditor extends HTMLElement {
         if (targetNode != null) {
             const canJoinGroup = this.groupingManager.getGroupCapturingDraggedNode(targetNode.id, node.id, targetNode, node);
             if (canJoinGroup != null) {
-                console.log(node.id, 'joined group', canJoinGroup)
                 if (this.groupingManager.getTreeRootOf(canJoinGroup) == null) {
                     // canJoinGroup is not part of a tree => mark it as a tree root
-                    this.groupingManager.markAsTreeRoot(canJoinGroup);
+                    this.groupingManager.markAsTreeRoot(canJoinGroup, eventSource, sourceEvent);
                 }
-                this.groupingManager.addNodeToGroup(canJoinGroup, node.id, {x: x, y: y});
+                this.groupingManager.addNodeToGroup(canJoinGroup, node.id, {x: x, y: y}, eventSource, sourceEvent);
                 if (this.groupingManager.getTreeDepthOf(node.id) === 0) {
-                    console.log('Join tree as subtree')
-                    this.groupingManager.joinTreeOfParent(node.id, canJoinGroup);
+                    this.groupingManager.joinTreeOfParent(node.id, canJoinGroup, eventSource, sourceEvent);
                 }
                 return true;
             }
