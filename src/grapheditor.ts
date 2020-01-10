@@ -123,6 +123,18 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
+     * Callback before a Node is moved.
+     *
+     * Use this callback to manipulate the provided movement information.
+     * The callback must return the modified movement information.
+     * If the callback returns null the node movement is cancelled.
+     *
+     * @param nodeMovementInfo the movement information containing the node that is about to move
+     * @returns the modified movement information
+     */
+    public onBeforeNodeMove: (nodeMovementInfo: NodeMovementInformation) => NodeMovementInformation;
+
+    /**
      * Callback when a new dragged edge is created.
      *
      * Use this callback only to customize the edge attributes like markers or type!
@@ -975,6 +987,9 @@ export default class GraphEditor extends HTMLElement {
                 drag<SVGGElement, Node, NodeMovementInformation>()
                     .subject((node) => {
                         const movementInfo = this.getNodeMovementInformation(node, event.x, event.y);
+                        if (movementInfo == null) {
+                            return; // move was cancelled by callback
+                        }
                         const startTreeParent = this.groupingManager.getTreeParentOf(movementInfo.node.id);
                         if (startTreeParent != null) {
                             const behaviour = this.groupingManager.getGroupBehaviourOf(startTreeParent);
@@ -1115,12 +1130,22 @@ export default class GraphEditor extends HTMLElement {
             dx: x - movementInfo.node.x,
             dy: y - movementInfo.node.y,
         };
+        if (this.onBeforeNodeMove != null) {
+            try {
+                return this.onBeforeNodeMove(movementInfo);
+            } catch (error) {
+                console.error('An error has occured in the onBeforeNodeMove callback.', node, movementInfo);
+            }
+        }
         return movementInfo;
     }
 
     public moveNode(nodeId: string | number, x: number, y: number, updatePositions: boolean= false): void {
         const node = this.objectCache.getNode(nodeId);
         const nodeMovementInfo = this.getNodeMovementInformation(node, node.x, node.y);
+        if (nodeMovementInfo == null) {
+            return; // move was cancelled by callback
+        }
         const startTreeParent = this.groupingManager.getTreeParentOf(nodeMovementInfo.node.id);
         if (startTreeParent != null) {
             const behaviour = this.groupingManager.getGroupBehaviourOf(startTreeParent);
