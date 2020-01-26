@@ -49,7 +49,7 @@ LineAttachementInfo
 .. js:autoclass:: LineAttachementInfo
    :members:
 
-Related Functions
-^^^^^^^^^^^^^^^^^
+Edge-Related Positioning Functions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. js:autofunction:: normalizePositionOnLine
