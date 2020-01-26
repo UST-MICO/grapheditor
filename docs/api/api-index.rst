@@ -8,6 +8,7 @@ API
    link-handle
    marker
    text-component
+   util
    positioning
    text-wrapping
    static-template-registry
@@ -15,3 +16,5 @@ API
    dynamic-templates
    edge-path-generator-registry
    edge-path-generators
+   grouping
+   drop-zone
