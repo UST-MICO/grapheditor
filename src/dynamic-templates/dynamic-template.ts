@@ -151,6 +151,11 @@ export interface DynamicTextComponentTemplate extends DynamicTemplate<TextCompon
     updateAfterTextwrapping(g: Selection<SVGGElement, TextComponent, any, unknown>, grapheditor: GraphEditor, context: DynamicChildElementTemplateContext): void;
 }
 
+/**
+ * Default implementation of the dynamic text component template interface.
+ *
+ * Adds a single text element to the group.
+ */
 export class DefaultTextComponentTemplate implements DynamicTextComponentTemplate {
 
     renderInitialTemplate(g: Selection<SVGGElement, TextComponent, any, unknown>, grapheditor: GraphEditor, context: DynamicChildElementTemplateContext): void {

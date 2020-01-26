@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+/**
+ * Vector used for angles and offsets.
+ */
 export interface RotationVector {
     dx: number;
     dy: number;

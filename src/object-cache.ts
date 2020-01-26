@@ -111,14 +111,31 @@ export class GraphObjectCache {
         return this.nodeBBoxes.get(id.toString());
     }
 
+    /**
+     * Set new dropzone onformation for a node.
+     *
+     * @param id the id of the node to update the dropzones for
+     * @param dropZones the new dropzones
+     */
     setNodeDropZones(id: number|string, dropZones: Map<string, NodeDropZone>): void {
         this.nodeDropZones.set(id.toString(), dropZones);
     }
 
+    /**
+     * Get all dropzones of a node.
+     *
+     * @param id the id of the node to get the dropzones for
+     */
     getAllDropZones(id: number|string): Map<string, NodeDropZone> {
         return this.nodeDropZones.get(id.toString());
     }
 
+    /**
+     * Get a specific dropzone of a node.
+     *
+     * @param id the id of the node to get the dropzone for
+     * @param dropZoneId the id of the dropzones
+     */
     getDropZone(id: number|string, dropZoneId: string): NodeDropZone {
         return this.nodeDropZones.get(id.toString())?.get(dropZoneId);
     }
