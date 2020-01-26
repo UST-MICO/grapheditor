@@ -160,7 +160,11 @@ export interface GroupBehaviour {
     captureDraggedNodes?: boolean;
     /** If true always allow free positioning of child nodes inside the group. (Always true if the node has no defined drop zones.)*/
     allowFreePositioning?: boolean;
-    /** Decide whether this specific node may join this group. */
+    /**
+     * Decide whether this specific node may join this group.
+     *
+     * Default implementation: `defaultCaptureThisDraggedNode`
+     */
     captureThisDraggedNode?: GroupBehaviourDecisionCallback;
 
     /** If true dragged nodes can generally leave this group. */
@@ -247,6 +251,52 @@ export interface GroupBehaviour {
      */
     childNodePositions?: Map<string, string|Point>;
 }
+
+/**
+ * Default behaviour of the `captureThisDraggedNode` GroupBehaviourDecisionCallback of a GroupBehaviour.
+ *
+ * If the group behaviour has `allowFreePositioning` set as `true` then this method
+ * always returns true.
+ *
+ * This method rerturns true if the group node has an unoccupied dropzone that allows the type
+ * of the childNode in its filters.
+ *
+ * If the dropzone is already marked as occupied by the same id as the childNode the dropzone
+ * is **not** considered occupied by this method!
+ *
+ * @param this the GroupBehaviour
+ * @param group the group id of this group
+ * @param childGroup the group id of the group (or node) the action will be performed for
+ * @param groupNode the node in the grapheditor with the same id as `group`, may be null.
+ * @param childNode the node in the grapheditor with the same id as `childGroup`, may be null.
+ * @param graphEditor the instance of the grapheditor.
+ * @returns true iff the node can join the group
+ */
+export function defaultCaptureThisDraggedNode(this: GroupBehaviour, group: string, childGroup: string, groupNode: Node, childNode: Node, graphEditor: GraphEditor): boolean {
+    if (this.allowFreePositioning) {
+        return true;
+    }
+    if (childNode == null) {
+        return false;
+    }
+    const dropZones = graphEditor.getNodeDropZonesForNode(group);
+    for (const zone of filterDropzonesByType(dropZones, childNode.type)) {
+        if (this.occupiedDropZones != null) {
+            if (this.occupiedDropZones.has(zone.id)) {
+                // drop zone is occupied
+                if (this.occupiedDropZones.get(zone.id) === childNode.id.toString()) {
+                    // occupied by the node in question, this cannot happen normally...
+                    // assume node can join or already has joined this group
+                    return true;
+                }
+                continue; // check next dropzone
+            }
+        }
+        // drop zone is free
+        return true;
+    }
+    return false;
+};
 
 /**
  * Default behaviour of the `beforeNodeMove` callback of a GroupBehaviour.
@@ -795,14 +845,17 @@ export class GroupingManager {
     /**
      * Set the graoup behaviour.
      *
-     * The default implementations for `afterNodeJoinedGroup`, `afterNodeLeftGroup`
-     * and `beforeNodeMove` will be inserted into the given groupBehaviour if
-     * the behaviour does not specify them already.
+     * The default implementations for `captureThisDraggedNode`, `afterNodeJoinedGroup`,
+     * `afterNodeLeftGroup` and `beforeNodeMove` will be inserted into the given groupBehaviour
+     * if the behaviour does not specify them already.
      *
      * @param groupId the group to set the behaviour for
      * @param groupBehaviour the group behaviour
      */
     setGroupBehaviourOf(groupId: string|number, groupBehaviour: GroupBehaviour): void {
+        if (groupBehaviour.captureThisDraggedNode == null) {
+            groupBehaviour.captureThisDraggedNode = defaultCaptureThisDraggedNode;
+        }
         if (groupBehaviour.afterNodeJoinedGroup == null) {
             groupBehaviour.afterNodeJoinedGroup = defaultAfterNodeJoinedGroup;
         }
@@ -819,7 +872,7 @@ export class GroupingManager {
      * Get the group behaviour of a specific group.
      *
      * The returned group behaviour will always have at least the default implementations
-     * for `afterNodeJoinedGroup`, `afterNodeLeftGroup` and `beforeNodeMove` set.
+     * for `captureThisDraggedNode`, `afterNodeJoinedGroup`, `afterNodeLeftGroup` and `beforeNodeMove` set.
      *
      * The returned group behaviour may be null if the group id was never used before.
      *
@@ -831,6 +884,9 @@ export class GroupingManager {
             return null;
         }
         const groupBehaviour = group.groupBehaviour ?? {};
+        if (groupBehaviour.captureThisDraggedNode == null) {
+            groupBehaviour.captureThisDraggedNode = defaultCaptureThisDraggedNode;
+        }
         if (groupBehaviour.afterNodeJoinedGroup == null) {
             groupBehaviour.afterNodeJoinedGroup = defaultAfterNodeJoinedGroup;
         }
@@ -864,8 +920,9 @@ export class GroupingManager {
         while (currentGroup?.treeParent != null && currentGroup.groupId !== currentGroup.treeRoot) {
             const parentGroup = this.getGroupForNode(currentGroup.treeParent);
             if (parentGroup.groupBehaviour[groupProperty]) {
-                const groupDecision: GroupBehaviourDecisionCallback = parentGroup.groupBehaviour[groupDecisionCallback];
-                if (groupDecision == null || groupDecision(parentGroup.groupId, childId, this.graphEditor.getNode(parentGroup.groupId), childNode, this.graphEditor)) {
+                const behaviour = parentGroup.groupBehaviour;
+                if (behaviour[groupDecisionCallback] == null ||
+                        behaviour[groupDecisionCallback](parentGroup.groupId, childId, this.graphEditor.getNode(parentGroup.groupId), childNode, this.graphEditor)) {
                     // groupBehaviour satisfies conditions
                     if (strategy === 'closest-parent') {
                         return parentGroup.groupId;
@@ -930,79 +987,60 @@ export class GroupingManager {
     }
 
     /**
-     * Get the group that the node may join into.
+     * Get the group that the (dragged) node may join into.
      *
-     * TODO detailed typedoc comment
+     * Only groups in the tree as groupId (including groupId) may capture the (dragged) node.
+     *
+     * Joining a group returned by this method does not create a cycle in the group graph!
+     *
+     * If two or more groups in the path to the tree root may capture the (dragged) node
+     * the group closest to the groupNode is returned.
      *
      * @param groupId the id of the group that a new node may join into
      * @param childGroupId the id of the group that may join
-     * @param groupNode the node with thegroupId
+     * @param groupNode the node with the groupId
      * @param node the node with the childGroupId
+     * @returns the group id capturing the (dragged) node or null no group was found
      */
     // eslint-disable-next-line complexity
     getGroupCapturingDraggedNode(groupId: string|number, childGroupId: string|number, groupNode: Node, node: Node): string {
-        let currentGroup: NodeGroup = this.groupsById.get(groupId.toString());
+        const group: NodeGroup = this.groupsById.get(groupId.toString());
 
-        // eslint-disable-next-line no-shadow
-        const checkGroup = (groupId: string, childId: string, group: NodeGroup, groupNode: Node, node: Node) => {
+        // check first group
+        // test if node tries to join itself
+        if (groupId !== childGroupId.toString()) {
             const behaviour = group?.groupBehaviour;
+            // test if group allows nodes to join
             if (behaviour?.captureDraggedNodes ?? false) {
-                const groupDecision: GroupBehaviourDecisionCallback = group.groupBehaviour.captureThisDraggedNode;
-                if (groupDecision == null || groupDecision(groupId, childId, groupNode, node, this.graphEditor)) {
-                    if (behaviour.allowFreePositioning) {
-                        return true;
-                    }
-                    const dropZones = this.graphEditor.getNodeDropZonesForNode(groupNode);
-                    for (const zone of filterDropzonesByType(dropZones, node.type)) {
-                        if (behaviour.occupiedDropZones != null) {
-                            if (behaviour.occupiedDropZones.has(zone.id)) {
-                                // drop zone is occupied
-                                // eslint-disable-next-line max-depth
-                                if (behaviour.occupiedDropZones.get(zone.id) === node.id.toString()) {
-                                    return true; // occupied by the node in question, this cannot happen normally...
-                                }
-                                continue;
-                            }
-                        }
-                        return true;
+                // test if node joining the group would create a cycle
+                if (!(this.getAllChildrenOf(node.id)?.has(group.groupId) ?? false)) {
+                    // test if group allows this specific node to join
+                    if (behaviour.captureThisDraggedNode == null || behaviour.captureThisDraggedNode(group.groupId, childGroupId.toString(), groupNode, node, this.graphEditor)) {
+                        return group.groupId;
                     }
                 }
             }
-            return false;
-        };
-
-        const allChildren = this.getAllChildrenOf(node.id);
-
-        // check first group
-        if (checkGroup(currentGroup?.groupId, childGroupId.toString(), currentGroup, groupNode, node)) {
-            // found a group
-            if (currentGroup.groupId === node.id.toString()) {
-                return; // cannot join itself
-            }
-            if (allChildren?.has(currentGroup.groupId) ?? false) {
-                return; // but cannot join the found group as it would create a cycle!
-            }
-            return currentGroup.groupId;
         }
 
         // check group tree
-        while (currentGroup?.treeParent != null && currentGroup.groupId !== currentGroup.treeRoot) {
-            currentGroup = this.getGroupForNode(currentGroup.treeParent);
-            const currentGroupNode = this.graphEditor.getNode(currentGroup.groupId);
-            if (checkGroup(currentGroup.groupId, childGroupId.toString(), currentGroup, currentGroupNode, node)) {
-                // found a group
-                if (currentGroup.groupId === node.id.toString()) {
-                    return; // cannot join itself
-                }
-                if (allChildren?.has(currentGroup.groupId) ?? false) {
-                    return; // but cannot join the found group as it would create a cycle!
-                }
-                return currentGroup.groupId;
-            }
+        const matchingGroup = this.getGroupWithProperty(groupNode, 'captureDraggedNodes', 'captureThisDraggedNode', 'closest-parent');
+
+        if (matchingGroup === groupId.toString()) {
+            // groupNode.id was used as falback by this.getGroupWithProperty
+            // first group was already checked (and failed)
+            return;
         }
 
-        // no group found
-        return null;
+        // extra checks for possible cycles
+        if (matchingGroup === childGroupId.toString()) {
+            return; // a group cannot join itself
+        }
+        if (this.getAllChildrenOf(node.id)?.has(matchingGroup)) {
+            return; // node cannot join the group as it would create a cycle!
+        }
+
+        // return the found group
+        return matchingGroup;
     }
 
     /**
