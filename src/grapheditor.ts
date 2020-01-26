@@ -464,6 +464,11 @@ export default class GraphEditor extends HTMLElement {
         }
     }
 
+    /**
+     * Get all declared NodeDropZones of a node.
+     *
+     * @param node the node to get the drop zones of
+     */
     public getNodeDropZonesForNode(node: Node | number | string): Map<string, NodeDropZone> {
         const id: string | number = (node as Node).id != null ? (node as Node).id : (node as number | string);
         return this.objectCache.getAllDropZones(id);
@@ -978,6 +983,7 @@ export default class GraphEditor extends HTMLElement {
             )
             .call(this.updateNodes.bind(this))
             .call(this.updateNodePositions.bind(this))
+            .order()
             .on('mouseover', (d) => { this.onNodeEnter.bind(this)(d); })
             .on('mouseout', (d) => { this.onNodeLeave.bind(this)(d); })
             .on('click', (d) => { this.onNodeClick.bind(this)(d); });
@@ -1068,11 +1074,18 @@ export default class GraphEditor extends HTMLElement {
             })
             .call(self.updateEdgeGroups.bind(this))
             .call(self.updateEdgePositions.bind(this))
+            .order()
             .on('click', (d) => { this.onEdgeClick.bind(this)(d); });
 
         this.classesToRemove.clear();
     }
 
+    /**
+     * Get all nodes that are under the given screen/client coordinates.
+     *
+     * @param clientX the x coordinate in the client coordinate system
+     * @param clientY the y coordinate in the client coordinate system
+     */
     public getNodesFromPoint(clientX: number, clientY: number): Node[] {
         const possibleTargets = document.elementsFromPoint(clientX, clientY);
         if (possibleTargets.length === 0) {
@@ -1107,6 +1120,19 @@ export default class GraphEditor extends HTMLElement {
         return nodes;
     }
 
+    /**
+     * Get the movement information for moving a Node.
+     *
+     * The calculated movement information contains the actual node to move, the start offset and all affected nodes.
+     * The actual node to move may be a (indirect) parent of the given node.
+     * If the group that captured the movement of the given node has no node a dummy node is used instead to track the movement.
+     *
+     * This method calls onBeforeNodeMove with the node movement information.
+     *
+     * @param node the original node that is to be moved
+     * @param x the x coordinate from where the move should start (can be substituted by node.x)
+     * @param y the y coordinate from where the move should start (can be substituted by node.y)
+     */
     private getNodeMovementInformation(node: Node, x: number, y: number): NodeMovementInformation {
         const movementInfo: NodeMovementInformation = {node: node};
         const groupId = this.groupingManager.getGroupCapturingMovementOfChild(node);
@@ -1140,7 +1166,25 @@ export default class GraphEditor extends HTMLElement {
         return movementInfo;
     }
 
-    public moveNode(nodeId: string | number, x: number, y: number, updatePositions: boolean= false): void {
+    /**
+     * Move a node to the coordinates (x,y).
+     *
+     * This method handles cases where a group captures the movement of a child node correctly.
+     * This method also handles all group-join and -leave mechanics like for dragging nodes manually.
+     *
+     * For batch updates updatePositions is set to false.
+     * Be aware that nodeDropPositions are only updated if the graph is rerendered!
+     * This is only relevant for adding/removing dropZones or chainging their filters.
+     *
+     * If this method returns true a complete render might be neccessary to correctly display all changes!
+     *
+     * @param nodeId the node to move
+     * @param x the target x coordinate of the node
+     * @param y the target y coordinate of the node
+     * @param updatePositions set this to true to automatically render all position changes (default: false)
+     * @returns true iff the graph possibly needs a complete render to correctly display all changes
+     */
+    public moveNode(nodeId: string | number, x: number, y: number, updatePositions: boolean= false): boolean {
         const node = this.objectCache.getNode(nodeId);
         const nodeMovementInfo = this.getNodeMovementInformation(node, node.x, node.y);
         if (nodeMovementInfo == null) {
@@ -1171,8 +1215,17 @@ export default class GraphEditor extends HTMLElement {
                 this.updateGraphPositions();
             }
         }
+        return needsFullRender;
     }
 
+    /**
+     * Get the position the group dictates for this node.
+     *
+     * If the node is not in a group or has no fixed position in that group this method returns null.
+     *
+     * @param node the node to get the position for
+     * @returns the absolute node position (or null)
+     */
     private getGroupDictatedPositionOfNode(node: Node): Point {
         let groupRelativePosition: string|Point;
         let relativeToGroup: string;
@@ -1215,6 +1268,18 @@ export default class GraphEditor extends HTMLElement {
         return null;
     }
 
+    /**
+     * Move a node to the desired point (x,y).
+     *
+     * If the node has a fixed position dictated by its group it will not be moved from that position!
+     * If the nodeMovementInfo contains children every child will be moved the same offset as the node.
+     * Group dictated positions are not checked for these children!
+     *
+     * @param nodeMovementInfo the movement info for this node move operation
+     * @param x the target x coordinate
+     * @param y the target y coordinate
+     * @param eventSource the event source used in movement events
+     */
     private _moveNode(nodeMovementInfo: NodeMovementInformation, x: number, y: number, eventSource: EventSource) {
         if (nodeMovementInfo.offset != null) {
             x -= nodeMovementInfo.offset?.dx ?? 0;
@@ -1256,6 +1321,17 @@ export default class GraphEditor extends HTMLElement {
         this.onNodePositionChange(node, eventSource);
     }
 
+    /**
+     * Convert from graph coordinates to screen coordinates.
+     *
+     * This method can be useful together with getNodesFromPoint.
+     *
+     * Most events already contain screen/client coordinates!
+     * Only use this method if no scren/client coordinates are available.
+     *
+     * @param graphPoint a point in graph coordinates
+     * @returns the same point in screen/client coordinates
+     */
     public getClientPointFromGraphCoordinates(graphPoint: Point): Point {
         const ng = this.svg.select<SVGGElement>('g.nodes');
         const p = this.svg.node().createSVGPoint();
@@ -1264,6 +1340,18 @@ export default class GraphEditor extends HTMLElement {
         return p.matrixTransform(ng.node().getScreenCTM());
     }
 
+    /**
+     * Try for the given node to leave its group if it moves to the point (x, y).
+     *
+     * This method checks if the node can leave its group when it moves to the given coordinates.
+     * If the node can leave the group then the node is removed from the group.
+     *
+     * @param nodeMovementInformation the movement information of the node to move
+     * @param x the target x coordinates for the node
+     * @param y the target y coordinates for the node
+     * @param eventSource the event source to be used in triggered events
+     * @param sourceEvent the source event (may be null)
+     */
     private tryToLeaveCurrentGroup(nodeMovementInformation: NodeMovementInformation, x: number, y: number, eventSource: EventSource, sourceEvent?: Event): boolean {
         const node = nodeMovementInformation.node;
 
@@ -1299,6 +1387,22 @@ export default class GraphEditor extends HTMLElement {
         return false;
     }
 
+    /**
+     * Try for the given node to join a group if it moves to the point (x, y).
+     *
+     * This method checks if the node can join a group when it moves to the given coordinates.
+     * If the node can join a group it is added to the group.
+     *
+     * The node will join in the same tree as the group it joined.
+     * If the group it joined was not part of a tree it is marked as a tree root.
+     * If the joining node was a tree root it will no longer be a tree root as it is joined to the parent tree.
+     *
+     * @param nodeMovementInformation the movement information of the node to move
+     * @param x the target x coordinates for the node
+     * @param y the target y coordinates for the node
+     * @param eventSource the event source to be used in triggered events
+     * @param sourceEvent the source event (may be null)
+     */
     private tryJoinNodeIntoGroup(nodeMovementInformation: NodeMovementInformation, x: number, y: number, eventSource: EventSource, sourceEvent?: Event): boolean {
         const node = nodeMovementInformation.node;
 
@@ -1586,6 +1690,11 @@ export default class GraphEditor extends HTMLElement {
             });
     }
 
+    /**
+     * Update node drop zones.
+     *
+     * @param nodeSelection d3 selection of nodes to calculate drop zones for with bound data
+     */
     private updateNodeDropAreas(nodeSelection: Selection<SVGGElement, Node, any, unknown>) {
         const self = this;
         nodeSelection.each(function(node) {

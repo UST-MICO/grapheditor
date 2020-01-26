@@ -1,5 +1,3 @@
-import { RotationVector } from './rotation-vector';
-
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -16,6 +14,9 @@ import { RotationVector } from './rotation-vector';
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+import { RotationVector } from './rotation-vector';
+
 
 /**
  * Node interface.
@@ -34,8 +35,14 @@ export interface Node {
     [prop: string]: any;
 }
 
+/**
+ * Interface storing all informatein needed when moving a node.
+ */
 export interface NodeMovementInformation {
+    /** The node to be moved. */
     node: Node;
+    /** The affected children that need to move with the node. */
     children?: Set<string>;
+    /** The initial offset from the movement start position to the node. */
     offset?: RotationVector;
 }
