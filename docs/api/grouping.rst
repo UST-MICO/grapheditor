@@ -3,6 +3,7 @@ Grouping
 
 .. js:autoclass:: GroupingManager
    :members:
+   :exclude-members: _leaveTree, dispatchGroupChangeEvent, dispatchGroupDepthChangedEvent, dispatchTreeChangedEvent, getGroupWithProperty
 
 NodeGroup
 ---------

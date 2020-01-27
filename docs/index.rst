@@ -26,6 +26,7 @@ Features
 * Edge drag and drop
 * :ref:`Custom markers <grapheditor:edge markers>` for edges (more powerful than svg markers)
 * :ref:`Text components <grapheditor:text-components>` for edges
+* Powerful :doc:`grouping mechanism <groups>`
 * Compatible with all web frameworks (behaves like a standard html tag)
 * Many :ref:`custom events <grapheditor:component events>`
 
@@ -42,5 +43,6 @@ Documentation
     static-templates
     dynamic-templates
     edge-path-templates
+    groups
     api/api-index
     changelog
