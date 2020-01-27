@@ -10,6 +10,25 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 **Known Issue:** this version was compiled using typescript 3.7!
 The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`. See [typescript 3.7 release notes](www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#class-field-mitigations) for more information.
 
+### Added
+
+- Added more specific typing information
+- The order of nodes and edges in the dom is now the same as the order in the node or edge list
+- Added `getNodesFromPoint` and `getClientPointFromGraphCoordinates` to get a list of nodes that overlap a certain point
+- Added `moveNode` to move a node with all special node movement logic
+- Added Groups and a GroupingManager
+- Added GroupBehaviour for changing how a group interacts with its own and other nodes
+- Added `onBeforeNodeMove` NodeMovementInformation used when a node moves
+- Added NodeDropZones for groups to specify where a dragged node should be placed
+- Added util module to collect small interfaces and functions
+- Added `Rect` interface to util
+- Added `calculateBoundingRect` that calculates a bounding box of a bunch of rects
+
+
+### Incompatible changes
+
+- Changed the type of `Node.type` from `any` to `string`
+
 
 ## [0.3.1] - 2019-12-02
 
