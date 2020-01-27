@@ -527,6 +527,8 @@ export class GroupingManager {
     /**
      * Get the set of **direct** children of this group.
      *
+     * Do **NOT** alter this set!
+     *
      * @param groupId the id of the group (e.g. the node id)
      */
     getChildrenOf(groupId: string|number): Set<string> {
@@ -535,6 +537,8 @@ export class GroupingManager {
 
     /**
      * Get the set of direct parents of this group.
+     *
+     * Do **NOT** alter this set!
      *
      * @param groupId the id of the group (e.g. the node id)
      */
@@ -553,7 +557,7 @@ export class GroupingManager {
      * @param groupId the id of the group (e.g. the node id)
      */
     getGroupDepthOf(groupId: string|number): number {
-        return this.groupsById.get(groupId.toString())?.groupDepth;
+        return this.groupsById.get(groupId.toString())?.groupDepth ?? 0;
     }
 
     /**
