@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 **Known Issue:** this version was compiled using typescript 3.7!
 The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`. See [typescript 3.7 release notes](www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#class-field-mitigations) for more information.
 
+
+## [0.4.0] - 2020-01-28
+
+**Known Issue:** this version was compiled using typescript 3.7!
+The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`. See [typescript 3.7 release notes](www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#class-field-mitigations) for more information.
+
 ### Added
 
 - Added more specific typing information
@@ -186,7 +192,8 @@ First beta version.
 - Initial webcomponent
 - Documentation
 
-[Unreleased]: https://github.com/UST-MICO/grapheditor/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/UST-MICO/grapheditor/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/UST-MICO/grapheditor/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/UST-MICO/grapheditor/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/UST-MICO/grapheditor/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/UST-MICO/grapheditor/compare/v0.1.3...v0.2.0
