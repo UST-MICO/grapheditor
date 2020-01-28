@@ -69,7 +69,8 @@ def analyze_typescript(abs_source_paths, app):
                             sanitize_typedoc_json(entry)
                     if key == 'originalName':
                         filepath = typedoc[key]
-                        typedoc[key] = relpath(filepath)
+                        if filepath:
+                            typedoc[key] = relpath(filepath)
             sanitize_typedoc_json(typedoc)
             with open('typedoc.json', mode='w') as typedoc_json:
                 dump(typedoc, typedoc_json)
