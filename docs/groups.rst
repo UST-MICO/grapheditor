@@ -203,6 +203,9 @@ Example drop zone:
         data-node-type-filter="!group-node">
     </rect>
 
+.. note::
+    When a dragged node joins or leaves a group the graph is updated with :js:func:`GraphEditor.completeRender`
+    instead of just updating the positions of the graph elements.
 
 .. seealso::
 
