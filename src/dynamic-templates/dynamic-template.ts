@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { Selection } from 'd3';
+import { Selection } from 'd3-selection';
 import { Node } from '../node';
 import { Marker, LineAttachementInfo } from '../marker';
 import GraphEditor from '../grapheditor';

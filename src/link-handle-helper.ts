@@ -18,7 +18,7 @@
 import { LinkHandle } from './link-handle';
 import { Edge, DraggedEdge, Point, edgeId } from './edge';
 import { Node } from './node';
-import { Selection } from 'd3';
+import { Selection } from 'd3-selection';
 import { StaticTemplateRegistry, DynymicTemplateRegistry } from './templating';
 import { DynamicNodeTemplate } from './dynamic-templates/dynamic-template';
 import GraphEditor from './grapheditor';

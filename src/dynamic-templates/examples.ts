@@ -17,7 +17,7 @@
 
 import { DynamicNodeTemplate, DynamicTemplateContext } from './dynamic-template';
 import { handlesForRectangle, LinkHandle } from '../link-handle';
-import { Selection } from 'd3';
+import { Selection } from 'd3-selection';
 import { Node } from '../node';
 import GraphEditor from '../grapheditor';
 
