@@ -391,6 +391,19 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
             "newMode": "both"
         }
 
+.. describe:: zoomchange
+
+    Fired after the zoom has changed.
+
+    **Example** ``detail``
+
+    .. code-block:: ts
+
+        {
+            "oldZoom": d3-zoom.ZoomTransform,
+            "newZoom": d3-zoom.ZoomTransform,
+        }
+
 .. describe:: backgroundclick
 
     Fired when the graph background was clicked.

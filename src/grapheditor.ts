@@ -16,7 +16,7 @@
  */
 
 import { select, event, Selection } from 'd3-selection';
-import { zoom, zoomIdentity, zoomTransform, ZoomBehavior } from 'd3-zoom';
+import { zoom, zoomIdentity, zoomTransform, ZoomBehavior, ZoomTransform } from 'd3-zoom';
 import { drag } from 'd3-drag';
 import { curveBasis } from 'd3-shape';
 
@@ -62,6 +62,7 @@ export default class GraphEditor extends HTMLElement {
     private root: ShadowRoot;
     private zoom: ZoomBehavior<any, any>;
     private zoomActive: boolean = false;
+    private currentZoom: ZoomTransform;
 
     private contentMaxHeight = 1;
     private contentMaxWidth = 1;
@@ -213,6 +214,14 @@ export default class GraphEditor extends HTMLElement {
      */
     // eslint-disable-next-line max-len
     public calculateLinkHandlesForEdge: (edge: Edge|DraggedEdge, sourceHandles: LinkHandle[], source: Node, targetHandles: LinkHandle[], target: Node|Point) => {sourceHandles: LinkHandle[]; targetHandles: LinkHandle[]};
+
+
+    /**
+     * The current zoom transform of the zoom group in the svg.
+     */
+    get currentZoomTransform(): ZoomTransform {
+        return this.currentZoom;
+    }
 
     get classes(): string[] {
         return this._classes;
@@ -804,6 +813,14 @@ export default class GraphEditor extends HTMLElement {
 
         const newZoom = zoom().on('zoom', (d) => {
             graph.attr('transform', event.transform);
+            const oldZoom = this.currentZoom;
+            this.currentZoom = event.transform;
+            let eventSource = EventSource.USER_INTERACTION;
+            if (event.sourceEvent == null) {
+                // only direct user interaction has a source event
+                eventSource = EventSource.API;
+            }
+            this.onZoomChange(oldZoom, event.transform, eventSource);
         });
 
         if (graph.select('g.edges').empty()) {
@@ -867,24 +884,32 @@ export default class GraphEditor extends HTMLElement {
 
         const svg = this.svg;
 
-        // reset zoom
-        svg.call(this.zoom.transform, zoomIdentity);
-
         const box: SVGRect = (svg.select('g.zoom-group').select('g.nodes').node() as any).getBBox();
+        this.zoomToBox(box);
+    };
+
+    /**
+     * Zoom to the given box.
+     *
+     * The box will be centered in the view with some padding around.
+     *
+     * @param box a box in graph coordinates
+     */
+    public zoomToBox(box: Rect): void {
         const scale = 0.9 * Math.min(this.contentMaxWidth / box.width, this.contentMaxHeight / box.height);
 
         const xCorrection = (-box.x * scale) + ((this.contentMaxWidth - (box.width * scale)) / 2);
         const yCorrection = (-box.y * scale) + ((this.contentMaxHeight - (box.height * scale)) / 2);
 
-        let newZoom = zoomTransform(svg.node() as Element)
+        let newZoom = zoomIdentity
             .translate(xCorrection, yCorrection)
             .scale(scale);
 
         if (isNaN(xCorrection) || isNaN(yCorrection)) {
             newZoom = zoomIdentity;
         }
-        svg.call(this.zoom.transform, newZoom);
-    };
+        this.svg.call(this.zoom.transform, newZoom);
+    }
 
     /**
      * Update the template cache from the provided svg or the current svg.
@@ -1082,6 +1107,9 @@ export default class GraphEditor extends HTMLElement {
 
     /**
      * Get all nodes that are under the given screen/client coordinates.
+     *
+     * Use `getClientPointFromGraphCoordinates` to convert from graph coordinates
+     * to client coordinates.
      *
      * @param clientX the x coordinate in the client coordinate system
      * @param clientY the y coordinate in the client coordinate system
@@ -1338,6 +1366,23 @@ export default class GraphEditor extends HTMLElement {
         p.x = graphPoint.x;
         p.y = graphPoint.y;
         return p.matrixTransform(ng.node().getScreenCTM());
+    }
+
+
+    /**
+     * Convert from screen coordinates to graph coordinates.
+     *
+     * Inverse operation of `getClientPointFromGraphCoordinates`.
+     *
+     * @param graphPoint a point in screen/client coordinates
+     * @returns the same point in graph coordinates
+     */
+    public getGraphPointFromClientCoordinates(clientPoint: Point): Point {
+        const ng = this.svg.select<SVGGElement>('g.nodes');
+        const p = this.svg.node().createSVGPoint();
+        p.x = clientPoint.x;
+        p.y = clientPoint.y;
+        return p.matrixTransform(ng.node().getScreenCTM().inverse());
     }
 
     /**
@@ -3383,7 +3428,9 @@ export default class GraphEditor extends HTMLElement {
      * Create and dispatch a 'backgroundclick' event.
      */
     private onBackgroundClick() {
-        const currentZoom = zoomTransform(this.svg.select<SVGGElement>('.zoom-group').node());
+        if (this.currentZoom == null) {
+            this.currentZoom = zoomTransform(this.svg.select<SVGGElement>('.zoom-group').node());
+        }
         const ev = new CustomEvent('backgroundclick', {
             bubbles: true,
             composed: true,
@@ -3392,9 +3439,30 @@ export default class GraphEditor extends HTMLElement {
                 eventSource: EventSource.USER_INTERACTION,
                 sourceEvent: event,
                 point: {
-                    x: currentZoom.invertX(event.x),
-                    y: currentZoom.invertY(event.y),
+                    x: this.currentZoom.invertX(event.x),
+                    y: this.currentZoom.invertY(event.y),
                 },
+            },
+        });
+        this.dispatchEvent(ev);
+    }
+
+    /**
+     * Create and dispatch a 'zoomchange' event.
+     *
+     * @param oldZoom the old ZoomTransform
+     * @param newZoom the new ZoomTransform
+     * @param eventSource the event source to use for the event
+     */
+    private onZoomChange(oldZoom: ZoomTransform, newZoom: ZoomTransform, eventSource: EventSource) {
+        const ev = new CustomEvent('zoomchange', {
+            bubbles: true,
+            composed: true,
+            cancelable: false,
+            detail: {
+                eventSource: eventSource,
+                oldZoom: oldZoom,
+                newZoom: newZoom,
             },
         });
         this.dispatchEvent(ev);
