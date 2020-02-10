@@ -1030,6 +1030,7 @@ export default class GraphEditor extends HTMLElement {
                         }
                         return movementInfo;
                     })
+                    .on('start', () => this.onNodeDrag('start', event.subject, EventSource.USER_INTERACTION))
                     .on('drag', () => {
                         let x = event.x;
                         let y = event.y;
@@ -1061,6 +1062,7 @@ export default class GraphEditor extends HTMLElement {
                                 behaviour.onNodeMoveEnd(endTreeParent, node.id.toString(), this.objectCache.getNode(endTreeParent), node, this);
                             }
                         }
+                        this.onNodeDrag('end', event.subject, EventSource.USER_INTERACTION);
                     })
             );
         } else {
@@ -1218,6 +1220,7 @@ export default class GraphEditor extends HTMLElement {
         if (nodeMovementInfo == null) {
             return; // move was cancelled by callback
         }
+        this.onNodeDrag('start', nodeMovementInfo, EventSource.API);
         const startTreeParent = this.groupingManager.getTreeParentOf(nodeMovementInfo.node.id);
         if (startTreeParent != null) {
             const behaviour = this.groupingManager.getGroupBehaviourOf(startTreeParent);
@@ -1236,6 +1239,7 @@ export default class GraphEditor extends HTMLElement {
                 behaviour.onNodeMoveEnd(endTreeParent, nodeMovementInfo.node.id.toString(), this.objectCache.getNode(endTreeParent), nodeMovementInfo.node, this);
             }
         }
+        this.onNodeDrag('end', nodeMovementInfo, EventSource.API);
         if (updatePositions) {
             if (needsFullRender) {
                 this.completeRender();
@@ -1602,6 +1606,16 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
+     * Get the node selection with bound data.
+     */
+    public getNodeSelection(): Selection<SVGGElement, Node, any, unknown> {
+        const graph = this.svg.select('g.zoom-group');
+        return graph.select('.nodes')
+            .selectAll<SVGGElement, Node>('g.node')
+            .data<Node>(this._nodes, (d: Node) => d.id.toString());
+    }
+
+    /**
      * Get a single node selection with bound datum.
      *
      * @param nodeId the id of the node to select
@@ -1619,14 +1633,9 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param nodeSelection d3 selection of nodes to update with bound data
      */
-    private updateNodes(nodeSelection: Selection<SVGGElement, Node, any, unknown>) {
+    private updateNodes(nodeSelection?: Selection<SVGGElement, Node, any, unknown>) {
         if (nodeSelection == null) {
-            const svg = this.svg;
-
-            const graph = svg.select('g.zoom-group');
-            nodeSelection = graph.select('.nodes')
-                .selectAll<SVGGElement, Node>('g.node')
-                .data<Node>(this._nodes, (d: Node) => d.id.toString());
+            nodeSelection = this.getNodeSelection();
         }
 
         // alias for this for use in closures
@@ -1872,7 +1881,10 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param nodeSelection d3 selection of nodes to update with bound data
      */
-    private updateNodeClasses(nodeSelection: Selection<SVGGElement, Node, any, unknown>) {
+    public updateNodeClasses(nodeSelection?: Selection<SVGGElement, Node, any, unknown>): void {
+        if (nodeSelection == null) {
+            nodeSelection = this.getNodeSelection();
+        }
         if (this.classesToRemove != null) {
             this.classesToRemove.forEach((className) => {
                 nodeSelection.classed(className, () => false);
@@ -3177,6 +3189,27 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
+     * Create and dispatch 'nodedragstart' and 'nodedragend' events.
+     *
+     * @param eventType the type of the event
+     * @param movementInfo the node movement information
+     * @param eventSource the event source
+     */
+    private onNodeDrag(eventType: 'start'|'end', movementInfo: NodeMovementInformation, eventSource) {
+        const ev = new CustomEvent(`nodedrag${eventType}`, {
+            bubbles: true,
+            composed: true,
+            cancelable: false,
+            detail: {
+                eventSource: eventSource,
+                node: movementInfo.node,
+                affectedChildren: movementInfo.children,
+            },
+        });
+        this.dispatchEvent(ev);
+    }
+
+    /**
      * Callback for creating nodepositionchange events.
      *
      * @param nodes nodes that changed
@@ -3368,12 +3401,7 @@ export default class GraphEditor extends HTMLElement {
      */
     private updateNodeHighligts(nodeSelection?: Selection<SVGGElement, Node, any, unknown>) {
         if (nodeSelection == null) {
-            const svg = this.svg;
-
-            const graph = svg.select('g.zoom-group');
-            nodeSelection = graph.select<SVGGElement>('.nodes')
-                .selectAll<SVGGElement, Node>('g.node')
-                .data<Node>(this._nodes, (d: Node) => d.id.toString());
+            nodeSelection = this.getNodeSelection();
         }
 
         nodeSelection

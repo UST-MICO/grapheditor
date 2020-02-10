@@ -16,6 +16,8 @@ The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`.
 - Added `zoomToBox` to zoom to a specific area of the graph
 - Added 'zoomchange' events to the grapheditor
 - Added `getGraphPointFromClientCoordinates` as inverse of `getClientPointFromGraphCoordinates`
+- Added 'nodedragstart' and 'nodedragend' events
+- Added public `updateNodeClasses` to only update the classes of nodes
 
 ### Fixed
 

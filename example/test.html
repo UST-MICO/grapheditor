@@ -273,6 +273,12 @@
                 graph.addEventListener('nodepositionchange', function test(event) {
                     console.log(event.type, event.detail);
                 });
+                graph.addEventListener('nodedragstart', function test(event) {
+                    console.log(event.type, event.detail);
+                });
+                graph.addEventListener('nodedragend', function test(event) {
+                    console.log(event.type, event.detail);
+                });
             }
             if (true) {
                 graph.addEventListener('nodeadd', function test(event) {

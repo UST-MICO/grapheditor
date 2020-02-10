@@ -511,6 +511,40 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
             }
         }
 
+.. describe:: nodedragstart
+
+    Fired before a :js:class:`Node` is moved via drag and drop or :js:func:`GraphEditor.moveNode`.
+
+    **Example** ``detail``
+
+    .. code-block:: ts
+
+        {
+            "node": {
+                "id": 1,
+                "x": 0,
+                "y": 0
+            }
+            "affectedChildren": new Set<string>()
+        }
+
+.. describe:: nodedragstart
+
+    Fired after a :js:class:`Node` was moved via drag and drop or :js:func:`GraphEditor.moveNode`.
+
+    **Example** ``detail``
+
+    .. code-block:: ts
+
+        {
+            "node": {
+                "id": 1,
+                "x": 0,
+                "y": 0
+            }
+            "affectedChildren": new Set<string>()
+        }
+
 .. describe:: nodeadd
 
     Fired when a :js:class:`Node` gets added to the graph.
