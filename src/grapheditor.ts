@@ -223,6 +223,22 @@ export default class GraphEditor extends HTMLElement {
         return this.currentZoom;
     }
 
+    /**
+     * The currently visible area in graph coordinates.
+     */
+    get currentViewWindow(): Rect {
+        const minX = this.currentZoom.invertX(0);
+        const minY = this.currentZoom.invertY(0);
+        const maxX = this.currentZoom.invertX(this.contentMaxWidth);
+        const maxY = this.currentZoom.invertY(this.contentMaxHeight);
+        return {
+            x: minX,
+            y: minY,
+            width: maxX -  minX,
+            height: maxY - minY,
+        };
+    }
+
     get classes(): string[] {
         return this._classes;
     }
