@@ -1522,7 +1522,7 @@ export default class GraphEditor extends HTMLElement {
         if (oldTemplateID != null && oldTemplateID === templateId && dynamic === oldDynamic) {
             return; // already using right template
         }
-        element.selectAll().remove(); // clear old content
+        element.selectAll('*').remove(); // clear old content
         if (dynamic) {
             // dynamic template
             if (templateType === 'node') {
