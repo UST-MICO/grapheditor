@@ -528,7 +528,7 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
             "affectedChildren": new Set<string>()
         }
 
-.. describe:: nodedragstart
+.. describe:: nodedragend
 
     Fired after a :js:class:`Node` was moved via drag and drop or :js:func:`GraphEditor.moveNode`.
 
