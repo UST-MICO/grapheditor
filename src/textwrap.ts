@@ -263,7 +263,7 @@ function wrapCharacters(newText: string, text: any, width: number, overflowChar:
  * @param overflowChar wrapping mode
  */
 function wrapWords(newText: string, text: any, width: number, overflowChar: string) {
-    const WORD_BOUNDARY = /\b\s*/g;
+    const WORD_BOUNDARY = /\b\s*|$/g;
     // start searching from the first charcter in the string
     // don't start with 0 because 0 is always a word boundary
     WORD_BOUNDARY.lastIndex = 1;
@@ -271,8 +271,10 @@ function wrapWords(newText: string, text: any, width: number, overflowChar: stri
     let lastBoundary: RegExpExecArray;
     let boundary: RegExpExecArray = WORD_BOUNDARY.exec(newText);
 
+
+
     let counter = 0; // counter to catch infinite loops
-    while (boundary.index < newText.length && !(lastBoundary == null && boundary == null)) {
+    while (boundary.index < (newText.length - 1) && !(lastBoundary == null && boundary == null)) {
         counter ++;
         if (counter > 10000) {
             console.warn('Wrapping the text encountered a loop!', 'Text to wrap:', newText);
@@ -292,6 +294,9 @@ function wrapWords(newText: string, text: any, width: number, overflowChar: stri
         if (boundary.index === lastIndex) {
             WORD_BOUNDARY.lastIndex++;
             boundary = WORD_BOUNDARY.exec(newText);
+            if (boundary == null) {
+                break; // WORD_BOUNDARY.lastIndex already exceeds newText.length
+            }
         }
     }
     if (lastBoundary == null) {

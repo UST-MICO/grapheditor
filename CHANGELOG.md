@@ -18,6 +18,7 @@ The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`.
 
 - Fixed old node content staying when node type was changed
 - Fixed `dragend` event listed as `dragstart` in the documentation
+- Fixed null pointer when multiline textwrapping ends with a single character
 
 
 ## [0.4.1] - 2020-02-11
