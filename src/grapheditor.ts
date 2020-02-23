@@ -2173,14 +2173,22 @@ export default class GraphEditor extends HTMLElement {
             if (self.isInteractive) {
                 const path = edgeGroupSelection.select('path.edge');
                 const length = (path.node() as SVGPathElement).getTotalLength();
-                textSelection.call(drag().on('drag', (text: TextComponent) => {
-                    const positionOnLine = normalizePositionOnLine(text.positionOnLine);
-                    const referencePoint = (path.node() as SVGPathElement).getPointAtLength(length * positionOnLine);
-                    text.offsetX = event.x - referencePoint.x;
-                    text.offsetY = event.y - referencePoint.y;
-                    self.onEdgeTextPositionChange(text, edge);
-                    self.updateEdgeTextPositions(edgeGroupSelection, edge);
-                }) as any);
+                textSelection.call(drag()
+                    .on('start', (text: TextComponent) => {
+                        self.onEdgeTextDrag('start', text, edge, EventSource.USER_INTERACTION);
+                    })
+                    .on('drag', (text: TextComponent) => {
+                        const positionOnLine = normalizePositionOnLine(text.positionOnLine);
+                        const referencePoint = (path.node() as SVGPathElement).getPointAtLength(length * positionOnLine);
+                        text.offsetX = event.x - referencePoint.x;
+                        text.offsetY = event.y - referencePoint.y;
+                        self.onEdgeTextPositionChange(text, edge);
+                        self.updateEdgeTextPositions(edgeGroupSelection, edge);
+                    })
+                    .on('end', (text: TextComponent) => {
+                        self.onEdgeTextDrag('end', text, edge, EventSource.USER_INTERACTION);
+                    })
+                );
             } else {
                 textSelection.on('drag', null);
             }
@@ -3173,6 +3181,28 @@ export default class GraphEditor extends HTMLElement {
         if (!this.dispatchEvent(ev)) {
             return; // prevent default / event cancelled
         }
+    }
+
+    /**
+     * Create and dispatch 'edgetextdragstart' and 'edgetextdragend' events.
+     *
+     * @param eventType the type of the event
+     * @param textComponent The text component that was dragged.
+     * @param edge The edge the text component belongs to.
+     * @param eventSource the event source
+     */
+    private onEdgeTextDrag(eventType: 'start'|'end', textComponent: TextComponent, edge: Edge, eventSource) {
+        const ev = new CustomEvent(`edgetextdrag${eventType}`, {
+            bubbles: true,
+            composed: true,
+            cancelable: false,
+            detail: {
+                eventSource: eventSource,
+                text: textComponent,
+                edge: edge,
+            },
+        });
+        this.dispatchEvent(ev);
     }
 
     /**

@@ -650,6 +650,44 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
             }
         }
 
+.. describe:: edgetextdragstart
+
+    Fired before a :js:class:`TextComponent` is moved via drag and drop.
+
+    **Example** ``detail``
+
+    .. code-block:: ts
+
+        {
+            "text": {
+                "offsetX": 10,
+                "offsetY": 24
+            },
+            "edge": {
+                "source": 1,
+                "target": 2
+            }
+        }
+
+.. describe:: edgetextdragend
+
+    Fired after a :js:class:`TextComponent` was moved via drag and drop.
+
+    **Example** ``detail``
+
+    .. code-block:: ts
+
+        {
+            "text": {
+                "offsetX": 10,
+                "offsetY": 24
+            },
+            "edge": {
+                "source": 1,
+                "target": 2
+            }
+        }
+
 .. describe:: edgeadd
 
     Fired when an :js:class:`Edge` gets added to the graph.

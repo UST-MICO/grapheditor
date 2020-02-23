@@ -15,6 +15,7 @@ The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`.
 - Added `currentViewWindow` to get the currently visible area of the graph
 - Added `currentViewWindow` to the 'zoomchange' event
 - Added 'render' event and `onBeforeCompleteRender` callback
+- Added 'edgetextdragstart' and 'edgetextdragend' events
 
 ### Fixed
 
