@@ -402,6 +402,37 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
         {
             "oldZoom": d3-zoom.ZoomTransform,
             "newZoom": d3-zoom.ZoomTransform,
+            "currentViewWindow": graphEditor.currentViewWindow,
+        }
+
+.. describe:: render
+
+    Fired after the graph was completely or partially updated.
+
+    Type can be one of the following:
+
+    ``complete``
+
+        The method :js:func:`GraphEditor.completeRender` was used to update the graph.
+
+    ``text``
+
+        The method :js:func:`GraphEditor.updateTextElements` was used to update the graph.
+
+    ``classes``
+
+        The method :js:func:`GraphEditor.updateNodeClasses` was used to update the graph.
+
+    ``positions``
+
+        The method :js:func:`GraphEditor.updateGraphPositions` was used to update the graph.
+
+    **Example** ``detail``
+
+    .. code-block:: ts
+
+        {
+            "type": "complete",
         }
 
 .. describe:: backgroundclick

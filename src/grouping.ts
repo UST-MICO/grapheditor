@@ -553,6 +553,7 @@ export class GroupingManager {
      * A group with parents has a depth of `max(parent => parent.depth) + 1`.
      *
      * This can be useful for sorting the nodes so that children of a group appear above the group.
+     * See also `GraphEditor.onBeforeCompleteRender`.
      *
      * @param groupId the id of the group (e.g. the node id)
      */

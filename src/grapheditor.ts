@@ -124,6 +124,16 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
+     * Callback before the graph is updated by the `completeRender` method.
+     *
+     * Use this callback to reorder nodeList or edgeList to change which node/edge
+     * gets drawn above which node/edge. See also `GroupingManager.getGroupDepthOf`.
+     *
+     * @param eventSource The eventSource used for the render event dispatched later by `completeRender`.
+     */
+    public onBeforeCompleteRender: (eventSource: EventSource) => void;
+
+    /**
      * Callback before a Node is moved.
      *
      * Use this callback to manipulate the provided movement information.
@@ -365,7 +375,7 @@ export default class GraphEditor extends HTMLElement {
         }
 
         // initial render after connect
-        this.completeRender();
+        this.completeRender(false, EventSource.INTERNAL);
         this.zoomToBoundingBox(false);
     }
 
@@ -406,7 +416,7 @@ export default class GraphEditor extends HTMLElement {
         if (name === 'mode') {
             this.setMode(newValue.toLowerCase());
         }
-        this.completeRender();
+        this.completeRender(false, EventSource.INTERNAL);
         this.zoomToBoundingBox(false);
     }
 
@@ -422,7 +432,7 @@ export default class GraphEditor extends HTMLElement {
     public setNodes(nodes: Node[], redraw: boolean = false): void {
         this.nodeList = nodes;
         if (redraw) {
-            this.completeRender();
+            this.completeRender(false, EventSource.API);
             this.zoomToBoundingBox(false);
         }
     }
@@ -438,7 +448,7 @@ export default class GraphEditor extends HTMLElement {
         this.objectCache.updateNodeCache(this._nodes);
         this.onNodeCreate(node, EventSource.API);
         if (redraw) {
-            this.completeRender();
+            this.completeRender(false, EventSource.API);
             this.zoomToBoundingBox(false);
         }
     }
@@ -483,7 +493,7 @@ export default class GraphEditor extends HTMLElement {
             });
             this.edgeList = newEdgeList;
             if (redraw) {
-                this.completeRender();
+                this.completeRender(false, EventSource.API);
                 this.zoomToBoundingBox(false);
             }
         }
@@ -594,7 +604,7 @@ export default class GraphEditor extends HTMLElement {
     public setEdges(edges: Edge[], redraw: boolean = false): void {
         this.edgeList = edges;
         if (redraw) {
-            this.completeRender();
+            this.completeRender(false, EventSource.API);
             this.zoomToBoundingBox(false);
         }
     }
@@ -609,7 +619,7 @@ export default class GraphEditor extends HTMLElement {
         this._edges.push(edge);
         this.objectCache.updateEdgeCache(this._edges);
         if (redraw) {
-            this.completeRender();
+            this.completeRender(false, EventSource.API);
             this.zoomToBoundingBox(false);
         }
     }
@@ -643,7 +653,7 @@ export default class GraphEditor extends HTMLElement {
             this._edges.splice(index, 1);
             this.objectCache.updateEdgeCache(this._edges);
             if (redraw) {
-                this.completeRender();
+                this.completeRender(false, EventSource.API);
                 this.zoomToBoundingBox(false);
             }
         }
@@ -722,7 +732,7 @@ export default class GraphEditor extends HTMLElement {
                 },
             });
             this.dispatchEvent(ev);
-            this.completeRender();
+            this.completeRender(false, EventSource.INTERNAL);
         }
     }
 
@@ -770,7 +780,7 @@ export default class GraphEditor extends HTMLElement {
                 },
             });
             this.dispatchEvent(ev);
-            this.completeRender();
+            this.completeRender(false, EventSource.INTERNAL);
         }
     }
 
@@ -797,7 +807,7 @@ export default class GraphEditor extends HTMLElement {
             // the svg changed!
             this.initialize(svg);
         }
-        this.completeRender();
+        this.completeRender(false, EventSource.INTERNAL);
         this.zoomToBoundingBox(false);
     }
 
@@ -988,11 +998,19 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param forceUpdateTemplates set to true if a template was changed,
      *      forces an entire re render by deleting all nodes and edges before adding them again
+     * @param eventSource the event source used for render events (default: `EventSource.API`)
      */
-    public completeRender(forceUpdateTemplates: boolean = false): void {
+    public completeRender(forceUpdateTemplates: boolean = false, eventSource: EventSource = EventSource.API): void {
         if (!this.initialized || !this.isConnected) {
             return;
         }
+
+        try {
+            this.onBeforeCompleteRender?.(eventSource);
+        } catch (err) {
+            console.warn('Executing onBeforeCompleteRender callback produced an error.', err);
+        }
+
         const svg = this.svg;
 
         if (this._zoomMode === 'manual' || this._zoomMode === 'both') {
@@ -1064,9 +1082,9 @@ export default class GraphEditor extends HTMLElement {
                         needsFullRender = this.tryJoinNodeIntoGroup(event.subject, x, y, EventSource.USER_INTERACTION, event) || needsFullRender;
                         this._moveNode(event.subject, event.x, event.y, EventSource.USER_INTERACTION);
                         if (needsFullRender) {
-                            this.completeRender();
+                            this.completeRender(false, EventSource.USER_INTERACTION);
                         } else {
-                            this.updateGraphPositions();
+                            this.updateGraphPositions(EventSource.USER_INTERACTION);
                         }
                     })
                     .on('end', () => {
@@ -1121,6 +1139,8 @@ export default class GraphEditor extends HTMLElement {
             .on('click', (d) => { this.onEdgeClick.bind(this)(d); });
 
         this.classesToRemove.clear();
+
+        this.onRender(eventSource, 'complete');
     }
 
     /**
@@ -1258,9 +1278,9 @@ export default class GraphEditor extends HTMLElement {
         this.onNodeDrag('end', nodeMovementInfo, EventSource.API);
         if (updatePositions) {
             if (needsFullRender) {
-                this.completeRender();
+                this.completeRender(false, EventSource.API);
             } else {
-                this.updateGraphPositions();
+                this.updateGraphPositions(EventSource.API);
             }
         }
         return needsFullRender;
@@ -1519,6 +1539,7 @@ export default class GraphEditor extends HTMLElement {
             .each(function (d) {
                 self.updateEdgeText(select(this), d, force);
             });
+        this.onRender(EventSource.API, 'text');
     }
 
     /**
@@ -1898,6 +1919,7 @@ export default class GraphEditor extends HTMLElement {
      * @param nodeSelection d3 selection of nodes to update with bound data
      */
     public updateNodeClasses(nodeSelection?: Selection<SVGGElement, Node, any, unknown>): void {
+        const calledDirectly = nodeSelection == null;
         if (nodeSelection == null) {
             nodeSelection = this.getNodeSelection();
         }
@@ -1915,6 +1937,9 @@ export default class GraphEditor extends HTMLElement {
                     return false;
                 });
             });
+        }
+        if (calledDirectly) {
+            this.onRender(EventSource.API, 'classes');
         }
     }
 
@@ -2077,7 +2102,7 @@ export default class GraphEditor extends HTMLElement {
                         return {edge: this.createDraggedEdgeFromExistingEdge(edge), capturingGroup: edge.source.toString()};
                     })
                     .container(() => this.svg.select('g.zoom-group').select('g.edges').node() as any)
-                    .on('start', () => this.completeRender())
+                    .on('start', () => this.completeRender(false, EventSource.USER_INTERACTION))
                     .on('drag', () => {
                         this.updateDraggedEdge(event.subject.edge, event.subject.capturingGroup);
                         this.updateDraggedEdgeGroups();
@@ -2826,8 +2851,10 @@ export default class GraphEditor extends HTMLElement {
 
     /**
      * Update all node positions and edge paths.
+     *
+     * @param eventSource the event source used for render events (default: `EventSource.API`)
      */
-    private updateGraphPositions() {
+    private updateGraphPositions(eventSource: EventSource = EventSource.API) {
         const svg = this.svg;
 
         const graph = svg.select('g.zoom-group');
@@ -2845,6 +2872,8 @@ export default class GraphEditor extends HTMLElement {
             .selectAll('g.edge-group.dragged')
             .data(this.draggedEdges, edgeId)
             .call(this.updateEdgePositions.bind(this));
+
+        this.onRender(eventSource, 'positions');
     }
 
     /**
@@ -3029,7 +3058,7 @@ export default class GraphEditor extends HTMLElement {
             if (edge.createdFrom != null &&
                 edge.target === this.objectCache.getEdge(edge.createdFrom).target.toString()) {
                 // edge was dropped on the node that was the original target for the edge
-                this.completeRender();
+                this.completeRender(false, EventSource.USER_INTERACTION);
             } else {
                 if (this.onEdgeCreate(edge, EventSource.USER_INTERACTION)) {
                     this._edges.push(edge);
@@ -3041,7 +3070,7 @@ export default class GraphEditor extends HTMLElement {
         }
         if (updateEdgeCache) {
             this.objectCache.updateEdgeCache(this._edges);
-            this.completeRender();
+            this.completeRender(false, EventSource.USER_INTERACTION);
         }
     }
 
@@ -3407,7 +3436,7 @@ export default class GraphEditor extends HTMLElement {
             this._edges.push(newEdge);
         }
         this.objectCache.updateEdgeCache(this._edges);
-        this.completeRender();
+        this.completeRender(false, EventSource.USER_INTERACTION);
         this.interactionStateData.source = null;
         this.interactionStateData.target = null;
     }
@@ -3492,6 +3521,30 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
+     * Create and dispatch a 'render' event.
+     *
+     * @param eventSource the event source to use for the event
+     * @param type what type of render was performed
+     * @param affectedNodes the nodes that got updated by this render (only for partial renders)
+     */
+    private onRender(eventSource: EventSource, type: 'complete'|'text'|'classes'|'positions', affectedNodes?: Set<string>) {
+        const detail: any = {
+            eventSource: eventSource,
+            rendered: type,
+        };
+        if (affectedNodes != null) {
+            detail.affectedNodes = affectedNodes;
+        }
+        const ev = new CustomEvent('render', {
+            bubbles: true,
+            composed: true,
+            cancelable: false,
+            detail: detail,
+        });
+        this.dispatchEvent(ev);
+    }
+
+    /**
      * Create and dispatch a 'zoomchange' event.
      *
      * @param oldZoom the old ZoomTransform
@@ -3507,6 +3560,7 @@ export default class GraphEditor extends HTMLElement {
                 eventSource: eventSource,
                 oldZoom: oldZoom,
                 newZoom: newZoom,
+                currentViewWindow: this.currentViewWindow,
             },
         });
         this.dispatchEvent(ev);
