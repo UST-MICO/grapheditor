@@ -2914,7 +2914,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param eventSource the event source used for render events (default: `EventSource.API`)
      */
-    private updateGraphPositions(eventSource: EventSource = EventSource.API) {
+    public updateGraphPositions(eventSource: EventSource = EventSource.API): void {
         const svg = this.svg;
 
         const graph = svg.select('g.zoom-group');
