@@ -425,7 +425,7 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
 
     Fired after the graph was completely or partially updated.
 
-    Type can be one of the following:
+    The attribute ``rendered`` can be one of the following:
 
     ``complete``
 
@@ -448,7 +448,7 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
     .. code-block:: ts
 
         {
-            "type": "complete",
+            "rendered": "complete",
         }
 
 .. describe:: backgroundclick
