@@ -16,12 +16,20 @@ The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`.
 - Added `currentViewWindow` to the 'zoomchange' event
 - Added 'render' event and `onBeforeCompleteRender` callback
 - Added 'edgetextdragstart' and 'edgetextdragend' events
+- Added absolute positioning of elements on an edge path with `absolutePositionOnLine`
+- Added bidirectional/non-directional edges
+- Added explicit `dragHandles` for edges (interface `EdgeDragHandle`)
 
 ### Fixed
 
 - Fixed old node content staying when node type was changed
 - Fixed `dragend` event listed as `dragstart` in the documentation
 - Fixed null pointer when multiline textwrapping ends with a single character
+
+### Incompatible changes
+
+- Interface `PathPositionRotationAndScale` has a new attribute `absolutePositionOnLine` (affecting edge markers, text components and LinkDragHandles)
+- Interface Edge has two new attributes: `dragHandles` and `isBidirectional`
 
 
 ## [0.4.1] - 2020-02-11

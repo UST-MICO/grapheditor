@@ -231,7 +231,23 @@ List of special edge classes
 ``highlight-incoming``
     Class to highlight incoming edges of a selected or hovered node.
 
-Edge markers
+Edge Drag Handles
+"""""""""""""""""
+
+:js:class:`Edges <Edge>` can have a list of :js:class:`EdgeDragHandles <EdgeDragHandle>` that use marker templates for display.
+They behave like :js:class:`Markers <Marker>` (see :ref:`next section <grapheditor:edge markers>`).
+If they are dragged the edge detaches from it's target node and follows the drag.
+
+To create bidirectional edges set the :js:attr:`isBidirectional <Edge.isBidirectional>` attribute to ``true``.
+Alternatively directly use a :js:class:`EdgeDragHandle` with :js:attr:`isReverseHandle <EdgeDragHandle.isReverseHandle>` to ``true`` to
+simulate an edge that can be dragged from its source.
+If such a :js:class:`EdgeDragHandle` is dragged the resulting dragged edge is a flipped version of the original edge with source and target switched.
+
+.. hint::
+    To determine if an edge was dragged from a :js:class:`EdgeDragHandle` with :js:attr:`isReverseHandle <EdgeDragHandle.isReverseHandle>` set ``true``
+    compare the dragged edge source with the original edge source.
+
+Edge Markers
 """"""""""""
 
 :js:class:`Edges <Edge>` can have a list of :js:class:`Markers <Marker>` that use marker templates for display.

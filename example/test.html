@@ -205,7 +205,7 @@
                 ]
 
                 graph.addNode({id: 4, title: 'NEU', type: 'fancy-node', x: 130, y: -50, description: 'New node', image: 'https://d3js.org/logo.svg', link: 'https://d3js.org'});
-                graph.addEdge({source: 4, target: 1, markers: [
+                graph.addEdge({source: 4, target: 1, isBidirectional: true, markers: [
                     {template: 'arrow', positionOnLine: 1, scale: 0.5, relativeRotation: 0, clickEventKey: 'HelloWorld'},
                     {template: 'arrow', positionOnLine: 0.3, scale: 0.5, scaleRelative: true, absoluteRotation: 180, relativeRotation: 0},
                     {template: 'arrow', positionOnLine: 0.1, scale: 0.5, relativeRotation: 0},

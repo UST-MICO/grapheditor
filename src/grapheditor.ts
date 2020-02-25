@@ -21,7 +21,7 @@ import { drag } from 'd3-drag';
 import { curveBasis } from 'd3-shape';
 
 import { Node, NodeMovementInformation } from './node';
-import { Edge, DraggedEdge, edgeId, Point, TextComponent, PathPositionRotationAndScale, normalizePositionOnLine } from './edge';
+import { Edge, DraggedEdge, edgeId, Point, TextComponent, PathPositionRotationAndScale, normalizePositionOnLine, EdgeDragHandle, setDefaultEdgeDragHandles } from './edge';
 import { LinkHandle } from './link-handle';
 import { GraphObjectCache } from './object-cache';
 import { wrapText } from './textwrap';
@@ -1120,13 +1120,6 @@ export default class GraphEditor extends HTMLElement {
                         edgeGroup.append('path')
                             .classed('edge', true)
                             .attr('fill', 'none');
-
-                        edgeGroup.append<SVGGElement>('g')
-                            .classed('link-handle', true)
-                            .each(function () {
-                                const templateId = self.staticTemplateRegistry.getMarkerTemplateId('default-marker');
-                                self.updateContentTemplate<LinkHandle>(select(this), templateId, 'marker');
-                            });
                     })
             )
             .classed('ghost', (d) => {
@@ -1762,7 +1755,7 @@ export default class GraphEditor extends HTMLElement {
                             self.updateDraggedEdgeGroups();
                         })
                         .on('end', () => {
-                            self.dropDraggedEdge(event.subject.edge);
+                            self.dropDraggedEdge(event.subject.edge, false);
                         })
                 );
             } else {
@@ -2050,16 +2043,11 @@ export default class GraphEditor extends HTMLElement {
                 .call(self.updateMarkerPositions.bind(self));
         }).each(function (d) {
             self.updateEndMarkerPositions(select(this), d);
-        }).each(function () {
+        }).each(function (d) {
             // update link handle position
-            const edgeGroup = select(this);
-            const path = edgeGroup.select<SVGPathElement>('path.edge');
-            const length = path.node().getTotalLength();
-            const linkMarkerOffset = 10;
-            const linkHandlePos = (path.node() as SVGPathElement).getPointAtLength(length - linkMarkerOffset);
-            edgeGroup.select<SVGGElement>('g.link-handle')
-                .attr('transform', () => `translate(${linkHandlePos.x},${linkHandlePos.y})`)
-                .raise();
+            setDefaultEdgeDragHandles(d);
+            select(this).selectAll('g.link-handle').data(d.dragHandles)
+                .call(self.updateMarkerPositions.bind(self));
         });
     }
 
@@ -2072,6 +2060,8 @@ export default class GraphEditor extends HTMLElement {
     private updateEdgeGroup(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, d: Edge) {
         const pathSelection = edgeGroupSelection.select<SVGPathElement>('path.edge:not(.dragged)').datum(d);
         pathSelection.attr('stroke', 'black');
+
+        // update markers
         this.updateEndMarkers(edgeGroupSelection, d);
         edgeGroupSelection.selectAll<SVGGElement, Marker>('g.marker:not(.marker-special)')
             .data(d.markers != null ? d.markers : [])
@@ -2081,25 +2071,50 @@ export default class GraphEditor extends HTMLElement {
             )
             .call(this.updateMarker.bind(this), d);
 
+        // update edge drag handles
+        setDefaultEdgeDragHandles(d);
+        const edgeDragHandles = edgeGroupSelection.selectAll<SVGGElement, EdgeDragHandle>('g.link-handle')
+            .data(d.dragHandles)
+            .join(
+                enter => enter.append('g')
+                    .classed('link-handle', true)
+            )
+            .call(this.updateMarker.bind(this), d)
+            .raise(); // raise the drag handles to the top of the edge
+
         this.updateEdgeText(edgeGroupSelection, d);
         this.updateDynamicProperties(edgeGroupSelection);
 
         if (this.isInteractive) {
-            edgeGroupSelection.select<SVGGElement>('g.link-handle')
-                .datum<Edge>(d)
-                .call(drag<SVGGElement, Edge, {edge: DraggedEdge; capturingGroup?: string}>()
-                    .subject((edge) => {
-                        const sourceNode = this.getNode(edge.source);
+            edgeDragHandles.call(
+                drag<SVGGElement, EdgeDragHandle, {edge: DraggedEdge; capturingGroup?: string; isReversedEdge: boolean}>()
+                    .subject((handle) => {
+                        const edge = d;
+                        let sourceNode: Node;
+                        if (handle.isReverseHandle ?? false) {
+                            // a reverse handle flips the edge direction
+                            sourceNode = this.getNode(edge.target);
+                        } else {
+                            sourceNode = this.getNode(edge.source);
+                        }
                         const groupCapturingEdge = this.groupingManager.getGroupCapturingOutgoingEdge(sourceNode);
                         if (groupCapturingEdge != null && groupCapturingEdge !== sourceNode.id.toString()) {
                             const groupNode = this.getNode(groupCapturingEdge);
                             if (groupNode != null) {
                                 const newEdge = this.createDraggedEdgeFromExistingEdge(edge);
                                 newEdge.source = groupCapturingEdge;
-                                return {edge: newEdge, capturingGroup: groupCapturingEdge};
+                                return {
+                                    edge: newEdge,
+                                    capturingGroup: groupCapturingEdge,
+                                    isReversedEdge: handle.isReverseHandle ?? false,
+                                };
                             }
                         }
-                        return {edge: this.createDraggedEdgeFromExistingEdge(edge), capturingGroup: edge.source.toString()};
+                        return {
+                            edge: this.createDraggedEdgeFromExistingEdge(edge, handle.isReverseHandle ?? false),
+                            capturingGroup: sourceNode.id.toString(),
+                            isReversedEdge: handle.isReverseHandle ?? false,
+                        };
                     })
                     .container(() => this.svg.select('g.zoom-group').select('g.edges').node() as any)
                     .on('start', () => this.completeRender(false, EventSource.USER_INTERACTION))
@@ -2108,9 +2123,9 @@ export default class GraphEditor extends HTMLElement {
                         this.updateDraggedEdgeGroups();
                     })
                     .on('end', () => {
-                        this.dropDraggedEdge(event.subject.edge);
+                        this.dropDraggedEdge(event.subject.edge, event.subject.isReversedEdge);
                     })
-                );
+            );
         } else {
             edgeGroupSelection.select('g.link-handle').on('.drag', null);
         }
@@ -2171,15 +2186,16 @@ export default class GraphEditor extends HTMLElement {
                 }
             });
             if (self.isInteractive) {
-                const path = edgeGroupSelection.select('path.edge');
-                const length = (path.node() as SVGPathElement).getTotalLength();
+                const path = edgeGroupSelection.select<SVGPathElement>('path.edge');
                 textSelection.call(drag()
                     .on('start', (text: TextComponent) => {
                         self.onEdgeTextDrag('start', text, edge, EventSource.USER_INTERACTION);
                     })
                     .on('drag', (text: TextComponent) => {
+                        const length = path.node().getTotalLength();
                         const positionOnLine = normalizePositionOnLine(text.positionOnLine);
-                        const referencePoint = (path.node() as SVGPathElement).getPointAtLength(length * positionOnLine);
+                        const absolutePositionOnLine = self.calculateAbsolutePositionOnLine(length, positionOnLine, text.absolutePositionOnLine);
+                        const referencePoint = path.node().getPointAtLength(absolutePositionOnLine);
                         text.offsetX = event.x - referencePoint.x;
                         text.offsetY = event.y - referencePoint.y;
                         self.onEdgeTextPositionChange(text, edge);
@@ -2474,25 +2490,58 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
+     * Calculate the safe absolutePositionOnLine value for the given path length.
+     *
+     * If absolutePositidragHandlesonOnLine is negative it is counted from the end of the path.
+     * If absolutePositidragHandlesonOnLine exceeds the path length positionOnLine will be used as fallback.
+     *
+     * @param pathLength the length of the path
+     * @param positionOnLine the relative position on the line (between 0 and 1)
+     * @param absolutePositidragHandlesonOnLine the absolute position on line (between 0 and length)
+     * @returns the positive absolute positionOnLine to be used with `path.getPointAtLength(absolutePositionOnLine)`.
+     */
+    public calculateAbsolutePositionOnLine(pathLength: number, positionOnLine: number, absolutePositionOnLine?: number): number {
+        let result = null;
+        if (absolutePositionOnLine != null) {
+            if (absolutePositionOnLine < 0) {
+                // actually a substraction...
+                result = pathLength + absolutePositionOnLine;
+            } else {
+                result = absolutePositionOnLine;
+            }
+        }
+
+        // else case & sanity checks for if case
+        if (result == null || result < 0 || result > pathLength) {
+            // always fall back to relative position
+            result = pathLength * positionOnLine;
+        }
+        return result;
+    }
+
+    /**
      * Calculate a normal vector pointing in the direction of the path at the positonOnLine.
      *
      * @param path the path object
-     * @param positionOnLine the relative position on the path (between 0 and 1)
+     * @param absolutePositionOnLine the absolute position on the path (between 0 and length)
      * @param point the point at positionOnLine (will be calculated if not supplied)
      * @param length the length of the path (will be calculated if not supplied)
      */
-    public calculatePathNormalAtPosition(path: SVGPathElement, positionOnLine: number, point?: DOMPoint, length?: number): RotationVector {
+    public calculatePathNormalAtPosition(path: SVGPathElement, absolutePositionOnLine: number, point?: DOMPoint, length?: number): RotationVector {
         if (length == null) {
             length = path.getTotalLength();
         }
         if (point == null) {
-            point = path.getPointAtLength(length * positionOnLine);
+            point = path.getPointAtLength(absolutePositionOnLine);
         }
-        const epsilon = positionOnLine > 0.5 ? -1e-5 : 1e-5;
-        const point2 = path.getPointAtLength(length * (positionOnLine + epsilon));
+        const isSecondHalve = absolutePositionOnLine > (length / 2);
+        // calculate a second point at a small offset
+        const epsilon = Math.min(1, length / 100);
+        const delta = isSecondHalve ? -epsilon : epsilon;
+        const point2 = path.getPointAtLength(absolutePositionOnLine + delta);
         return normalizeVector({
-            dx: positionOnLine > 0.5 ? (point.x - point2.x) : (point2.x - point.x),
-            dy: positionOnLine > 0.5 ? (point.y - point2.y) : (point2.y - point.y),
+            dx: isSecondHalve ? (point.x - point2.x) : (point2.x - point.x),
+            dy: isSecondHalve ? (point.y - point2.y) : (point2.y - point.y),
         });
     }
 
@@ -2590,7 +2639,8 @@ export default class GraphEditor extends HTMLElement {
             .select<SVGGElement>(`g.marker.${markerClass}`)
             .datum(marker);
         // path end point
-        const pathPointA = path.node().getPointAtLength(length * positionOnLine);
+        const absolutePositionOnLine = this.calculateAbsolutePositionOnLine(length, positionOnLine);
+        const pathPointA = path.node().getPointAtLength(absolutePositionOnLine);
         // calculate angle for marker
         let markerStartingNormal: RotationVector;
         if (handle?.normal?.dx !== 0 || handle?.normal?.dy !== 0) {
@@ -2601,7 +2651,7 @@ export default class GraphEditor extends HTMLElement {
         }
         if (markerStartingNormal == null) {
             // no link handle for marker present, calculate starting angle from path
-            markerStartingNormal = this.calculatePathNormalAtPosition(path.node(), positionOnLine, pathPointA, length);
+            markerStartingNormal = this.calculatePathNormalAtPosition(path.node(), absolutePositionOnLine, pathPointA, length);
         }
         // calculate marker offset
         const attachementPointVector: RotationVector = this.calculateLineAttachementVector(markerStartingNormal, markerSelection, strokeWidth);
@@ -2644,9 +2694,10 @@ export default class GraphEditor extends HTMLElement {
             const length = path.node().getTotalLength();
             const strokeWidth: number = parseFloat(path.style('stroke-width').replace(/px/, ''));
             const positionOnLine = normalizePositionOnLine(d.positionOnLine);
+            const absolutePositionOnLine = self.calculateAbsolutePositionOnLine(length, positionOnLine, d.absolutePositionOnLine);
 
-            const point = path.node().getPointAtLength(length * positionOnLine);
-            const normal = self.calculatePathNormalAtPosition(path.node(), positionOnLine, point, length);
+            const point = path.node().getPointAtLength(absolutePositionOnLine);
+            const normal = self.calculatePathNormalAtPosition(path.node(), absolutePositionOnLine, point, length);
             // account for deprecated attributes:
             if (d.rotate != null) {
                 console.warn('The marker.rotate attribute is deprecated!');
@@ -2743,10 +2794,11 @@ export default class GraphEditor extends HTMLElement {
         // eslint-disable-next-line complexity
         textSelection.each(function (t) {
             const text = select(this);
-            const positionOnLine =  normalizePositionOnLine(t.positionOnLine);
-            const pathPoint = path.node().getPointAtLength(length * positionOnLine);
+            const positionOnLine = normalizePositionOnLine(t.positionOnLine);
+            const absolutePositionOnLine = self.calculateAbsolutePositionOnLine(length, positionOnLine, t.absolutePositionOnLine);
+            const pathPoint = path.node().getPointAtLength(absolutePositionOnLine);
 
-            const edgeNormal = self.calculatePathNormalAtPosition(path.node(), positionOnLine, pathPoint, length);
+            const edgeNormal = self.calculatePathNormalAtPosition(path.node(), absolutePositionOnLine, pathPoint, length);
 
             // factor in offset coordinates of text component
             const referencePoint = {
@@ -2759,7 +2811,7 @@ export default class GraphEditor extends HTMLElement {
             text.attr('transform', initialTransform);
 
             // calculate center of nearest node (line distance, not euklidean distance)
-            const nodeBB = (positionOnLine > 0.5) ? targetBB : sourceBB;
+            const nodeBB = (absolutePositionOnLine > (length / 2)) ? targetBB : sourceBB;
             const nodeCenter = {
                 x: nodeBB.x + (nodeBB.width / 2),
                 y: nodeBB.y + (nodeBB.height / 2),
@@ -2925,36 +2977,75 @@ export default class GraphEditor extends HTMLElement {
      * Create a dragged edge from an existing edge.
      *
      * @param edge existing edge
+     * @param reverseEdgeDirection reverse the direction of the returned edge
      */
     // eslint-disable-next-line complexity
-    private createDraggedEdgeFromExistingEdge(edge: Edge): DraggedEdge {
+    private createDraggedEdgeFromExistingEdge(edge: Edge, reverseEdgeDirection: boolean= false): DraggedEdge {
         const validTargets = new Set<string>();
         this._nodes.forEach(node => validTargets.add(node.id.toString()));
-        this.objectCache.getEdgesBySource(edge.source).forEach(edgeOutgoing => {
+        const source = reverseEdgeDirection ? edge.target : edge.source;
+        this.objectCache.getEdgesBySource(source).forEach(edgeOutgoing => {
             if (edgeId(edge) !== edgeId(edgeOutgoing)) {
                 validTargets.delete(edgeOutgoing.target.toString());
             }
         });
         let draggedEdge: DraggedEdge = {
-            id: edge.source.toString() + Date.now().toString(),
+            id: source.toString() + Date.now().toString(),
             createdFrom: edgeId(edge),
-            source: edge.source,
+            source: reverseEdgeDirection ? edge.target : edge.source,
             target: null,
             type: edge.type,
             pathType: edge.pathType,
             validTargets: validTargets,
             currentTarget: { x: event.x, y: event.y },
             markers: [],
-            textx: [],
+            texts: [],
+            dragHandles: null,
+            isBidirectional: edge.isBidirectional,
         };
         for (const key in edge) {
-            if (edge.hasOwnProperty(key) && key !== 'id' && key !== 'createdFrom' && key !== 'sourceHandle' &&
-                key !== 'targetHandle' && key !== 'validTargets' && key !== 'currentTarget') {
+            if (edge.hasOwnProperty(key) && key !== 'id' && key !== 'type' && key !== 'createdFrom' && key !== 'sourceHandle' &&
+                key !== 'targetHandle' && key !== 'source' && key !== 'target' && key !== 'validTargets' && key !== 'currentTarget') {
                 try {
                     draggedEdge[key] = JSON.parse(JSON.stringify(edge[key]));
                 } catch (error) {
                     draggedEdge[key] = edge.key;
                 }
+            }
+        }
+        if (reverseEdgeDirection) {
+            const flipDirections = (element: PathPositionRotationAndScale) => {
+                // flip positionOnLine
+                if (element.positionOnLine === 'start') {
+                    element.positionOnLine = 'end';
+                } else if (element.positionOnLine === 'end') {
+                    element.positionOnLine = 'start';
+                } else {
+                    element.positionOnLine = 1 - element.positionOnLine;
+                }
+                // rotate relative rotation by 180°
+                if (element.relativeRotation != null) {
+                    element.relativeRotation += element.relativeRotation > 180 ? -180 : 180;
+                }
+                // flip absolutePositionOnLine
+                if (element.absolutePositionOnLine != null) {
+                    element.absolutePositionOnLine = -element.absolutePositionOnLine;
+                }
+            };
+            draggedEdge.markers.forEach(flipDirections);
+            draggedEdge.texts.forEach(flipDirections);
+            draggedEdge.dragHandles.forEach(handle => {
+                flipDirections(handle);
+                // flip isReverseHandle
+                handle.isReverseHandle = !handle.isReverseHandle;
+            });
+            // flip end markers
+            const temp = draggedEdge.markerEnd;
+            if (draggedEdge.markerStart != null) {
+                draggedEdge.markerEnd = draggedEdge.markerStart;
+            }
+            if (temp != null) {
+                draggedEdge.markerStart = temp;
             }
         }
         if (this.onCreateDraggedEdge != null) {
@@ -3037,12 +3128,21 @@ export default class GraphEditor extends HTMLElement {
 
     /**
      * Drop dragged edge.
+     *
+     * @param edge the edge that was dropped
+     * @param isReversedEdge true if the edge is bidirectional and was dragged
+     *      from a reverse handle flipping the edge direction
      */
-    private dropDraggedEdge(edge: DraggedEdge) {
+    // eslint-disable-next-line complexity
+    private dropDraggedEdge(edge: DraggedEdge, isReversedEdge: boolean) {
         let updateEdgeCache = false;
+        const existingEdge = this.objectCache.getEdge(edge.createdFrom);
+        let existingTarget = existingEdge?.target.toString();
+        if (isReversedEdge) {
+            existingTarget = existingEdge?.source.toString();
+        }
         if (edge.createdFrom != null) {
-            const existingEdge = this.objectCache.getEdge(edge.createdFrom);
-            if (edge.target !== existingEdge.target.toString()) {
+            if (edge.target?.toString() !== existingTarget) {
                 // only remove original edge if target of dropped edge is different then original target
                 const i = this._edges.findIndex(e => edgeId(e) === edge.createdFrom);
                 if (this.onEdgeRemove(this._edges[i], EventSource.USER_INTERACTION)) {
@@ -3063,8 +3163,7 @@ export default class GraphEditor extends HTMLElement {
                 finalEdge = this.onDropDraggedEdge(edge, this.objectCache.getNode(edge.source),
                                               this.objectCache.getNode(edge.target));
             }
-            if (edge.createdFrom != null &&
-                edge.target === this.objectCache.getEdge(edge.createdFrom).target.toString()) {
+            if (edge.createdFrom != null && edge.target === existingTarget) {
                 // edge was dropped on the node that was the original target for the edge
                 this.completeRender(false, EventSource.USER_INTERACTION);
             } else {

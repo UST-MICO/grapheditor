@@ -31,9 +31,18 @@ export interface Point {
  * Interface describing the position of a marker, text component or link handle placed along an edge path.
  */
 export interface PathPositionRotationAndScale extends RotationData {
-    /** The relative position of the marker on the edge (between 0 and 1). (Default `0`=='start') */
+    /** The relative position of the path element on the edge (between 0 and 1). (Default `0`=='start') */
     positionOnLine?: number|'start'|'end';
-    /** A factor to scale the marker. */
+    /**
+     * The absolute position of the path element on the edge.
+     *
+     * A positive value is counted from the start of the path.
+     * A negative value is counted from the end of the path.
+     * If the absolute value is longer than the path length the relative
+     * positionOnLine will be used as fallback value.
+     */
+    absolutePositionOnLine?: number;
+    /** A factor to scale the path element. */
     scale?: number;
     /** If true the scaling factor is applied relative to the stroke width. */
     scaleRelative?: boolean;
@@ -54,6 +63,12 @@ export function normalizePositionOnLine(positionOnLine: number|'start'|'end') {
     }
     if (isNaN(positionOnLine)) {
         return 0;
+    }
+    if (positionOnLine < 0) {
+        return 0;
+    }
+    if (positionOnLine > 1) {
+        return 1;
     }
     return positionOnLine;
 }
@@ -80,6 +95,47 @@ export interface TextComponent extends PathPositionRotationAndScale {
     offsetY?: number;
     /** The template to use for this text component. (Default: `'default-textcomponent'`) */
     template?: string;
+}
+
+/**
+ * Special marker used as a drag handle for dragging an edge.
+ */
+export interface EdgeDragHandle extends Marker {
+    /**
+     * If true dragging this drag handle will result in a flipped edge beeing dragged.
+     *
+     * The flipped edge looks the same as the original edge but has source and target switched.
+     * All component positions and relative rotations are updated accordingly.
+     * This can be used to implement bidirectional or non-directional behaviour for edges.
+     */
+    isReverseHandle?: boolean;
+}
+
+/**
+ * Set the `dragHandles` attribute of an edge to the default values.
+ *
+ * See `Edge.dragHandles`.
+ *
+ * @param edge the edge to set the default drag handles for
+ */
+export function setDefaultEdgeDragHandles(edge: Edge) {
+    if (edge.dragHandles == null) {
+        edge.dragHandles = [
+            {
+                template: 'default-marker',
+                positionOnLine: 0.95,
+                absolutePositionOnLine: -10,
+            },
+        ];
+        if (edge.isBidirectional) {
+            edge.dragHandles.push({
+                template: 'default-marker',
+                positionOnLine: 0.05,
+                absolutePositionOnLine: 10,
+                isReverseHandle: true,
+            });
+        }
+    }
 }
 
 /**
@@ -121,6 +177,17 @@ export interface Edge {
     markerEnd?: Marker;
     /** List of text components of this edge. */
     texts?: TextComponent[];
+    /**
+     * List of EdgeDragHandle that can be used to drag the edge with.
+     *
+     * If the list is `null` a list containing default drag handle will be created.
+     * If the list is an empty list `[]` no default drag handle will be created.
+     * If `isBidirectional` is `true` and the list is `null` a list containing two
+     * default drag handles (one for each end) will be created.
+     */
+    dragHandles?: EdgeDragHandle[];
+    /** Set this to `true` if the edge should be treated as bidirectional (see `dragHandles`). */
+    isBidirectional?: boolean;
     [prop: string]: any;
 }
 

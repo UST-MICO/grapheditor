@@ -24,10 +24,11 @@ Features
 * :ref:`View only mode <view-mode-attribute>`
 * Node drag and drop
 * Edge drag and drop
+* :ref:`Custom edge drag handles <grapheditor:edge drag handles>` for edges and bidirectional edges
 * :ref:`Custom markers <grapheditor:edge markers>` for edges (more powerful than svg markers)
 * :ref:`Text components <grapheditor:text-components>` for edges
 * Powerful :doc:`grouping mechanism <groups>`
-* Compatible with all web frameworks (behaves like a standard html tag)
+* Compatible with all web frameworks (behaves like a standard html tag, see also `custom web component <https://www.webcomponents.org>`_)
 * Many :ref:`custom events <grapheditor:component events>`
 
 .. image:: screenshots/test-html.png
