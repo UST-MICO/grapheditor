@@ -31,7 +31,7 @@ export interface Point {
  * Interface describing the position of a marker, text component or link handle placed along an edge path.
  */
 export interface PathPositionRotationAndScale extends RotationData {
-    /** The relative position of the path element on the edge (between 0 and 1). (Default `0`=='start') */
+    /** The relative position of the path element on the edge (between 0 and 1). (Default `0` == 'start') */
     positionOnLine?: number|'start'|'end';
     /**
      * The absolute position of the path element on the edge.
