@@ -146,7 +146,7 @@ export class GraphObjectCache {
      * @param id the edge id
      */
     getEdge(id: number|string): Edge {
-        return this.edges.get(id.toString());
+        return this.edges.get(id?.toString());
     }
 
     /**
