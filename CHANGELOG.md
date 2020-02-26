@@ -249,7 +249,8 @@ First beta version.
 - Initial webcomponent
 - Documentation
 
-[Unreleased]: https://github.com/UST-MICO/grapheditor/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/UST-MICO/grapheditor/compare/v0.5.1...HEAD
+[0.5.0]: https://github.com/UST-MICO/grapheditor/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/UST-MICO/grapheditor/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/UST-MICO/grapheditor/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/UST-MICO/grapheditor/compare/v0.3.1...v0.4.0
