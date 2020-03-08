@@ -55,6 +55,26 @@ export class GraphObjectCache {
     }
 
     /**
+     * Add a node to the cache without invalidating the complete cache.
+     *
+     * @param node the new node to add to the cache
+     */
+    addNodeToCache(node: Node): void {
+        this.nodes.set(node.id.toString(), node);
+    }
+
+    /**
+     * Remove a node from the cache without invalidating the complete cache.
+     *
+     * @param nodeId the id of the old node to remove from the cache
+     */
+    removeNodeFromCache(nodeId: string): void {
+        this.nodes.delete(nodeId.toString());
+        this.nodeBBoxes.delete(nodeId.toString());
+        this.nodeDropZones.delete(nodeId.toString());
+    }
+
+    /**
      * Invalidate all edge related caches.
      *
      * @param edges the new edge list
@@ -81,6 +101,39 @@ export class GraphObjectCache {
         this.edges = edgeMap;
         this.edgesBySource = bySourceMap;
         this.edgesByTarget = byTargetMap;
+    }
+
+    /**
+     * Add a new edge to the object cache without invalidating the whole cache.
+     *
+     * @param edge the new edge to add to the object cache
+     */
+    addEdgeToCache(edge: Edge): void {
+        this.edges.set(edgeId(edge), edge);
+        let bySource: Set<Edge> = this.edgesBySource.get(edge.source.toString());
+        if (bySource == null) {
+            bySource = new Set();
+            this.edgesBySource.set(edge.source.toString(), bySource);
+        }
+        bySource.add(edge);
+        let byTarget: Set<Edge> = this.edgesByTarget.get(edge.target.toString());
+        if (byTarget == null) {
+            byTarget = new Set();
+            this.edgesByTarget.set(edge.target.toString(), byTarget);
+        }
+        byTarget.add(edge);
+    }
+
+    /**
+     * Remove an edge from the cache without invalidating the whole cache.
+     *
+     * @param edge the edge to remove from the object cache
+     */
+    removeEdgeFromCache(edge: Edge): void {
+        edge = this.edges.get(edgeId(edge));
+        this.edges.delete(edgeId(edge));
+        this.edgesBySource.get(edge.source.toString())?.delete(edge);
+        this.edgesByTarget.get(edge.target.toString())?.delete(edge);
     }
 
     /**

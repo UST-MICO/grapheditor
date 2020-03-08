@@ -275,10 +275,40 @@ export default class GraphEditor extends HTMLElement {
      *
      * This list should **not** be altered outside without updating the cache!
      * Use `addNode` and `removeNode` to keep the cache consistent.
+     *
+     * Changing this list directly may lead to **inconsistencies** as there may
+     * still be **edges pointing to already** removed nodes!
      */
     set nodeList(nodes: Node[]) {
+        const oldNodes = this._nodes;
+
+        // save added nodes for later
+        const addedNodes: Node[] = [];
+        nodes.forEach(node => {
+            if (this.objectCache.getNode(node.id) == null) {
+                addedNodes.push(node);
+            }
+        });
+
+        // update data and cache
         this._nodes = nodes;
         this.objectCache.updateNodeCache(nodes);
+
+        // save removed nodes for later
+        const removedNodes: Node[] = [];
+        oldNodes.forEach(node => {
+            if (this.objectCache.getNode(node.id) == null) {
+                removedNodes.push(node);
+            }
+        });
+
+        // fire events
+        removedNodes.forEach(node => {
+            this.onNodeRemove(node, EventSource.API);
+        });
+        addedNodes.forEach(node => {
+            this.onNodeCreate(node, EventSource.API);
+        });
     }
 
     get edgeList(): Edge[] {
@@ -292,8 +322,35 @@ export default class GraphEditor extends HTMLElement {
      * Use `addEdge` and `removeEdge` to keep the cache consistent.
      */
     set edgeList(edges: Edge[]) {
+        const oldEdges = this._edges;
+
+        // save added edges for later
+        const addedEdges: Edge[] = [];
+        edges.forEach(edge => {
+            if (this.objectCache.getEdge(edgeId(edge)) == null) {
+                addedEdges.push(edge);
+            }
+        });
+
+        // update data and cache
         this._edges = edges;
         this.objectCache.updateEdgeCache(edges);
+
+        // save removed edges for later
+        const removedEdges: Edge[] = [];
+        oldEdges.forEach(edge => {
+            if (this.objectCache.getEdge(edgeId(edge)) == null) {
+                removedEdges.push(edge);
+            }
+        });
+
+        // fire events
+        removedEdges.forEach(edge => {
+            this.onEdgeRemove(edge, EventSource.API, false);
+        });
+        addedEdges.forEach(edge => {
+            this.onEdgeCreate(edge, EventSource.API, false);
+        });
     }
 
     /**
@@ -445,7 +502,7 @@ export default class GraphEditor extends HTMLElement {
      */
     public addNode(node: Node, redraw: boolean = false): void {
         this._nodes.push(node);
-        this.objectCache.updateNodeCache(this._nodes);
+        this.objectCache.addNodeToCache(node);
         this.onNodeCreate(node, EventSource.API);
         if (redraw) {
             this.completeRender(false, EventSource.API);
@@ -472,26 +529,33 @@ export default class GraphEditor extends HTMLElement {
      * @param redraw if the graph should be redrawn (default: `false`)
      */
     public removeNode(node: Node | number | string, redraw: boolean = false): void {
-        const id: string | number = (node as Node).id != null ? (node as Node).id : (node as number | string);
-        const index = this._nodes.findIndex(n => n.id === id);
+        const nodeId: string | number = (node as Node).id != null ? (node as Node).id : (node as number | string);
+        const index = this._nodes.findIndex(n => n.id === nodeId);
         if (index >= 0) {
-            this.deselectNode(id);
-            this.onNodeRemove(this._nodes[index], EventSource.API);
-            this._nodes.splice(index, 1);
-            this.objectCache.updateNodeCache(this._nodes);
+            this.deselectNode(nodeId);
+
             const newEdgeList = [];
             this._edges.forEach(edge => {
-                if (edge.source === id) {
-                    this.onEdgeRemove(edge, EventSource.API);
+                // eslint-disable-next-line eqeqeq
+                if (edge.source == nodeId) { // number/string conversion is needed for this test
+                    this.onEdgeRemove(edge, EventSource.API, false);
+                    this.objectCache.removeEdgeFromCache(edge);
                     return;
                 }
-                if (edge.target === id) {
-                    this.onEdgeRemove(edge, EventSource.API);
+                // eslint-disable-next-line eqeqeq
+                if (edge.target == nodeId) { // number/string conversion is needed for this test
+                    this.onEdgeRemove(edge, EventSource.API, false);
+                    this.objectCache.removeEdgeFromCache(edge);
                     return;
                 }
                 newEdgeList.push(edge);
             });
-            this.edgeList = newEdgeList;
+
+            this._edges = newEdgeList;
+            this.onNodeRemove(this._nodes[index], EventSource.API);
+            this._nodes.splice(index, 1);
+            this.objectCache.removeNodeFromCache(nodeId.toString());
+
             if (redraw) {
                 this.completeRender(false, EventSource.API);
                 this.zoomToBoundingBox(false);
@@ -617,7 +681,8 @@ export default class GraphEditor extends HTMLElement {
      */
     public addEdge(edge: Edge, redraw: boolean = false): void {
         this._edges.push(edge);
-        this.objectCache.updateEdgeCache(this._edges);
+        this.objectCache.addEdgeToCache(edge);
+        this.onEdgeCreate(edge, EventSource.API, false);
         if (redraw) {
             this.completeRender(false, EventSource.API);
             this.zoomToBoundingBox(false);
@@ -649,9 +714,10 @@ export default class GraphEditor extends HTMLElement {
         }
         const index = this._edges.findIndex((e) => edgeId(e) === edgeIdToDelete);
         if (index >= 0) {
-            this.onEdgeRemove(this._edges[index], EventSource.API);
+            const removedEdge = this._edges[index];
+            this.onEdgeRemove(removedEdge, EventSource.API, false);
             this._edges.splice(index, 1);
-            this.objectCache.updateEdgeCache(this._edges);
+            this.objectCache.removeEdgeFromCache(removedEdge);
             if (redraw) {
                 this.completeRender(false, EventSource.API);
                 this.zoomToBoundingBox(false);
@@ -3185,13 +3251,15 @@ export default class GraphEditor extends HTMLElement {
      * Callback for creating edgeadd events.
      *
      * @param edge the created edge
+     * @param eventSource the event source
+     * @param cancelable set to true if the event can be cancelled (default `true`)
      * @returns false if event was cancelled
      */
-    private onEdgeCreate(edge: Edge, eventSource: EventSource): boolean {
+    private onEdgeCreate(edge: Edge, eventSource: EventSource, cancelable: boolean = true): boolean {
         const ev = new CustomEvent('edgeadd', {
             bubbles: true,
             composed: true,
-            cancelable: true,
+            cancelable: Boolean(cancelable),
             detail: {
                 eventSource: eventSource,
                 edge: edge,
@@ -3207,6 +3275,7 @@ export default class GraphEditor extends HTMLElement {
      * The event is only for dragged edges that are dropped in the void.
      *
      * @param edge the dropped dragged edge
+     * @param dropPosition the position where the edge was dropped at
      * @returns false if event was cancelled
      */
     private onEdgeDrop(edge: DraggedEdge, dropPosition: Point) {
@@ -3232,13 +3301,15 @@ export default class GraphEditor extends HTMLElement {
      * Callback for creating edgeremove events.
      *
      * @param edge the created edge
+     * @param eventSource the event source
+     * @param cancelable set to true if the event can be cancelled (default `true`)
      * @returns false if event was cancelled
      */
-    private onEdgeRemove(edge: Edge, eventSource: EventSource) {
+    private onEdgeRemove(edge: Edge, eventSource: EventSource, cancelable: boolean = true) {
         const ev = new CustomEvent('edgeremove', {
             bubbles: true,
             composed: true,
-            cancelable: true,
+            cancelable: Boolean(cancelable),
             detail: {
                 eventSource: eventSource,
                 edge: edge,
