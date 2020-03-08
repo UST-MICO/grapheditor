@@ -350,8 +350,10 @@ function calculateLinkHandles(nodeTemplate: Selection<SVGGElement, unknown, any,
     if (linkHandles != null) {
         // link handles were set explicitly by a json
     } else if (backgroundSelection.node().tagName === 'circle') {
+        const x = parseFloat(backgroundSelection.attr('cx'));
+        const y = parseFloat(backgroundSelection.attr('cy'));
         const radius = parseFloat(backgroundSelection.attr('r'));
-        linkHandles = handlesForCircle(radius, linkHandlesOptions);
+        linkHandles = handlesForCircle(x, y, radius, linkHandlesOptions);
     } else if (backgroundSelection.node().tagName === 'rect') {
         const x = parseFloat(backgroundSelection.attr('x'));
         const y = parseFloat(backgroundSelection.attr('y'));

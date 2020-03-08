@@ -99,41 +99,43 @@ export function handlesForRectangle(x: number, y: number, width: number, height:
 /**
  * Generate link handles list for circle.
  *
+ * @param x x coordinate of the center of the circle
+ * @param y y coordinate of the center of the circle
  * @param radius of the circle
  * @param linkHandles one of ['all', 'minimal']
  */
-export function handlesForCircle(radius: number, linkHandles: string): LinkHandle[] {
+export function handlesForCircle(x: number, y: number, radius: number, linkHandles: string): LinkHandle[] {
     const handles: LinkHandle[] = [];
-    handles.push({id: 0, x: 0, y: radius});
+    handles.push({id: 0, x: x, y: y + radius});
     if (linkHandles === 'all') {
         handles.push({
             id: 0,
-            x: Math.sin((Math.PI / 2) + (Math.PI / 4)) * radius,
-            y: Math.cos((Math.PI / 2) + (Math.PI / 4)) * radius,
+            x: x + (Math.sin((Math.PI / 2) + (Math.PI / 4)) * radius),
+            y: y + (Math.cos((Math.PI / 2) + (Math.PI / 4)) * radius),
         });
     }
-    handles.push({id: 0, x: radius, y: 0});
+    handles.push({id: 0, x: x + radius, y: y});
     if (linkHandles === 'all') {
         handles.push({
             id: 0,
-            x: Math.sin(Math.PI / 4) * radius,
-            y: Math.cos(Math.PI / 4) * radius,
+            x: x + (Math.sin(Math.PI / 4) * radius),
+            y: y + (Math.cos(Math.PI / 4) * radius),
         });
     }
-    handles.push({id: 0, x: 0, y: -radius});
+    handles.push({id: 0, x: x, y: y - radius});
     if (linkHandles === 'all') {
         handles.push({
             id: 0,
-            x: Math.sin((3 * Math.PI / 2) + (Math.PI / 4)) * radius,
-            y: Math.cos((3 * Math.PI / 2) + (Math.PI / 4)) * radius,
+            x: x + (Math.sin((3 * Math.PI / 2) + (Math.PI / 4)) * radius),
+            y: y + (Math.cos((3 * Math.PI / 2) + (Math.PI / 4)) * radius),
         });
     }
-    handles.push({id: 0, x: -radius, y: 0});
+    handles.push({id: 0, x: x - radius, y: y});
     if (linkHandles === 'all') {
         handles.push({
             id: 0,
-            x: Math.sin((2 * Math.PI / 2) + (Math.PI / 4)) * radius,
-            y: Math.cos((2 * Math.PI / 2) + (Math.PI / 4)) * radius,
+            x: x + (Math.sin((2 * Math.PI / 2) + (Math.PI / 4)) * radius),
+            y: y + (Math.cos((2 * Math.PI / 2) + (Math.PI / 4)) * radius),
         });
     }
     handles.forEach((element, index) => {element.id = index; });

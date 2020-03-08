@@ -19,6 +19,7 @@ The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`.
 - Fixed adding or removing edges or nodes with the api not always triggering an event
 - Fixed the result of `calculateBoundingRect` sometimes having negative width or height
 - Fixed `GroupBehaviour` interface not allowing additional properties
+- Fixed LinkHandles of a circle not taking the circle center into account
 
 
 ## [0.5.1] - 2020-02-26
