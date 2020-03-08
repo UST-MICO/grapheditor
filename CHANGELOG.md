@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 **Known Issue:** this version was compiled using typescript 3.7!
 The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`. See [typescript 3.7 release notes](www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#class-field-mitigations) for more information.
 
+### Fixed
+
+- Fixed the result of `calculateBoundingRect` sometimes having negative width or height
+
 
 ## [0.5.1] - 2020-02-26
 

@@ -53,10 +53,10 @@ export function calculateBoundingRect(...rectangles: Rect[]): Rect {
             result.height += delta;
         }
         if (r.x + r.width > result.x + result.width) {
-            result.width += (result.x + result.width) - (r.x + r.width);
+            result.width += (r.x + r.width) - (result.x + result.width);
         }
         if (r.y + r.height > result.y + result.height) {
-            result.height += (result.y + result.height) - (r.y + r.height);
+            result.height += (r.y + r.height) - (result.y + result.height);
         }
     });
     return result;
