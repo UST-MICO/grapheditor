@@ -574,6 +574,23 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
+     * Get the bounding box of a node.
+     *
+     * The box is relative to the node. Add `node.x` and `node.y` to the `x` and `y`
+     * coordinates of the box to get a box at the correct coordinates.
+     *
+     * The bounding box is only available/updated after the node was rendered to the graph!
+     *
+     * Do **not** change the returned object directly!
+     *
+     * @param node the node to get the bounding box of
+     */
+    public getNodeBBox(node: Node | number | string): Rect {
+        const id: string | number = (node as Node).id != null ? (node as Node).id : (node as number | string);
+        return this.objectCache.getNodeBBox(id);
+    }
+
+    /**
      * Add a node to the selected set.
      *
      * This method will cause a 'selection' event if the selection has changed.
