@@ -250,6 +250,7 @@ export interface GroupBehaviour {
      * Delete the node id from this map to allow free movement for the node.
      */
     childNodePositions?: Map<string, string|Point>;
+    [prop: string]: any;
 }
 
 /**
