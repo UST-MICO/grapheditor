@@ -129,7 +129,6 @@ export class StaticTemplateRegistry {
                 bBox = templateNode.getBBox();
                 finishedCallback?.(bBox, temp);
             } catch (error) {
-                console.log('Work around firefox bug')
                 // workaround to get BBox in firefox (copy it into temp group, then get BBox)
                 temp = svg.append('g').attr('id', 'temp-template-measurements');
                 const node = temp.node();
@@ -139,7 +138,7 @@ export class StaticTemplateRegistry {
                     finishedCallback?.(bBox, temp);
                     return;
                 }
-                console.log('Wait for node to be connected to dom')
+
                 // wait until node is connected before taking measurements...
                 let tries = 0;
                 // use setInterval to avoid busy waiting
