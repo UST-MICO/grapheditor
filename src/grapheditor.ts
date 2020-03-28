@@ -3150,46 +3150,52 @@ export default class GraphEditor extends HTMLElement {
         edge.target = null;
         edge.currentTarget.x = event.x;
         edge.currentTarget.y = event.y;
-        const possibleTarget = document.elementFromPoint(event.sourceEvent.clientX, event.sourceEvent.clientY);
-        if (possibleTarget != null) {
-            let target = select(possibleTarget);
-            while (!target.empty()) {
-                if (target.classed('node')) {
-                    const id = target.attr('id').replace(/^node-/, '');
-                    if (edge.source.toString() === id) {
-                        break;
-                    }
-                    edge.target = id;
-                    if (id !== oldTarget) {
-                        // check target group behaviour
-                        const targetNode = this.getNode(id);
-                        if (targetNode != null) {
-                            const targetGroupCapturingEdge = this.groupingManager.getGroupCapturingIncomingEdge(targetNode);
-                            // eslint-disable-next-line max-depth
-                            if (targetGroupCapturingEdge != null) {
-                                const targetGroupBehaviour = this.groupingManager.getGroupBehaviourOf(targetGroupCapturingEdge);
-                                const targetGroupNode = this.getNode(targetGroupCapturingEdge);
-                                // eslint-disable-next-line max-depth
-                                if (targetGroupBehaviour?.delegateIncomingEdgeTargetToNode != null && targetGroupNode != null) {
-                                    const newTarget = targetGroupBehaviour.delegateIncomingEdgeTargetToNode(targetGroupCapturingEdge, targetGroupNode, edge, this);
-                                    // eslint-disable-next-line max-depth
-                                    if (newTarget != null && newTarget !== '' && this.getNode(newTarget) !== null) {
-                                        edge.target = newTarget;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    break;
-                }
-                target = select(target.node().parentElement);
+
+        const sourceEvent = event.sourceEvent;
+        const possibleTargetNodes = this.getNodesFromPoint(sourceEvent.clientX, sourceEvent.clientY);
+        if (possibleTargetNodes.length > 0) {
+            const targetNode = possibleTargetNodes[0];
+            const targetNodeId = targetNode.id.toString();
+
+            // validate target
+            let isValidTarget = true;
+
+            // allow target to be source
+            // isValidTarget = isValidTarget && (edge.source.toString() === targetNodeId);
+
+            // check group capture
+            const targetGroupCapturingEdge = this.groupingManager.getGroupCapturingIncomingEdge(targetNode);
+
+            if (targetGroupCapturingEdge == null) {
+                // no group capture, node must be a valid target
+                isValidTarget = isValidTarget && edge.validTargets.has(targetNodeId);
+            } else {
+                // group capture, group must be a valid target
+                isValidTarget = isValidTarget && edge.validTargets.has(targetGroupCapturingEdge);
             }
-        }
-        if (edge.target != null) {
-            if (!edge.validTargets.has(edge.target.toString())) {
+
+            if (isValidTarget) {
+                // initially always set the target node
+                edge.target = targetNodeId;
+            } else {
+                // remove target if no valid target found
                 edge.target = null;
             }
+
+            // handle group captures
+            if (isValidTarget && targetGroupCapturingEdge != null) {
+                const targetGroupBehaviour = this.groupingManager.getGroupBehaviourOf(targetGroupCapturingEdge);
+                const targetGroupNode = this.getNode(targetGroupCapturingEdge);
+                if (targetGroupBehaviour?.delegateIncomingEdgeTargetToNode != null && targetGroupNode != null) {
+                    const newTarget = targetGroupBehaviour.delegateIncomingEdgeTargetToNode(targetGroupCapturingEdge, targetGroupNode, edge, this);
+                    if (newTarget != null && newTarget !== '' && this.getNode(newTarget) !== null) {
+                        edge.target = newTarget;
+                    }
+                }
+            }
         }
+
+        // dispatch event if target changed and handle source group link capture
         if (edge.target !== oldTarget) {
             if (capturingGroup != null) {
                 const groupBehaviour = this.groupingManager.getGroupBehaviourOf(capturingGroup);
