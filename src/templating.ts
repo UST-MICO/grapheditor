@@ -120,6 +120,45 @@ export class StaticTemplateRegistry {
         const templateBBoxes = new Map<string, DOMRect>();
         const templates = svg.select('defs').selectAll<SVGGElement, unknown>('g[data-template-type]');
         const idSet = new Set<string>();
+
+        const getWorkableTemplate = (id, templateNode, finishedCallback: (bBox: DOMRect, temp: Selection<SVGGElement, unknown, any, unknown>) => void) => {
+            let bBox: DOMRect;
+            // temp svg group, only used if getBBox() does not work in defs tag (e.g. firefox)
+            let temp: Selection<SVGGElement, unknown, any, unknown>;
+            try {
+                bBox = templateNode.getBBox();
+                finishedCallback?.(bBox, temp);
+            } catch (error) {
+                console.log('Work around firefox bug')
+                // workaround to get BBox in firefox (copy it into temp group, then get BBox)
+                temp = svg.append('g').attr('id', 'temp-template-measurements');
+                const node = temp.node();
+                node.appendChild(templateNode.cloneNode(true));
+                if (node.isConnected) {
+                    bBox = temp.select<SVGGElement>('g').node().getBBox();
+                    finishedCallback?.(bBox, temp);
+                    return;
+                }
+                console.log('Wait for node to be connected to dom')
+                // wait until node is connected before taking measurements...
+                let tries = 0;
+                // use setInterval to avoid busy waiting
+                const intervalId = setInterval(() => {
+                    if (node.isConnected) {
+                        bBox = temp.select<SVGGElement>('g').node().getBBox();
+                        finishedCallback?.(bBox, temp);
+                        clearInterval(intervalId);
+                        return;
+                    }
+                    tries += 1;
+                    if (tries > 50) {
+                        console.warn(`Could not load template for id ${ id }!`);
+                        clearInterval(intervalId);
+                    }
+                }, 15);
+            }
+        };
+
         templates.each(function() {
             const template = select(this);
             const id = template.attr('id');
@@ -130,37 +169,30 @@ export class StaticTemplateRegistry {
                 console.error('All template id\'s must be unique!');
             }
             idSet.add(id);
-            let bBox: DOMRect;
-            // temp svg group, only used if getBBox() does not work in defs tag (e.g. firefox)
-            let temp: Selection<SVGGElement, unknown, any, unknown>;
-            try {
-                bBox = this.getBBox();
-            } catch (error) {
-                // workaround to get BBox in firefox (copy it into temp group, then get BBox)
-                temp = svg.append('g').attr('id', 'temp-template-measurements');
-                temp.node().appendChild(this.cloneNode(true));
-                bBox = temp.select<SVGGElement>('g').node().getBBox();
-            }
-            templateBBoxes.set(id, bBox);
-            if (template.attr('data-template-type').toLowerCase() === 'node') {
-                nodeTemplates.set(id, template);
-                let workableTemplate: Selection<SVGGElement, unknown, any, unknown>;
-                if (temp == null || temp.empty()) {
-                    workableTemplate = template;
-                } else {
-                    workableTemplate = temp.select<SVGGElement>('g[data-template-type]');
+
+            getWorkableTemplate(id, this, (bBox: DOMRect, temp: Selection<SVGGElement, unknown, any, unknown>) => {
+                // this part may be executed asynchrounously if the workaround for firefox engages...
+                templateBBoxes.set(id, bBox);
+                if (template.attr('data-template-type').toLowerCase() === 'node') {
+                    nodeTemplates.set(id, template);
+                    let workableTemplate: Selection<SVGGElement, unknown, any, unknown>;
+                    if (temp == null || temp.empty()) {
+                        workableTemplate = template;
+                    } else {
+                        workableTemplate = temp.select<SVGGElement>('g[data-template-type]');
+                    }
+                    nodeTemplateLinkHandles.set(id, calculateLinkHandles(workableTemplate));
                 }
-                nodeTemplateLinkHandles.set(id, calculateLinkHandles(workableTemplate));
-            }
-            if (template.attr('data-template-type').toLowerCase() === 'marker') {
-                markerTemplates.set(id, template);
-                const attachementInfo = new LineAttachementInfo(template.attr('data-line-attachement-point'));
-                markerTemplateLineAttachements.set(id, attachementInfo);
-            }
-            // cleanup temp
-            if (temp != null) {
-                temp.remove();
-            }
+                if (template.attr('data-template-type').toLowerCase() === 'marker') {
+                    markerTemplates.set(id, template);
+                    const attachementInfo = new LineAttachementInfo(template.attr('data-line-attachement-point'));
+                    markerTemplateLineAttachements.set(id, attachementInfo);
+                }
+                // cleanup temp
+                if (temp != null) {
+                    temp.remove();
+                }
+            });
         });
 
         this.templateBBoxes = templateBBoxes;
