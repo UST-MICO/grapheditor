@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 ## [Unreleased]
 
 
+## [0.5.4] - 2020-04-30
+
+### Fixed
+
+- Fixed build errors when using the package in a typescript project
+
+
 ## [0.5.3] - 2020-04-30
 
 **Known Issue:** this version was compiled using typescript 3.8!
@@ -282,7 +289,8 @@ First beta version.
 - Initial webcomponent
 - Documentation
 
-[Unreleased]: https://github.com/UST-MICO/grapheditor/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/UST-MICO/grapheditor/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/UST-MICO/grapheditor/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/UST-MICO/grapheditor/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/UST-MICO/grapheditor/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/UST-MICO/grapheditor/compare/v0.5.0...v0.5.1
