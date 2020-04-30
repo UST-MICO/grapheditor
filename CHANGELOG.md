@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## [Unreleased]
 
+
+## [0.5.3] - 2020-04-30
+
 **Known Issue:** this version was compiled using typescript 3.8!
 The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`. See [typescript 3.7 release notes](www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#class-field-mitigations) for more information.
 
@@ -279,7 +282,8 @@ First beta version.
 - Initial webcomponent
 - Documentation
 
-[Unreleased]: https://github.com/UST-MICO/grapheditor/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/UST-MICO/grapheditor/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/UST-MICO/grapheditor/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/UST-MICO/grapheditor/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/UST-MICO/grapheditor/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/UST-MICO/grapheditor/compare/v0.4.1...v0.5.0

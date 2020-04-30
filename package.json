@@ -1,12 +1,16 @@
 {
   "name": "@ustutt/grapheditor-webcomponent",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Webcomponent for displaying and editing graphs.",
   "author": "Fabian Bühler",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
   "typesVersions": {
-    ">=3.6": { "*": ["./lib/index.d.ts"] }
+    ">=3.6": {
+      "*": [
+        "./lib/index.d.ts"
+      ]
+    }
   },
   "directories": {
     "doc": "docs",
