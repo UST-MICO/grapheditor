@@ -1142,7 +1142,10 @@ export default class GraphEditor extends HTMLElement {
                         if (startTreeParent != null) {
                             const behaviour = this.groupingManager.getGroupBehaviourOf(startTreeParent);
                             if (behaviour.onNodeMoveStart != null) {
-                                behaviour.onNodeMoveStart(startTreeParent, movementInfo.node.id.toString(), this.objectCache.getNode(startTreeParent), movementInfo.node, this);
+                                const needRender = Boolean(
+                                    behaviour.onNodeMoveStart(startTreeParent, movementInfo.node.id.toString(), this.objectCache.getNode(startTreeParent), movementInfo.node, this)
+                                );
+                                movementInfo.needsFullRender = needRender || movementInfo.needsFullRender;
                             }
                         }
                         return movementInfo;
@@ -1152,26 +1155,28 @@ export default class GraphEditor extends HTMLElement {
                         let x = event.x;
                         let y = event.y;
                         if (event.subject != null) {
-                            const info: NodeMovementInformation = event.subject;
-                            if (info.offset?.dx !== null) {
-                                x -= info.offset.dx;
+                            const movementInfo: NodeMovementInformation = event.subject;
+                            if (movementInfo.offset?.dx !== null) {
+                                x -= movementInfo.offset.dx;
                             }
-                            if (info.offset?.dy !== null) {
-                                y -= info.offset.dy;
+                            if (movementInfo.offset?.dy !== null) {
+                                y -= movementInfo.offset.dy;
                             }
-                        }
-                        let needsFullRender: boolean = false;
-                        needsFullRender = this.tryToLeaveCurrentGroup(event.subject, x, y, EventSource.USER_INTERACTION, event) || needsFullRender;
-                        needsFullRender = this.tryJoinNodeIntoGroup(event.subject, x, y, EventSource.USER_INTERACTION, event) || needsFullRender;
-                        this._moveNode(event.subject, event.x, event.y, EventSource.USER_INTERACTION);
-                        if (needsFullRender) {
-                            this.completeRender(false, EventSource.USER_INTERACTION);
-                        } else {
-                            this.updateGraphPositions(EventSource.USER_INTERACTION);
+                            movementInfo.needsFullRender = movementInfo.needsFullRender ?? false;
+                            movementInfo.needsFullRender = this.tryToLeaveCurrentGroup(event.subject, x, y, EventSource.USER_INTERACTION, event) || movementInfo.needsFullRender;
+                            movementInfo.needsFullRender = this.tryJoinNodeIntoGroup(event.subject, x, y, EventSource.USER_INTERACTION, event) || movementInfo.needsFullRender;
+                            movementInfo.needsFullRender = this._moveNode(event.subject, event.x, event.y, EventSource.USER_INTERACTION) || movementInfo.needsFullRender;
+                            if (movementInfo.needsFullRender) {
+                                this.completeRender(false, EventSource.USER_INTERACTION);
+                            } else {
+                                this.updateGraphPositions(EventSource.USER_INTERACTION);
+                            }
+                            movementInfo.needsFullRender = false;
                         }
                     })
                     .on('end', () => {
-                        const node = event.subject.node;
+                        const movementInfo: NodeMovementInformation = event.subject;
+                        const node = movementInfo.node;
                         const endTreeParent = this.groupingManager.getTreeParentOf(node.id);
                         if (endTreeParent != null) {
                             const behaviour = this.groupingManager.getGroupBehaviourOf(endTreeParent);
@@ -1179,6 +1184,13 @@ export default class GraphEditor extends HTMLElement {
                                 behaviour.onNodeMoveEnd(endTreeParent, node.id.toString(), this.objectCache.getNode(endTreeParent), node, this);
                             }
                         }
+
+                        // rerender if needed
+                        if (movementInfo.needsFullRender) {
+                            this.completeRender(false, EventSource.USER_INTERACTION);
+                            movementInfo.needsFullRender = false;
+                        }
+
                         this.onNodeDrag('end', event.subject, EventSource.USER_INTERACTION);
                     })
             );
@@ -1326,40 +1338,50 @@ export default class GraphEditor extends HTMLElement {
      * @param updatePositions set this to true to automatically render all position changes (default: false)
      * @returns true iff the graph possibly needs a complete render to correctly display all changes
      */
+    // eslint-disable-next-line complexity
     public moveNode(nodeId: string | number, x: number, y: number, updatePositions: boolean= false): boolean {
         const node = this.objectCache.getNode(nodeId);
         const nodeMovementInfo = this.getNodeMovementInformation(node, node.x, node.y);
         if (nodeMovementInfo == null) {
             return; // move was cancelled by callback
         }
+        nodeMovementInfo.needsFullRender = nodeMovementInfo.needsFullRender ?? false;
         this.onNodeDrag('start', nodeMovementInfo, EventSource.API);
         const startTreeParent = this.groupingManager.getTreeParentOf(nodeMovementInfo.node.id);
         if (startTreeParent != null) {
             const behaviour = this.groupingManager.getGroupBehaviourOf(startTreeParent);
             if (behaviour.onNodeMoveStart != null) {
-                behaviour.onNodeMoveStart(startTreeParent, nodeMovementInfo.node.id.toString(), this.objectCache.getNode(startTreeParent), nodeMovementInfo.node, this);
+                const needRender = Boolean(
+                    behaviour.onNodeMoveStart(startTreeParent, nodeMovementInfo.node.id.toString(), this.objectCache.getNode(startTreeParent), nodeMovementInfo.node, this)
+                );
+                nodeMovementInfo.needsFullRender = needRender || nodeMovementInfo.needsFullRender;
             }
         }
-        let needsFullRender: boolean = false;
-        needsFullRender = this.tryToLeaveCurrentGroup(nodeMovementInfo, x, y, EventSource.API) || needsFullRender;
-        needsFullRender = this.tryJoinNodeIntoGroup(nodeMovementInfo, x, y, EventSource.API) || needsFullRender;
-        this._moveNode(nodeMovementInfo, x, y, EventSource.API);
+        nodeMovementInfo.needsFullRender = this.tryToLeaveCurrentGroup(nodeMovementInfo, x, y, EventSource.API) || nodeMovementInfo.needsFullRender;
+        nodeMovementInfo.needsFullRender = this.tryJoinNodeIntoGroup(nodeMovementInfo, x, y, EventSource.API) || nodeMovementInfo.needsFullRender;
+
+        nodeMovementInfo.needsFullRender = this._moveNode(nodeMovementInfo, x, y, EventSource.API) || nodeMovementInfo.needsFullRender;
+
         const endTreeParent = this.groupingManager.getTreeParentOf(nodeMovementInfo.node.id);
         if (endTreeParent != null) {
             const behaviour = this.groupingManager.getGroupBehaviourOf(endTreeParent);
             if (behaviour.onNodeMoveEnd != null) {
-                behaviour.onNodeMoveEnd(endTreeParent, nodeMovementInfo.node.id.toString(), this.objectCache.getNode(endTreeParent), nodeMovementInfo.node, this);
+                const needRender = Boolean(
+                    behaviour.onNodeMoveEnd(endTreeParent, nodeMovementInfo.node.id.toString(), this.objectCache.getNode(endTreeParent), nodeMovementInfo.node, this)
+                );
+                nodeMovementInfo.needsFullRender = needRender || nodeMovementInfo.needsFullRender;
             }
         }
         this.onNodeDrag('end', nodeMovementInfo, EventSource.API);
         if (updatePositions) {
-            if (needsFullRender) {
+            if (nodeMovementInfo.needsFullRender) {
                 this.completeRender(false, EventSource.API);
             } else {
                 this.updateGraphPositions(EventSource.API);
             }
+            nodeMovementInfo.needsFullRender = false;
         }
-        return needsFullRender;
+        return nodeMovementInfo.needsFullRender;
     }
 
     /**
@@ -1424,45 +1446,53 @@ export default class GraphEditor extends HTMLElement {
      * @param y the target y coordinate
      * @param eventSource the event source used in movement events
      */
-    private _moveNode(nodeMovementInfo: NodeMovementInformation, x: number, y: number, eventSource: EventSource) {
+    private _moveNode(nodeMovementInfo: NodeMovementInformation, x: number, y: number, eventSource: EventSource): boolean {
+        let needsFullRender = false;
+
         if (nodeMovementInfo.offset != null) {
             x -= nodeMovementInfo.offset?.dx ?? 0;
             y -= nodeMovementInfo.offset?.dy ?? 0;
         }
         const node = nodeMovementInfo.node;
+
         // call parent groups beforeNodeMove
         const currentTreeParent = this.groupingManager.getTreeParentOf(node.id);
         if (currentTreeParent != null) {
             const groupBehaviour = this.groupingManager.getGroupBehaviourOf(currentTreeParent);
             if (groupBehaviour.beforeNodeMove != null) {
                 const groupNode = this.objectCache.getNode(currentTreeParent);
-                groupBehaviour.beforeNodeMove(currentTreeParent, node.id.toString(), groupNode, node, {x: x, y: y}, this);
+                needsFullRender = Boolean(groupBehaviour.beforeNodeMove(currentTreeParent, node.id.toString(), groupNode, node, {x: x, y: y}, this));
             }
         }
+
         // check for fixed group positions
         const groupDictatedPosition = this.getGroupDictatedPositionOfNode(node);
         if (groupDictatedPosition != null) {
             x = groupDictatedPosition.x;
             y = groupDictatedPosition.y;
         }
+
         const dx = x - node.x;
         const dy = y - node.y;
-        if (dx === 0 && dy === 0) {
-            return; // nothing has moved
+        if (dx !== 0 || dy !== 0) {
+            // perform actual movement
+            node.x = x;
+            node.y = y;
+            if (nodeMovementInfo.children != null) {
+                nodeMovementInfo.children.forEach(childId => {
+                    const child = this.objectCache.getNode(childId);
+                    if (child != null) {
+                        child.x += dx;
+                        child.y += dy;
+                        this.onNodePositionChange(child, eventSource);
+                    }
+                });
+            }
         }
-        node.x = x;
-        node.y = y;
-        if (nodeMovementInfo.children != null) {
-            nodeMovementInfo.children.forEach(childId => {
-                const child = this.objectCache.getNode(childId);
-                if (child != null) {
-                    child.x += dx;
-                    child.y += dy;
-                    this.onNodePositionChange(child, eventSource);
-                }
-            });
-        }
+
+        // always fire position change
         this.onNodePositionChange(node, eventSource);
+        return needsFullRender;
     }
 
     /**

@@ -210,8 +210,9 @@ export interface GroupBehaviour {
      * @param groupNode the node corresponding to the parent group, may be null
      * @param childNode the node corresponding to the child group
      * @param graphEditor the instance of the grapheditor
+     * @returns `true` if the graph needs to be completely rerendered to reflect all changes
      */
-    onNodeMoveStart?: (group: string, childGroup: string, groupNode: Node, childNode: Node, graphEditor: GraphEditor) => void;
+    onNodeMoveStart?: (group: string, childGroup: string, groupNode: Node, childNode: Node, graphEditor: GraphEditor) => boolean|void;
     /**
      * Callback called before a direct child in the same tree is moved to a new position.
      *
@@ -223,8 +224,9 @@ export interface GroupBehaviour {
      * @param childNode the node corresponding to the child group
      * @param newPosition the absolute position the node will be moved to
      * @param graphEditor the instance of the grapheditor
+     * @returns `true` if the graph needs to be completely rerendered to reflect all changes
      */
-    beforeNodeMove?: (group: string, childGroup: string, groupNode: Node, childNode: Node, newPosition: Point, graphEditor: GraphEditor) => void;
+    beforeNodeMove?: (group: string, childGroup: string, groupNode: Node, childNode: Node, newPosition: Point, graphEditor: GraphEditor) => boolean|void;
     /**
      * Callback called after a direct child in the same tree finished moving.
      *
@@ -235,8 +237,9 @@ export interface GroupBehaviour {
      * @param groupNode the node corresponding to the parent group, may be null
      * @param childNode the node corresponding to the child group
      * @param graphEditor the instance of the grapheditor
+     * @returns `true` if the graph needs to be completely rerendered to reflect all changes
      */
-    onNodeMoveEnd?: (group: string, childGroup: string, groupNode: Node, childNode: Node, graphEditor: GraphEditor) => void;
+    onNodeMoveEnd?: (group: string, childGroup: string, groupNode: Node, childNode: Node, graphEditor: GraphEditor) => boolean|void;
 
     /** A map mapping the id of occupied drop zones to the id of the node occupying them. */
     occupiedDropZones?: Map<string, string>;
@@ -917,18 +920,29 @@ export class GroupingManager {
      * @param groupProperty the groupProperty that must be true
      * @param groupDecisionCallback the groupDecisionCallback that must be true (if it is set)
      * @param strategy the strategy to use for finding the group
+     * @param nodeForDecisionCallback the node to use for the decision callback (provide only if different from child node!)
      * @returns the id of the matching group or the childNode id
      */
-    protected getGroupWithProperty(childNode: Node, groupProperty: string, groupDecisionCallback: string, strategy: 'closest-parent' | 'largest-group'): string {
+    // eslint-disable-next-line complexity
+    protected getGroupWithProperty(childNode: Node, groupProperty: string, groupDecisionCallback: string, strategy: 'closest-parent' | 'largest-group', nodeForDecisionCallback?: Node): string {
         const childId = childNode.id.toString();
         let currentGroup: NodeGroup = this.groupsById.get(childId); // the child group is never checked
         let validGroup: string;
         while (currentGroup?.treeParent != null && currentGroup.groupId !== currentGroup.treeRoot) {
             const parentGroup = this.getGroupForNode(currentGroup.treeParent);
+            // test basic group property
             if (parentGroup.groupBehaviour[groupProperty]) {
                 const behaviour = parentGroup.groupBehaviour;
+                // test fine grade callback decision
                 if (behaviour[groupDecisionCallback] == null ||
-                        behaviour[groupDecisionCallback](parentGroup.groupId, childId, this.graphEditor.getNode(parentGroup.groupId), childNode, this.graphEditor)) {
+                        behaviour[groupDecisionCallback](
+                            parentGroup.groupId,
+                            nodeForDecisionCallback?.id.toString() ?? childId,
+                            this.graphEditor.getNode(parentGroup.groupId),
+                            nodeForDecisionCallback ?? childNode,
+                            this.graphEditor
+                        )
+                ) {
                     // groupBehaviour satisfies conditions
                     if (strategy === 'closest-parent') {
                         return parentGroup.groupId;
@@ -1029,7 +1043,7 @@ export class GroupingManager {
         }
 
         // check group tree
-        const matchingGroup = this.getGroupWithProperty(groupNode, 'captureDraggedNodes', 'captureThisDraggedNode', 'closest-parent');
+        const matchingGroup = this.getGroupWithProperty(groupNode, 'captureDraggedNodes', 'captureThisDraggedNode', 'closest-parent', node);
 
         if (matchingGroup === groupId.toString()) {
             // groupNode.id was used as falback by this.getGroupWithProperty

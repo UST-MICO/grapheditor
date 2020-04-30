@@ -45,4 +45,6 @@ export interface NodeMovementInformation {
     children?: Set<string>;
     /** The initial offset from the movement start position to the node. */
     offset?: RotationVector;
+    /** Flag, true if the next render should be a complete render instead of only updating positions. Reset after render. */
+    needsFullRender?: boolean;
 }
