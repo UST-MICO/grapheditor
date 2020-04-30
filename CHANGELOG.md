@@ -7,13 +7,21 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## [Unreleased]
 
-**Known Issue:** this version was compiled using typescript 3.7!
+**Known Issue:** this version was compiled using typescript 3.8!
 The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`. See [typescript 3.7 release notes](www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#class-field-mitigations) for more information.
+
+This will be the last release to include this warning in the changelog!
+
+### Added
+
+- Added complete render flags to some GroupBehaviour callbacks and the node movement information
+- Added `typesVersions` field to package.json to get a warning when using this package with an incompatible typescript version
 
 ### Fixed
 
 - Fixed loading templates sometimes crashing on firefox
 - Fixed target detection for dragged edges sometimes not working correctly
+- Fixed group drag and drop checking join conditions for the wrong node
 
 
 ## [0.5.2] - 2020-03-08
