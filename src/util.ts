@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { Selection } from 'd3-selection';
+
 /**
  * Interface compatible with DOMRect and SVGRect.
  */
@@ -60,4 +62,53 @@ export function calculateBoundingRect(...rectangles: Rect[]): Rect {
         }
     });
     return result;
+}
+
+/**
+ * Remove all child nodes from a single node.
+ *
+ * @param nodeSelection a d3 selection of a single node that should be emptied
+ */
+export function removeAllChildNodes(nodeSelection: Selection<SVGElement, any, any, any>): void {
+    if (nodeSelection.empty() || nodeSelection.size() > 1) {
+        console.error('Node selection may only consist of exactly one node!');
+        return;
+    }
+    const range = document?.createRange();
+    if (range == null) {
+        // fallback when document api is not available
+        const node = nodeSelection.node();
+        while (node.lastChild) {
+            node.lastChild.remove();
+        }
+    }
+    range.selectNodeContents(nodeSelection.node());
+    range.deleteContents();
+}
+
+/**
+ * Copy the child nodes of a template into the node selected in nodeSelection.
+ *
+ * @param nodeSelection a d3 selection of a single empty svg element
+ * @param templateSelection a d3 selection of a single svg element whose content is to be copied into node
+ */
+export function copyTemplateSelectionIntoNode(nodeSelection: Selection<SVGElement, any, any, any>, templateSelection: Selection<SVGElement, any, any, any>): void {
+    if (nodeSelection.empty() || nodeSelection.size() > 1) {
+        console.error('Node selection may only consist of exactly one node!');
+        return;
+    }
+    if (templateSelection.empty() || templateSelection.size() > 1) {
+        console.error('Template selection may only consist of exactly one node!');
+        return;
+    }
+    const range = document?.createRange();
+    if (range == null) {
+        // fallback when document api is not available
+        const node = nodeSelection.node();
+        templateSelection.node().childNodes.forEach((templateChildNode) => {
+            node.appendChild(templateChildNode.cloneNode(true));
+        });
+    }
+    range.selectNodeContents(templateSelection.node());
+    nodeSelection.node().appendChild(range.cloneContents());
 }
