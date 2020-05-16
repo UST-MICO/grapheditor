@@ -33,7 +33,7 @@ import { getNodeLinkHandles, applyUserLinkHandleCalculationCallback, calculateNe
 import { SmoothedEdgePathGenerator, EdgePathGenerator } from './dynamic-templates/edge-path-generators';
 import { GroupingManager } from './grouping';
 import { NodeDropZone } from './drop-zone';
-import { Rect } from './util';
+import { Rect, copyTemplateSelectionIntoNode, removeAllChildNodes } from './util';
 
 const SHADOW_DOM_TEMPLATE = `
 <slot name="style"></slot>
@@ -58,6 +58,9 @@ export default class GraphEditor extends HTMLElement {
     private resizeObserver;
 
     private svg: Selection<SVGSVGElement, any, any, any>;
+    private graph: Selection<SVGGElement, any, any, any>;
+    private nodesGroup: Selection<SVGGElement, any, any, any>;
+    private edgesGroup: Selection<SVGGElement, any, any, any>;
 
     private root: ShadowRoot;
     private zoom: ZoomBehavior<any, any>;
@@ -914,7 +917,7 @@ export default class GraphEditor extends HTMLElement {
         }
 
         // setup graph groups //////////////////////////////////////////////
-        let graph = newSvg.select('defs ~ g');
+        let graph = newSvg.select<SVGGElement>('defs ~ g');
         if (graph.empty()) {
             graph = newSvg.append('g');
         }
@@ -932,13 +935,15 @@ export default class GraphEditor extends HTMLElement {
             this.onZoomChange(oldZoom, event.transform, eventSource);
         });
 
-        if (graph.select('g.edges').empty()) {
-            graph.append('g')
+        let edgesGroup = graph.select<SVGGElement>('g.edges');
+        if (edgesGroup.empty()) {
+            edgesGroup = graph.append('g')
                 .attr('class', 'edges');
         }
 
-        if (graph.select('g.nodes').empty()) {
-            graph.append('g')
+        let nodesGroup = graph.select<SVGGElement>('g.nodes');
+        if (nodesGroup.empty()) {
+            nodesGroup = graph.append('g')
                 .attr('class', 'nodes');
         }
 
@@ -952,6 +957,9 @@ export default class GraphEditor extends HTMLElement {
 
         this.svg = newSvg;
         this.zoom = newZoom;
+        this.graph = graph;
+        this.nodesGroup = nodesGroup;
+        this.edgesGroup = edgesGroup;
 
         // listener for clicks on the graph background
         newSvg.on('click', () => {
@@ -962,6 +970,7 @@ export default class GraphEditor extends HTMLElement {
 
         this.updateTemplates();
         this.updateSize();
+        this.onInitializedSVG(oldSvg);
     }
 
     /**
@@ -1108,14 +1117,12 @@ export default class GraphEditor extends HTMLElement {
 
         this.updateSize();
 
-        const graph = svg.select('g.zoom-group');
-
         // update nodes ////////////////////////////////////////////////////////
         if (forceUpdateTemplates) {
-            graph.select('.nodes').selectAll('g.node').remove();
+            this.nodesGroup.selectAll('g.node').remove();
         }
 
-        const nodeSelection = graph.select('.nodes')
+        const nodeSelection = this.nodesGroup
             .selectAll<SVGGElement, Node>('g.node')
             .data<Node>(this._nodes, (d: Node) => d.id.toString())
             .join(
@@ -1200,10 +1207,10 @@ export default class GraphEditor extends HTMLElement {
 
         // update edges ////////////////////////////////////////////////////////
         if (forceUpdateTemplates) {
-            graph.select('.edges').selectAll('g.edge-group:not(.dragged)').remove();
+            this.edgesGroup.selectAll('g.edge-group:not(.dragged)').remove();
         }
         const self = this;
-        graph.select('.edges')
+        this.edgesGroup
             .selectAll<SVGGElement, Edge>('g.edge-group:not(.dragged)')
             .data<Edge>(this._edges, edgeId)
             .join(
@@ -1507,11 +1514,10 @@ export default class GraphEditor extends HTMLElement {
      * @returns the same point in screen/client coordinates
      */
     public getClientPointFromGraphCoordinates(graphPoint: Point): Point {
-        const ng = this.svg.select<SVGGElement>('g.nodes');
         const p = this.svg.node().createSVGPoint();
         p.x = graphPoint.x;
         p.y = graphPoint.y;
-        return p.matrixTransform(ng.node().getScreenCTM());
+        return p.matrixTransform(this.nodesGroup.node().getScreenCTM());
     }
 
 
@@ -1524,11 +1530,10 @@ export default class GraphEditor extends HTMLElement {
      * @returns the same point in graph coordinates
      */
     public getGraphPointFromClientCoordinates(clientPoint: Point): Point {
-        const ng = this.svg.select<SVGGElement>('g.nodes');
         const p = this.svg.node().createSVGPoint();
         p.x = clientPoint.x;
         p.y = clientPoint.y;
-        return p.matrixTransform(ng.node().getScreenCTM().inverse());
+        return p.matrixTransform(this.nodesGroup.node().getScreenCTM().inverse());
     }
 
     /**
@@ -1629,17 +1634,14 @@ export default class GraphEditor extends HTMLElement {
      *      (useful if node classes can change text attributes like size)
      */
     public updateTextElements(force: boolean = false): void {
-        const svg = this.svg;
-        const graph = svg.select('g.zoom-group');
-
         const self = this;
 
-        graph.select('.nodes')
+        this.nodesGroup
             .selectAll<SVGGElement, Node>('g.node')
             .data<Node>(this._nodes, (d: Node) => d.id.toString())
             .call(this.updateNodeText.bind(this), force);
 
-        graph.select('.edges')
+        this.edgesGroup
             .selectAll<SVGGElement, Edge>('g.edge-group:not(.dragged)')
             .data<Edge>(this._edges, edgeId)
             .each(function (d) {
@@ -1665,7 +1667,7 @@ export default class GraphEditor extends HTMLElement {
         if (oldTemplateID != null && oldTemplateID === templateId && dynamic === oldDynamic) {
             return; // already using right template
         }
-        element.selectAll('*').remove(); // clear old content
+        removeAllChildNodes(element);
         if (dynamic) {
             // dynamic template
             if (templateType === 'node') {
@@ -1743,19 +1745,62 @@ export default class GraphEditor extends HTMLElement {
             console.warn(`Tried to use unsupported template type: ${templateType}`);
         }
         // copy template content into element
-        newTemplate.node().childNodes.forEach((node) => {
-            element.node().appendChild(node.cloneNode(true));
-        });
+        copyTemplateSelectionIntoNode(element, newTemplate);
+    }
+
+    /**
+     * Get the d3 selection of the current SVG used by this grapheditor.
+     */
+    public getSVG(): Selection<SVGSVGElement, any, any, any> {
+        return this.svg;
+    }
+
+    /**
+     * Get the d3 selection of the SVG g element containing the graph.
+     */
+    public getGraphGroup(): Selection<SVGGElement, any, any, any> {
+        return this.graph;
+    }
+
+    /**
+     * Get the d3 selection of the SVG g element containing all node groups.
+     */
+    public getNodesGroup(): Selection<SVGGElement, any, any, any> {
+        return this.nodesGroup;
+    }
+
+    /**
+     * Get the d3 selection of the SVG g element containing all edge groups.
+     */
+    public getEdgesGroup(): Selection<SVGGElement, any, any, any> {
+        return this.edgesGroup;
     }
 
     /**
      * Get the node selection with bound data.
      */
     public getNodeSelection(): Selection<SVGGElement, Node, any, unknown> {
-        const graph = this.svg.select('g.zoom-group');
-        return graph.select('.nodes')
+        return this.nodesGroup
             .selectAll<SVGGElement, Node>('g.node')
             .data<Node>(this._nodes, (d: Node) => d.id.toString());
+    }
+
+    /**
+     * Get the edge selection with bound data.
+     */
+    public getEdgeSelection(): Selection<SVGGElement, Edge, any, unknown> {
+        return this.edgesGroup
+            .selectAll<SVGGElement, Edge>('g.edge-group:not(.dragged)')
+            .data<Edge>(this._edges, edgeId);
+    }
+
+    /**
+     * Get the dragged edge selection with bound data.
+     */
+    public getDraggedEdgeSelection(): Selection<SVGGElement, DraggedEdge, any, unknown> {
+        return this.edgesGroup
+            .selectAll<SVGGElement, DraggedEdge>('g.edge-group.dragged')
+            .data<DraggedEdge>(this.draggedEdges, edgeId);
     }
 
     /**
@@ -1766,7 +1811,7 @@ export default class GraphEditor extends HTMLElement {
     private getSingleNodeSelection(nodeId: string|number): Selection<SVGGElement, Node, any, unknown> {
         const node = this.objectCache.getNode(nodeId);
         if (node != null) {
-            return this.svg.select<SVGGElement>('.nodes').select<SVGGElement>(`g.node#node-${nodeId}`).datum(node);
+            return this.nodesGroup.select<SVGGElement>(`g.node#node-${nodeId}`).datum(node);
         }
         return null;
     }
@@ -2070,11 +2115,7 @@ export default class GraphEditor extends HTMLElement {
      */
     private updateEdgeGroups(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>) {
         if (edgeGroupSelection == null) {
-            const svg = this.svg;
-
-            const graph = svg.select('g.zoom-group');
-
-            edgeGroupSelection = graph.select('.edges')
+            edgeGroupSelection = this.edgesGroup
                 .selectAll<SVGGElement, Edge>('g.edge-group:not(.dragged)')
                 .data<Edge>(this._edges, edgeId);
         }
@@ -2092,10 +2133,7 @@ export default class GraphEditor extends HTMLElement {
      * Update draggededge groups.
      */
     private updateDraggedEdgeGroups() {
-        const svg = this.svg;
-
-        const graph = svg.select('g.zoom-group');
-        graph.select('.edges')
+        this.edgesGroup
             .selectAll<SVGGElement, DraggedEdge>('g.edge-group.dragged')
             .data<DraggedEdge>(this.draggedEdges, edgeId)
             .join(
@@ -2229,7 +2267,7 @@ export default class GraphEditor extends HTMLElement {
                             isReversedEdge: handle.isReverseHandle ?? false,
                         };
                     })
-                    .container(() => this.svg.select('g.zoom-group').select('g.edges').node() as any)
+                    .container(() => this.edgesGroup.node() as any)
                     .on('start', () => this.completeRender(false, EventSource.USER_INTERACTION))
                     .on('drag', () => {
                         this.updateDraggedEdge(event.subject.edge, event.subject.capturingGroup);
@@ -3028,20 +3066,17 @@ export default class GraphEditor extends HTMLElement {
      * @param eventSource the event source used for render events (default: `EventSource.API`)
      */
     public updateGraphPositions(eventSource: EventSource = EventSource.API): void {
-        const svg = this.svg;
-
-        const graph = svg.select('g.zoom-group');
-        graph.select('.nodes')
+        this.nodesGroup
             .selectAll<any, Node>('g.node')
             .data<Node>(this._nodes, (d: Node) => d.id.toString())
             .call(this.updateNodePositions.bind(this));
 
-        graph.select('.edges')
+        this.edgesGroup
             .selectAll('g.edge-group:not(.dragged)')
             .data(this._edges, edgeId)
             .call(this.updateEdgePositions.bind(this));
 
-        graph.select('.edges')
+        this.edgesGroup
             .selectAll('g.edge-group.dragged')
             .data(this.draggedEdges, edgeId)
             .call(this.updateEdgePositions.bind(this));
@@ -3727,10 +3762,7 @@ export default class GraphEditor extends HTMLElement {
      */
     private updateEdgeHighligts(edgeSelection?: Selection<SVGGElement, Edge, any, unknown>) {
         if (edgeSelection == null) {
-            const svg = this.svg;
-
-            const graph = svg.select<SVGGElement>('g.zoom-group');
-            edgeSelection = graph.select<SVGGElement>('.edges')
+            edgeSelection = this.edgesGroup
                 .selectAll<SVGGElement, Edge>('g.edge-group:not(.dragged)')
                 .data<Edge>(this._edges, edgeId);
         }
@@ -3755,7 +3787,7 @@ export default class GraphEditor extends HTMLElement {
      */
     private onBackgroundClick() {
         if (this.currentZoom == null) {
-            this.currentZoom = zoomTransform(this.svg.select<SVGGElement>('.zoom-group').node());
+            this.currentZoom = zoomTransform(this.graph.node());
         }
         const ev = new CustomEvent('backgroundclick', {
             bubbles: true,
@@ -3815,6 +3847,28 @@ export default class GraphEditor extends HTMLElement {
                 newZoom: newZoom,
                 currentViewWindow: this.currentViewWindow,
             },
+        });
+        this.dispatchEvent(ev);
+    }
+
+    /**
+     * Create and dispatch a 'svginitialized' event.
+     *
+     * @param oldSVG the old svg if any
+     */
+    private onInitializedSVG(oldSVG?: Selection<SVGSVGElement, any, any, any>) {
+        const detail: any = {
+            eventSource: EventSource.INTERNAL,
+            newSVG: this.svg,
+        };
+        if (oldSVG != null) {
+            detail.oldSVG = oldSVG;
+        }
+        const ev = new CustomEvent('svginitialized', {
+            bubbles: true,
+            composed: true,
+            cancelable: false,
+            detail: detail,
         });
         this.dispatchEvent(ev);
     }
