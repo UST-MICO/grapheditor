@@ -24,6 +24,12 @@ module.exports = merge(common, {
             hash: true,
             inject: 'head',
         }),
+        new HtmlWebpackPlugin({
+            filename: 'resize.html',
+            template: 'example/test-resize.html',
+            hash: true,
+            inject: 'head',
+        }),
     ],
     devServer: {
         contentBase: path.resolve(__dirname, '_bundles'),
