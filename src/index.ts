@@ -16,5 +16,9 @@
  */
 
 import GraphEditor from './grapheditor';
+export * from './grapheditor';
+export * from './node';
+export * from './edge';
+export * from './resizing';
 
 window.customElements.define('network-graph', GraphEditor);
