@@ -108,7 +108,7 @@
 
             graph.nodeList = [
                 { id: 1, title: 'A', type: 'resizable', dynamicTemplate: 'resizable', x: 0, y: 0, width: 60, height: 40 },
-                { id: 2, title: 'B', type: 'resizable', dynamicTemplate: 'resizable', x: 250, y: 0, width: 60, height: 40 },
+                { id: 2, title: 'B', type: 'resizable', dynamicTemplate: 'resizable', x: 250, y: 0, width: 40, height: 60 },
                 { id: 3, title: 'C', type: 'resizable', dynamicTemplate: 'resizable', x: 100, y: 200, width: 60, height: 40 },
             ];
 
@@ -118,6 +118,7 @@
             var rm = new this['grapheditor-webcomponent'].ResizingManager(graph);
 
             rm.showResizeOverlay(1, {handleTemplate: 'resize-handle', rotateHandles: false});
+            rm.showResizeOverlay(2, {handleTemplate: 'resize-handle', rotateHandles: false});
         </script>
     </body>
 </html>

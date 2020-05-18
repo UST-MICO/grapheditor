@@ -14,6 +14,8 @@ export interface ResizeOverlayOptions {
     noHorizontalHandles?: boolean;
     noVerticalHandles?: boolean;
     noCornerHandles?: boolean;
+
+    preserveRatio?: boolean;
 }
 
 interface ResizeHandle {
@@ -357,11 +359,19 @@ export class ResizingManager {
         const minHeight = 10;
         const maxWidth = Infinity;
         const maxHeight = Infinity;
+        const preserveRatio = options.preserveRatio ?? false;
 
         if (handle.type === 'top-left') {
             return (dx: number, dy: number, rect: Rect) => {
-                const cdx = -clampDelta(-dx, rect.width, minWidth, maxWidth);
-                const cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
+                let cdx = -clampDelta(-dx, rect.width, minWidth, maxWidth);
+                let cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
+                if (preserveRatio) {
+                    dy = cdy;
+                    const ratio = rect.height / rect.width;
+                    dy = cdx * ratio;
+                    cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
+                    cdx = cdx * (cdy / dy);
+                }
                 return {
                     x: rect.x + cdx,
                     y: rect.y + cdy,
@@ -373,8 +383,15 @@ export class ResizingManager {
 
         if (handle.type === 'top-right') {
             return (dx: number, dy: number, rect: Rect) => {
-                const cdx = clampDelta(dx, rect.width, minWidth, maxWidth);
-                const cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
+                let cdx = clampDelta(dx, rect.width, minWidth, maxWidth);
+                let cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
+                if (preserveRatio) {
+                    dy = cdy;
+                    const ratio = rect.height / rect.width;
+                    dy = -cdx * ratio;
+                    cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
+                    cdx = cdx * (cdy / dy);
+                }
                 return {
                     x: rect.x,
                     y: rect.y + cdy,
@@ -386,8 +403,15 @@ export class ResizingManager {
 
         if (handle.type === 'bottom-left') {
             return (dx: number, dy: number, rect: Rect) => {
-                const cdx = -clampDelta(-dx, rect.width, minWidth, maxWidth);
-                const cdy = clampDelta(dy, rect.height, minHeight, maxHeight);
+                let cdx = -clampDelta(-dx, rect.width, minWidth, maxWidth);
+                let cdy = clampDelta(dy, rect.height, minHeight, maxHeight);
+                if (preserveRatio) {
+                    dy = cdy;
+                    const ratio = rect.height / rect.width;
+                    dy = -cdx * ratio;
+                    cdy = clampDelta(dy, rect.height, minHeight, maxHeight);
+                    cdx = cdx * (cdy / dy);
+                }
                 return {
                     x: rect.x + cdx,
                     y: rect.y,
@@ -399,8 +423,15 @@ export class ResizingManager {
 
         if (handle.type === 'bottom-right') {
             return (dx: number, dy: number, rect: Rect) => {
-                const cdx = clampDelta(dx, rect.width, minWidth, maxWidth);
-                const cdy = clampDelta(dy, rect.height, minHeight, maxHeight);
+                let cdx = clampDelta(dx, rect.width, minWidth, maxWidth);
+                let cdy = clampDelta(dy, rect.height, minHeight, maxHeight);
+                if (preserveRatio) {
+                    dy = cdy;
+                    const ratio = rect.height / rect.width;
+                    dy = cdx * ratio;
+                    cdy = clampDelta(dy, rect.height, minHeight, maxHeight);
+                    cdx = cdx * (cdy / dy);
+                }
                 return {
                     x: rect.x,
                     y: rect.y,
@@ -412,11 +443,18 @@ export class ResizingManager {
 
         if (handle.type === 'top') {
             return (dx: number, dy: number, rect: Rect) => {
-                const cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
+                let cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
+                let cdx = 0;
+                if (preserveRatio) {
+                    const ratio = rect.width / rect.height;
+                    dx = cdy * ratio;
+                    cdx = -clampDelta(-dx, rect.width, minWidth, maxWidth);
+                    cdy = cdy * (cdx / dx);
+                }
                 return {
-                    x: rect.x,
+                    x: rect.x + (cdx / 2),
                     y: rect.y + cdy,
-                    width: rect.width,
+                    width: rect.width - cdx,
                     height: rect.height - cdy,
                 };
             };
@@ -424,11 +462,18 @@ export class ResizingManager {
 
         if (handle.type === 'bottom') {
             return (dx: number, dy: number, rect: Rect) => {
-                const cdy = clampDelta(dy, rect.height, minHeight, maxHeight);
+                let cdy = clampDelta(dy, rect.height, minHeight, maxHeight);
+                let cdx = 0;
+                if (preserveRatio) {
+                    const ratio = rect.width / rect.height;
+                    dx = -cdy * ratio;
+                    cdx = -clampDelta(-dx, rect.width, minWidth, maxWidth);
+                    cdy = cdy * (cdx / dx);
+                }
                 return {
-                    x: rect.x,
+                    x: rect.x + (cdx / 2),
                     y: rect.y,
-                    width: rect.width,
+                    width: rect.width - cdx,
                     height: rect.height + cdy,
                 };
             };
@@ -436,24 +481,38 @@ export class ResizingManager {
 
         if (handle.type === 'left') {
             return (dx: number, dy: number, rect: Rect) => {
-                const cdx = -clampDelta(-dx, rect.width, minWidth, maxWidth);
+                let cdx = -clampDelta(-dx, rect.width, minWidth, maxWidth);
+                let cdy = 0;
+                if (preserveRatio) {
+                    const ratio = rect.height / rect.width;
+                    dy = cdx * ratio;
+                    cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
+                    cdx = cdx * (cdy / dy);
+                }
                 return {
                     x: rect.x + cdx,
-                    y: rect.y,
+                    y: rect.y + (cdy / 2),
                     width: rect.width - cdx,
-                    height: rect.height,
+                    height: rect.height - cdy,
                 };
             };
         }
 
         if (handle.type === 'right') {
             return (dx: number, dy: number, rect: Rect) => {
-                const cdx = clampDelta(dx, rect.width, minWidth, maxWidth);
+                let cdx = clampDelta(dx, rect.width, minWidth, maxWidth);
+                let cdy = 0;
+                if (preserveRatio) {
+                    const ratio = rect.height / rect.width;
+                    dy = -cdx * ratio;
+                    cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
+                    cdx = cdx * (cdy / dy);
+                }
                 return {
                     x: rect.x,
-                    y: rect.y,
+                    y: rect.y + (cdy / 2),
                     width: rect.width + cdx,
-                    height: rect.height,
+                    height: rect.height - cdy,
                 };
             };
         }
