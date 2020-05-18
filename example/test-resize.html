@@ -117,8 +117,9 @@
 
             var rm = new this['grapheditor-webcomponent'].ResizingManager(graph);
 
-            rm.showResizeOverlay(1, {handleTemplate: 'resize-handle', rotateHandles: false});
-            rm.showResizeOverlay(2, {handleTemplate: 'resize-handle', rotateHandles: false});
+            rm.showResizeOverlay(1, {handleTemplate: 'resize-handle', rotateHandles: false, minWidth: 20, minHeight: 20, symmetricHorizontal: true});
+            rm.showResizeOverlay(2, {handleTemplate: 'resize-handle', rotateHandles: false, minWidth: 20, minHeight: 20, preserveRatio: true, symmetricVertical: true});
+            rm.showResizeOverlay(3, {handleTemplate: 'resize-handle', rotateHandles: false, minWidth: 60, minHeight: 40, maxWidth: 60, maxHeight: 60, symmetric: true});
         </script>
     </body>
 </html>

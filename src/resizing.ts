@@ -16,6 +16,14 @@ export interface ResizeOverlayOptions {
     noCornerHandles?: boolean;
 
     preserveRatio?: boolean;
+    symmetric?: boolean;
+    symmetricHorizontal?: boolean;
+    symmetricVertical?: boolean;
+
+    minWidth?: number;
+    minHeight?: number;
+    maxWidth?: number;
+    maxHeight?: number;
 }
 
 interface ResizeHandle {
@@ -352,17 +360,41 @@ export class ResizingManager {
     }
 
 
+    // eslint-disable-next-line complexity
     private resizeHandlerFromHandle(nodeId: string, handle: ResizeHandle): ResizeHandler {
         const options = this.resizeOptions.get(nodeId);
 
-        const minWidth = 10;
-        const minHeight = 10;
-        const maxWidth = Infinity;
-        const maxHeight = Infinity;
+        let minWidth = 1;
+        let minHeight = 1;
+        let maxWidth = Infinity;
+        let maxHeight = Infinity;
+
+        if (options.minWidth > 0) {
+            minWidth = options.minWidth;
+        }
+        if (options.minHeight > 0) {
+            minHeight = options.minHeight;
+        }
+
+        if (options.maxWidth >= minWidth) {
+            maxWidth = options.maxWidth;
+        }
+        if (options.maxHeight >= minHeight) {
+            maxHeight = options.maxHeight;
+        }
+
         const preserveRatio = options.preserveRatio ?? false;
+        const symmetricHorizontal = options.symmetric || options.symmetricHorizontal || false;
+        const symmetricVertical = options.symmetric || options.symmetricVertical || false;
 
         if (handle.type === 'top-left') {
             return (dx: number, dy: number, rect: Rect) => {
+                if (symmetricHorizontal) {
+                    dx *= 2;
+                }
+                if (symmetricVertical) {
+                    dy *= 2;
+                }
                 let cdx = -clampDelta(-dx, rect.width, minWidth, maxWidth);
                 let cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
                 if (preserveRatio) {
@@ -373,8 +405,8 @@ export class ResizingManager {
                     cdx = cdx * (cdy / dy);
                 }
                 return {
-                    x: rect.x + cdx,
-                    y: rect.y + cdy,
+                    x: rect.x + (symmetricHorizontal ? (cdx / 2) : cdx),
+                    y: rect.y + (symmetricVertical ? (cdy / 2) : cdy),
                     width: rect.width - cdx,
                     height: rect.height - cdy,
                 };
@@ -383,6 +415,12 @@ export class ResizingManager {
 
         if (handle.type === 'top-right') {
             return (dx: number, dy: number, rect: Rect) => {
+                if (symmetricHorizontal) {
+                    dx *= 2;
+                }
+                if (symmetricVertical) {
+                    dy *= 2;
+                }
                 let cdx = clampDelta(dx, rect.width, minWidth, maxWidth);
                 let cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
                 if (preserveRatio) {
@@ -393,8 +431,8 @@ export class ResizingManager {
                     cdx = cdx * (cdy / dy);
                 }
                 return {
-                    x: rect.x,
-                    y: rect.y + cdy,
+                    x: rect.x - (symmetricHorizontal ? (cdx / 2) : 0),
+                    y: rect.y + (symmetricVertical ? (cdy / 2) : cdy),
                     width: rect.width + cdx,
                     height: rect.height - cdy,
                 };
@@ -403,6 +441,12 @@ export class ResizingManager {
 
         if (handle.type === 'bottom-left') {
             return (dx: number, dy: number, rect: Rect) => {
+                if (symmetricHorizontal) {
+                    dx *= 2;
+                }
+                if (symmetricVertical) {
+                    dy *= 2;
+                }
                 let cdx = -clampDelta(-dx, rect.width, minWidth, maxWidth);
                 let cdy = clampDelta(dy, rect.height, minHeight, maxHeight);
                 if (preserveRatio) {
@@ -413,8 +457,8 @@ export class ResizingManager {
                     cdx = cdx * (cdy / dy);
                 }
                 return {
-                    x: rect.x + cdx,
-                    y: rect.y,
+                    x: rect.x + (symmetricHorizontal ? (cdx / 2) : cdx),
+                    y: rect.y - (symmetricVertical ? (cdy / 2) : 0),
                     width: rect.width - cdx,
                     height: rect.height + cdy,
                 };
@@ -423,6 +467,12 @@ export class ResizingManager {
 
         if (handle.type === 'bottom-right') {
             return (dx: number, dy: number, rect: Rect) => {
+                if (symmetricHorizontal) {
+                    dx *= 2;
+                }
+                if (symmetricVertical) {
+                    dy *= 2;
+                }
                 let cdx = clampDelta(dx, rect.width, minWidth, maxWidth);
                 let cdy = clampDelta(dy, rect.height, minHeight, maxHeight);
                 if (preserveRatio) {
@@ -433,8 +483,8 @@ export class ResizingManager {
                     cdx = cdx * (cdy / dy);
                 }
                 return {
-                    x: rect.x,
-                    y: rect.y,
+                    x: rect.x - (symmetricHorizontal ? (cdx / 2) : 0),
+                    y: rect.y - (symmetricVertical ? (cdy / 2) : 0),
                     width: rect.width + cdx,
                     height: rect.height + cdy,
                 };
@@ -443,6 +493,9 @@ export class ResizingManager {
 
         if (handle.type === 'top') {
             return (dx: number, dy: number, rect: Rect) => {
+                if (symmetricVertical) {
+                    dy *= 2;
+                }
                 let cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
                 let cdx = 0;
                 if (preserveRatio) {
@@ -453,7 +506,7 @@ export class ResizingManager {
                 }
                 return {
                     x: rect.x + (cdx / 2),
-                    y: rect.y + cdy,
+                    y: rect.y + (symmetricVertical ? (cdy / 2) : cdy),
                     width: rect.width - cdx,
                     height: rect.height - cdy,
                 };
@@ -462,6 +515,9 @@ export class ResizingManager {
 
         if (handle.type === 'bottom') {
             return (dx: number, dy: number, rect: Rect) => {
+                if (symmetricVertical) {
+                    dy *= 2;
+                }
                 let cdy = clampDelta(dy, rect.height, minHeight, maxHeight);
                 let cdx = 0;
                 if (preserveRatio) {
@@ -472,7 +528,7 @@ export class ResizingManager {
                 }
                 return {
                     x: rect.x + (cdx / 2),
-                    y: rect.y,
+                    y: rect.y - (symmetricVertical ? (cdy / 2) : 0),
                     width: rect.width - cdx,
                     height: rect.height + cdy,
                 };
@@ -481,6 +537,9 @@ export class ResizingManager {
 
         if (handle.type === 'left') {
             return (dx: number, dy: number, rect: Rect) => {
+                if (symmetricHorizontal) {
+                    dx *= 2;
+                }
                 let cdx = -clampDelta(-dx, rect.width, minWidth, maxWidth);
                 let cdy = 0;
                 if (preserveRatio) {
@@ -490,7 +549,7 @@ export class ResizingManager {
                     cdx = cdx * (cdy / dy);
                 }
                 return {
-                    x: rect.x + cdx,
+                    x: rect.x + (symmetricHorizontal ? (cdx / 2) : cdx),
                     y: rect.y + (cdy / 2),
                     width: rect.width - cdx,
                     height: rect.height - cdy,
@@ -500,6 +559,9 @@ export class ResizingManager {
 
         if (handle.type === 'right') {
             return (dx: number, dy: number, rect: Rect) => {
+                if (symmetricHorizontal) {
+                    dx *= 2;
+                }
                 let cdx = clampDelta(dx, rect.width, minWidth, maxWidth);
                 let cdy = 0;
                 if (preserveRatio) {
@@ -509,7 +571,7 @@ export class ResizingManager {
                     cdx = cdx * (cdy / dy);
                 }
                 return {
-                    x: rect.x,
+                    x: rect.x - (symmetricHorizontal ? (cdx / 2) : 0),
                     y: rect.y + (cdy / 2),
                     width: rect.width + cdx,
                     height: rect.height - cdy,
