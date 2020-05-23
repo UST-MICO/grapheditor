@@ -185,7 +185,7 @@ export class ResizingManager {
 
         const node = this.graphEditor.getNode(nodeId);
         const bbox = this.graphEditor.getNodeBBox(nodeId);
-        console.log(node, bbox);
+
         if (node == null || bbox == null) {
             return;
         }
@@ -342,7 +342,6 @@ export class ResizingManager {
         handleSelection.attr('transform', (handle) => {
             const translate = `translate(${handle.x},${handle.y})`;
 
-            console.log('translate', translate);
             // handle rotation
             if (handle.rotation != null && handle.rotation !== 0) {
                 return `${translate} rotate(${handle.rotation})`;
@@ -402,7 +401,11 @@ export class ResizingManager {
                     const ratio = rect.height / rect.width;
                     dy = cdx * ratio;
                     cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
-                    cdx = cdx * (cdy / dy);
+                    if (cdy !== 0) {
+                        cdx = cdx * (cdy / dy);
+                    } else {
+                        cdx = 0;
+                    }
                 }
                 return {
                     x: rect.x + (symmetricHorizontal ? (cdx / 2) : cdx),
@@ -428,7 +431,11 @@ export class ResizingManager {
                     const ratio = rect.height / rect.width;
                     dy = -cdx * ratio;
                     cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
-                    cdx = cdx * (cdy / dy);
+                    if (cdy !== 0) {
+                        cdx = cdx * (cdy / dy);
+                    } else {
+                        cdx = 0;
+                    }
                 }
                 return {
                     x: rect.x - (symmetricHorizontal ? (cdx / 2) : 0),
@@ -454,7 +461,11 @@ export class ResizingManager {
                     const ratio = rect.height / rect.width;
                     dy = -cdx * ratio;
                     cdy = clampDelta(dy, rect.height, minHeight, maxHeight);
-                    cdx = cdx * (cdy / dy);
+                    if (cdy !== 0) {
+                        cdx = cdx * (cdy / dy);
+                    } else {
+                        cdx = 0;
+                    }
                 }
                 return {
                     x: rect.x + (symmetricHorizontal ? (cdx / 2) : cdx),
@@ -480,7 +491,11 @@ export class ResizingManager {
                     const ratio = rect.height / rect.width;
                     dy = cdx * ratio;
                     cdy = clampDelta(dy, rect.height, minHeight, maxHeight);
-                    cdx = cdx * (cdy / dy);
+                    if (cdy !== 0) {
+                        cdx = cdx * (cdy / dy);
+                    } else {
+                        cdx = 0;
+                    }
                 }
                 return {
                     x: rect.x - (symmetricHorizontal ? (cdx / 2) : 0),
@@ -502,7 +517,11 @@ export class ResizingManager {
                     const ratio = rect.width / rect.height;
                     dx = cdy * ratio;
                     cdx = -clampDelta(-dx, rect.width, minWidth, maxWidth);
-                    cdy = cdy * (cdx / dx);
+                    if (cdx !== 0) {
+                        cdy = cdy * (cdx / dx);
+                    } else {
+                        cdy = 0;
+                    }
                 }
                 return {
                     x: rect.x + (cdx / 2),
@@ -524,7 +543,11 @@ export class ResizingManager {
                     const ratio = rect.width / rect.height;
                     dx = -cdy * ratio;
                     cdx = -clampDelta(-dx, rect.width, minWidth, maxWidth);
-                    cdy = cdy * (cdx / dx);
+                    if (cdx !== 0) {
+                        cdy = cdy * (cdx / dx);
+                    } else {
+                        cdy = 0;
+                    }
                 }
                 return {
                     x: rect.x + (cdx / 2),
@@ -546,7 +569,11 @@ export class ResizingManager {
                     const ratio = rect.height / rect.width;
                     dy = cdx * ratio;
                     cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
-                    cdx = cdx * (cdy / dy);
+                    if (cdy !== 0) {
+                        cdx = cdx * (cdy / dy);
+                    } else {
+                        cdx = 0;
+                    }
                 }
                 return {
                     x: rect.x + (symmetricHorizontal ? (cdx / 2) : cdx),
@@ -569,6 +596,11 @@ export class ResizingManager {
                     dy = -cdx * ratio;
                     cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
                     cdx = cdx * (cdy / dy);
+                    if (cdy !== 0) {
+                        cdx = cdx * (cdy / dy);
+                    } else {
+                        cdx = 0;
+                    }
                 }
                 return {
                     x: rect.x - (symmetricHorizontal ? (cdx / 2) : 0),
