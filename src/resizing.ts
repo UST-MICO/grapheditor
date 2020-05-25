@@ -3,7 +3,30 @@ import { Selection, select, event } from 'd3-selection';
 import { drag } from 'd3-drag';
 import { Rect, removeAllChildNodes, copyTemplateSelectionIntoNode } from './util';
 import { Point } from './edge';
+import { Node } from './node';
+import { RotationVector } from './rotation-vector';
 
+
+export interface ResizeStrategy {
+    applyNewDimensions: (node: Node, width: number, height: number, graphEditor: GraphEditor) => void;
+    moveIntoBoundingBox: (node: Node, rect: Rect, graphEditor: GraphEditor) => RotationVector;
+}
+
+export class DefaultResizeStrategy implements ResizeStrategy {
+    applyNewDimensions(node: Node, width: number, height: number, graphEditor: GraphEditor): void {
+        node.width = width;
+        node.height = height;
+    }
+
+    moveIntoBoundingBox(node: Node, rect: Rect, graphEditor: GraphEditor): RotationVector {
+        const dx = rect.x + (rect.width / 2);
+        const dy = rect.y + (rect.height / 2);
+        node.x += dx;
+        node.y += dy;
+        graphEditor.moveNode(node.id, node.x, node.y);
+        return {dx: dx, dy: dy};
+    };
+}
 
 export interface ResizeOverlayOptions {
     handleTemplate?: string;
@@ -15,10 +38,13 @@ export interface ResizeOverlayOptions {
     noVerticalHandles?: boolean;
     noCornerHandles?: boolean;
 
+    resizeStrategy?: string;
     preserveRatio?: boolean;
+    preserveRatioOnDiagonals?: boolean;
     symmetric?: boolean;
     symmetricHorizontal?: boolean;
     symmetricVertical?: boolean;
+    liveResize?: boolean;
 
     minWidth?: number;
     minHeight?: number;
@@ -37,6 +63,13 @@ interface ResizeHandle {
 
 type ResizeHandler = (dx: number, dy: number, rect: Rect) => Rect;
 
+interface ResizeInformation {
+    handler: ResizeHandler;
+    start: Point;
+    startRect: Rect;
+    node: Node;
+    resizeStrategy: ResizeStrategy;
+}
 
 // eslint-disable-next-line complexity
 function resizeHandlesFromOptions(options: ResizeOverlayOptions|null, bbox: Rect): ResizeHandle[] {
@@ -131,6 +164,7 @@ function clampDelta(d: number, value: number, min: number, max: number): number 
 
 export class ResizingManager {
     readonly graphEditor: GraphEditor;
+    private resizeStrategies: Map<string, ResizeStrategy> = new Map();
 
     // event subscriptions
     private svgChange;
@@ -143,6 +177,7 @@ export class ResizingManager {
     private currentlyResizing: Map<string, Rect> = new Map();
 
     private resizeOverlays: string[] = [];
+
 
     constructor(graphEditor: GraphEditor) {
         this.graphEditor = graphEditor;
@@ -159,6 +194,7 @@ export class ResizingManager {
             }
         };
         this.graphEditor.addEventListener('nodepositionchange', this.nodePositionChange);
+        this.resizeStrategies.set('default', new DefaultResizeStrategy());
     }
 
     public unlink(): void {
@@ -288,19 +324,26 @@ export class ResizingManager {
             })
             .call(this.updateResizeHandlePositions.bind(this))
             .call(
-                drag<SVGGElement, ResizeHandle, {handler: ResizeHandler; start: Point; startRect: Rect}>()
+                drag<SVGGElement, ResizeHandle, ResizeInformation>()
                     .subject((handle) => {
                         if (this.currentlyResizing.has(nodeId)) {
                             return;
                         }
+                        const node = this.graphEditor.getNode(nodeId);
                         // eslint-disable-next-line no-shadow
                         const bbox = this.graphEditor.getNodeBBox(nodeId);
                         this.currentlyResizing.set(nodeId, bbox);
                         const handler = this.resizeHandlerFromHandle(nodeId, handle);
+                        const resizeStrategy = this.resizeStrategies.get(options.resizeStrategy ?? 'default');
+                        if (resizeStrategy == null) {
+                            console.warn(`Could not find the resize strategy "${options.resizeStrategy ?? 'default'}"!`);
+                        }
                         return {
                             handler: handler,
                             start: {x: event.x, y: event.y},
                             startRect: bbox,
+                            node: node,
+                            resizeStrategy: resizeStrategy,
                         };
                     })
                     .on('drag', () => {
@@ -308,11 +351,35 @@ export class ResizingManager {
                         const start: Point = event.subject.start;
                         const startRect: Rect = event.subject.startRect;
                         const newRect = resizeHandler(event.x - start.x, event.y - start.y, startRect);
-                        this.currentlyResizing.set(nodeId, newRect);
 
-                        this.updateOverlayDimensions(overlaySelection, nodeId, resizeHandlesFromOptions(options, newRect));
+                        if (options.liveResize) {
+                            const nodeShift = this.resizeNode(event.subject, newRect);
+                            const shiftedRect = {
+                                x: newRect.x - nodeShift.dx,
+                                y: newRect.y - nodeShift.dy,
+                                width: newRect.width,
+                                height: newRect.height,
+                            };
+                            this.currentlyResizing.set(nodeId, shiftedRect);
+                            event.subject.startRect = {
+                                x: startRect.x - nodeShift.dx,
+                                y: startRect.y - nodeShift.dy,
+                                width: startRect.width,
+                                height: startRect.height,
+                            };
+                            event.subject.start = {
+                                x: start.x - nodeShift.dx,
+                                y: start.y - nodeShift.dy,
+                            };
+                            this.updateOverlayPositions(overlaySelection);
+                            this.updateOverlayDimensions(overlaySelection, nodeId, resizeHandlesFromOptions(options, shiftedRect));
+                        } else {
+                            this.currentlyResizing.set(nodeId, newRect);
+                            this.updateOverlayDimensions(overlaySelection, nodeId, resizeHandlesFromOptions(options, newRect));
+                        }
                     })
                     .on('end', () => {
+                        this.resizeNode(event.subject, this.currentlyResizing.get(nodeId));
                         this.currentlyResizing.delete(nodeId);
 
                         // eslint-disable-next-line no-shadow
@@ -352,10 +419,28 @@ export class ResizingManager {
     }
 
     private updateOverlayPositions(overlaySelection: Selection<SVGGElement, string, SVGGElement, any>) {
-        overlaySelection.attr('transform', (nodeId) => {
-            const node = this.graphEditor.getNode(nodeId);
-            return `translate(${node.x},${node.y})`;
+        const self = this;
+        overlaySelection.each(function(nodeId) {
+            const node = self.graphEditor.getNode(nodeId);
+            select(this).attr('transform', `translate(${node.x},${node.y})`);
         });
+    }
+
+    private resizeNode(resizeInfo: ResizeInformation, newRect: Rect): RotationVector {
+        const strat = resizeInfo.resizeStrategy;
+        let nodeShift: RotationVector = {dx: 0, dy: 0};
+        try {
+            strat.applyNewDimensions(resizeInfo.node, newRect.width, newRect.height, this.graphEditor);
+        } catch (error) {
+            console.error(`An error occured while applying the new dimensions to the node ${resizeInfo.node.id}.`, error);
+        }
+        try {
+            nodeShift = strat.moveIntoBoundingBox(resizeInfo.node, newRect, this.graphEditor);
+        } catch (error) {
+            console.error(`An error occured while moving the node ${resizeInfo.node.id} into the new bounding box.`, error);
+        }
+        this.graphEditor.completeRender();
+        return nodeShift;
     }
 
 
@@ -383,6 +468,7 @@ export class ResizingManager {
         }
 
         const preserveRatio = options.preserveRatio ?? false;
+        const preserveRatioOnDiagonals = options.preserveRatioOnDiagonals ?? preserveRatio;
         const symmetricHorizontal = options.symmetric || options.symmetricHorizontal || false;
         const symmetricVertical = options.symmetric || options.symmetricVertical || false;
 
@@ -396,7 +482,7 @@ export class ResizingManager {
                 }
                 let cdx = -clampDelta(-dx, rect.width, minWidth, maxWidth);
                 let cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
-                if (preserveRatio) {
+                if (preserveRatioOnDiagonals) {
                     dy = cdy;
                     const ratio = rect.height / rect.width;
                     dy = cdx * ratio;
@@ -426,7 +512,7 @@ export class ResizingManager {
                 }
                 let cdx = clampDelta(dx, rect.width, minWidth, maxWidth);
                 let cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
-                if (preserveRatio) {
+                if (preserveRatioOnDiagonals) {
                     dy = cdy;
                     const ratio = rect.height / rect.width;
                     dy = -cdx * ratio;
@@ -456,7 +542,7 @@ export class ResizingManager {
                 }
                 let cdx = -clampDelta(-dx, rect.width, minWidth, maxWidth);
                 let cdy = clampDelta(dy, rect.height, minHeight, maxHeight);
-                if (preserveRatio) {
+                if (preserveRatioOnDiagonals) {
                     dy = cdy;
                     const ratio = rect.height / rect.width;
                     dy = -cdx * ratio;
@@ -486,7 +572,7 @@ export class ResizingManager {
                 }
                 let cdx = clampDelta(dx, rect.width, minWidth, maxWidth);
                 let cdy = clampDelta(dy, rect.height, minHeight, maxHeight);
-                if (preserveRatio) {
+                if (preserveRatioOnDiagonals) {
                     dy = cdy;
                     const ratio = rect.height / rect.width;
                     dy = cdx * ratio;
