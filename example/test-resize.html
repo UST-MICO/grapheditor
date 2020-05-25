@@ -27,7 +27,7 @@
                 Links: <a href="/">index.html</a>, <a href="/groups.html">groups.html</a>, <a href="/groups-drag-and-drop.html">groups-drag-and-drop.html</a>, <a href="/resize.html">resize.html</a>
             </p>
         </div>
-        <network-graph classes="group-a group-b group-c" mode="layout" zoom="both">
+        <network-graph classes="resizing" mode="layout" zoom="both">
             <style slot="style">
                 svg {width:100%; height: 100%}
             </style>
@@ -42,7 +42,7 @@
                     .link-handle:hover>* {transform: scale(1.5);}
                     .text {fill: black; font-size: initial; text-overflow: clip; word-break: break-all;}
                     .node.hovered {fill: deepskyblue;}
-                    .hovered .link-handle {display: initial;}
+                    .node.hovered:not(.resizing) .link-handle {display: initial;}
                     .edge {stroke: black;}
                     .edge .marker {fill: black;}
 
@@ -83,7 +83,7 @@
                         .attr('height', height);
                     g.select('text')
                         .attr('x', (-width / 2) + 5)
-                        .attr('y', (-height / 2) + 14)
+                        .attr('y', (-height / 2) + 15)
                         .attr('width', Math.max(width - 10, 1));
                 },
                 getLinkHandles(g) {
@@ -99,9 +99,11 @@
                 }
             });
 
+            var rm = new this['grapheditor-webcomponent'].ResizingManager(graph);
+
             graph.setNodeClass = (className, node) => {
                 if (className === 'resizing') {
-                    if (node.id == 1) return true;
+                    if (rm.isResizeOverlayVisible(node.id)) return true;
                 }
                 return false;
             }
@@ -110,16 +112,41 @@
                 { id: 1, title: 'A', type: 'resizable', dynamicTemplate: 'resizable', x: 0, y: 0, width: 60, height: 40 },
                 { id: 2, title: 'B', type: 'resizable', dynamicTemplate: 'resizable', x: 250, y: 0, width: 40, height: 60 },
                 { id: 3, title: 'C', type: 'resizable', dynamicTemplate: 'resizable', x: 100, y: 200, width: 60, height: 40 },
+                { id: 4, title: 'D', type: 'resizable', dynamicTemplate: 'resizable', x: 150, y: 100, width: 40, height: 60 },
             ];
 
             graph.completeRender();
             graph.zoomToBoundingBox();
 
-            var rm = new this['grapheditor-webcomponent'].ResizingManager(graph);
+            graph.addEventListener('nodeclick', function test(event) {
+                event.preventDefault();
+                var nodeId = event.detail.node.id;
+                if (rm.isResizeOverlayVisible(nodeId)) {
+                    rm.hideResizeOverlay(nodeId);
+                    graph.updateNodeClasses();
+                    return;
+                }
+                if (nodeId == 1) {
+                    rm.showResizeOverlay(1, {handleTemplate: 'resize-handle', rotateHandles: false, minWidth: 20, minHeight: 20, symmetricHorizontal: true});
+                }
+                if (nodeId == 2) {
+                    rm.showResizeOverlay(2, {handleTemplate: 'resize-handle', rotateHandles: false, minWidth: 20, minHeight: 20, liveResize: true, preserveRatio: true, symmetricVertical: true});
+                }
+                if (nodeId == 3) {
+                    rm.showResizeOverlay(3, {handleTemplate: 'resize-handle', rotateHandles: false, minWidth: 60, minHeight: 40, maxWidth: 60, maxHeight: 60, liveResize: true, symmetric: true});
+                }
+                if (nodeId == 4) {
+                    rm.showResizeOverlay(4, {handleTemplate: 'resize-handle', rotateHandles: false, minWidth: 20, minHeight: 20, liveResize: true, preserveRatioOnDiagonals: true, symmetricHorizontal: true, symmetricVertical: true});
+                }
+                graph.updateNodeClasses();
+            });
 
             rm.showResizeOverlay(1, {handleTemplate: 'resize-handle', rotateHandles: false, minWidth: 20, minHeight: 20, symmetricHorizontal: true});
-            rm.showResizeOverlay(2, {handleTemplate: 'resize-handle', rotateHandles: false, minWidth: 20, minHeight: 20, preserveRatio: true, symmetricVertical: true});
-            rm.showResizeOverlay(3, {handleTemplate: 'resize-handle', rotateHandles: false, minWidth: 60, minHeight: 40, maxWidth: 60, maxHeight: 60, symmetric: true});
+            rm.showResizeOverlay(2, {handleTemplate: 'resize-handle', rotateHandles: false, minWidth: 20, minHeight: 20, liveResize: true, preserveRatio: true, symmetricVertical: true});
+            rm.showResizeOverlay(3, {handleTemplate: 'resize-handle', rotateHandles: false, minWidth: 60, minHeight: 40, maxWidth: 60, maxHeight: 60, liveResize: true, symmetric: true});
+            rm.showResizeOverlay(4, {handleTemplate: 'resize-handle', rotateHandles: false, minWidth: 20, minHeight: 20, liveResize: true, preserveRatioOnDiagonals: true, symmetricHorizontal: true, symmetricVertical: true});
+
+            graph.updateNodeClasses();
         </script>
     </body>
 </html>
