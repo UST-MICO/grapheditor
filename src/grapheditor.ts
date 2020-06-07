@@ -584,6 +584,9 @@ export default class GraphEditor extends HTMLElement {
      *
      * The bounding box is only available/updated after the node was rendered to the graph!
      *
+     * The bounding box includes **all** displayed elements in the node group.
+     * This especially includes the link handles not hidden with `disply: none`!
+     *
      * Do **not** change the returned object directly!
      *
      * @param node the node to get the bounding box of
