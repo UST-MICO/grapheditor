@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 import GraphEditor from './grapheditor';
 import { Selection, select, event } from 'd3-selection';
 import { drag } from 'd3-drag';
@@ -6,19 +23,81 @@ import { Point } from './edge';
 import { Node } from './node';
 import { RotationVector } from './rotation-vector';
 
-
+/**
+ * A strategy to apply the new dimensions to a node when a resize happens.
+ */
 export interface ResizeStrategy {
+
+    /**
+     * Apply the new width/height dimensions to the given node.
+     *
+     * This method is called before `fitIntoBoundingBox`.
+     *
+     * @param node the node to apply the dimensions to
+     * @param width the new width of the bounding box of the node
+     * @param width the new height of the bounding box of the node
+     * @param graphEditor the grapheditor instance
+     */
     applyNewDimensions: (node: Node, width: number, height: number, graphEditor: GraphEditor) => void;
-    moveIntoBoundingBox: (node: Node, rect: Rect, graphEditor: GraphEditor) => RotationVector;
+
+    /**
+     * Fit the given node into the given bounding box.
+     *
+     * This method is called after `applyNewDimensions`.
+     *
+     * The given bounding box has the same width and height that are used in the
+     * call of the `applyNewDimensions` method.
+     *
+     * If the center of the new bounding box is not (0,0) then the node should be moved
+     * such that the resulting bounding box of the node is again centered around (0,0)
+     * relative to the node.
+     *
+     * @param node the node to apply the dimensions to
+     * @param rect the new bounding box (relative to the node) the node should fit into
+     * @param graphEditor the grapheditor instance
+     */
+    fitIntoBoundingBox: (node: Node, rect: Rect, graphEditor: GraphEditor) => void;
 }
 
+/**
+ * The default resize strategy.
+ *
+ * This strategy uses `node.width` and `node.height`.
+ */
 export class DefaultResizeStrategy implements ResizeStrategy {
+
+    /**
+     * @override
+     *
+     * The width and height are set as `node.width` and `node.height`.
+     *
+     * @param node the node to apply the dimensions to
+     * @param width the new width of the bounding box of the node
+     * @param width the new height of the bounding box of the node
+     * @param graphEditor the grapheditor instance
+     */
     applyNewDimensions(node: Node, width: number, height: number, graphEditor: GraphEditor): void {
         node.width = width;
         node.height = height;
     }
 
-    moveIntoBoundingBox(node: Node, rect: Rect, graphEditor: GraphEditor): RotationVector {
+    /**
+     * @override
+     *
+     * The node position is first adjusted such that the center of the new bounding
+     * box of the node is at the node coordinates.
+     *
+     * Then the node is moved to that location with the `GraphEditor.moveNode`
+     * method to run all movement logic without changing child node positions.
+     *
+     * This ensures that child nodes that have a fixed position or a drop zone
+     * still get moved to the correct position.
+     *
+     * @param node the node to apply the dimensions to
+     * @param rect the new bounding box (relative to the node) the node should fit into
+     * @param graphEditor the grapheditor instance
+     */
+    fitIntoBoundingBox(node: Node, rect: Rect, graphEditor: GraphEditor): RotationVector {
         const dx = rect.x + (rect.width / 2);
         const dy = rect.y + (rect.height / 2);
         node.x += dx;
@@ -28,49 +107,103 @@ export class DefaultResizeStrategy implements ResizeStrategy {
     };
 }
 
+/**
+ * Options for the resize overlay to control appeareance and behaviour.
+ */
 export interface ResizeOverlayOptions {
+    /** The id of a static marker template to use for all resize handles. */
     handleTemplate?: string;
+    /** The id of a static marker template to use for corner resize handles. (Overwrites `handleTemplate` for corner handles) */
     cornerHandleTemplate?: string;
+    /** True if all handles should be rotated. (Handles are rotated such that the upward facing side is facing out of the rectangle overlay) */
     rotateHandles?: boolean;
+    /** True if handles on the edges of the rectangle overlay should be rotated. (see `rotateHandles`) */
     rotateEdgeHandles?: boolean;
+    /** True if handles on the corners of the rectangle overlay should be rotated. (see `rotateHandles`) */
     rotateCornerHandles?: boolean;
+    /** True if the overlay should not have handles for horizontal resizing (left and right). */
     noHorizontalHandles?: boolean;
+    /** True if the overlay should not have handles for vertical resizing (top and bottom). */
     noVerticalHandles?: boolean;
+    /** True if the overlay should not have handles in the corners. */
     noCornerHandles?: boolean;
 
+    /** The name of the strategy that is used to resize the node when the resize overlay changes. */
     resizeStrategy?: string;
+    /** True if all resizing handles should preserve the aspect ratio of the node. */
     preserveRatio?: boolean;
+    /** True if corner resizing handles should preserve the aspect ratio of the node. */
     preserveRatioOnDiagonals?: boolean;
+    /** True if all resizing operations are mirrored at the center of the resize overlay. */
     symmetric?: boolean;
+    /** True if the horizontal part of all resizing operations is mirrored at the center of the resize overlay. */
     symmetricHorizontal?: boolean;
+    /** True if the vertical part of all resizing operations is mirrored at the center of the resize overlay. */
     symmetricVertical?: boolean;
+    /** True if the node is resized while dragging. If unset or `false` the node is only resized after the resize overlay is not dragged anymore. */
     liveResize?: boolean;
 
+    /** The minimal width of the node. Must be `> 0`. */
     minWidth?: number;
+    /** The minimal height of the node. Must be `> 0`. */
     minHeight?: number;
+    /** The maximal width of the node. Must be `>= minWidth`. Set this to `minWidth` to disable horizontal resizing. */
     maxWidth?: number;
+    /** The maximal height of the node. Must be `>= minHeight`. Set this to `minHeight` to disable vertical resizing. */
     maxHeight?: number;
 }
 
+/**
+ * A single handle of the resize overlay.
+ */
 interface ResizeHandle {
+    /** The static marker template id used for this handle. */
     template: string;
+    /** The rotation of the handle in degree (default 0). */
     rotation?: number;
+    /** The position of the handle in the resize overlay. */
     type: 'top-left'|'top'|'top-right'|'right'|'bottom-right'|'bottom'|'bottom-left'|'left';
+    /** Wether the handle is a corner handle. */
     isCorner: boolean;
+    /** The x position of the handle relative to the resize overlay origin. */
     x: number;
+    /** The y position of the handle relative to the resize overlay origin. */
     y: number;
 }
 
+/**
+ * A function that takes the displacement of a resize handle and applies it to
+ * the given bounding box.
+ *
+ * @param dx the displacement in x direction
+ * @param dy the displacement in y direction
+ * @param rect the bounding box to apply the displacement to
+ * @returns a new and resized bounding box
+ */
 type ResizeHandler = (dx: number, dy: number, rect: Rect) => Rect;
 
+/**
+ * A data holder for information used while dragging a resize handle.
+ */
 interface ResizeInformation {
+    /** The handler function that applies the handle displacement to the bounding box. */
     handler: ResizeHandler;
+    /** The start coordinates of the event. */
     start: Point;
+    /** The initial bounding box of the node. */
     startRect: Rect;
+    /** The node that is resized. */
     node: Node;
+    /** The strategy to apply the resized bounding box to the node. */
     resizeStrategy: ResizeStrategy;
 }
 
+/**
+ * Get a list of resize handles for a node given ResizeOverlayOptions and dimensions of the overlay.
+ *
+ * @param options the options in effect for the resize overlay
+ * @param bbox the bounding box of the node used as dimensions of the overlay
+ */
 // eslint-disable-next-line complexity
 function resizeHandlesFromOptions(options: ResizeOverlayOptions|null, bbox: Rect): ResizeHandle[] {
     const handles: ResizeHandle[] = [];
@@ -152,6 +285,14 @@ function resizeHandlesFromOptions(options: ResizeOverlayOptions|null, bbox: Rect
     return handles;
 }
 
+/**
+ * Clamp a delta such that adjusting the value by that delta does not exceed the values bounds.
+ *
+ * @param d the delta to adjust value by
+ * @param value the value that is to be adjusted
+ * @param min the minimal allowed value for the value in question
+ * @param maxthe maximal allowed value for the value in question
+ */
 function clampDelta(d: number, value: number, min: number, max: number): number {
     if (d > 0) {
         return Math.min(d, max - value);
@@ -162,20 +303,48 @@ function clampDelta(d: number, value: number, min: number, max: number): number 
     return d;
 }
 
+/**
+ * A class to add interactive node resizing to a grapheditor instance.
+ *
+ * _Usage:_
+ *
+ * Initialize a new ResizeManager for a grapheditor instance.
+ *
+ * `const resizeManager = new ResizeManager(grapheditor);`
+ *
+ * Show the resize overlay for a Node
+ *
+ * `resizeManager.showResizeOverlay(node.id);`
+ *
+ * OR resize Node via api.
+ *
+ * `resizeManager.resizeNode(node.id, newWidth, newHeight);`
+ *
+ * For cleanup call `resizeManager.unlink()`!
+ */
 export class ResizingManager {
+
+    /** The grapheditor instance this object is bound to. */
     readonly graphEditor: GraphEditor;
-    private resizeStrategies: Map<string, ResizeStrategy> = new Map();
+    /** The map containing all resize strategies to be used for resizing nodes. */
+    readonly resizeStrategies: Map<string, ResizeStrategy> = new Map();
 
     // event subscriptions
+    /** Subscription to the 'svginitialized' events of the grapheditor. */
     private svgChange;
+    /** Subscription to the 'nodepositionchange' events of the grapheditor. */
     private nodePositionChange;
 
     // overlay group selection
+    /** The selection of the group layer containing all resize overlays. */
     private overlayGroup: Selection<SVGGElement, any, any, any>;
 
+    /** The currently active resize overlays by node id with resize options. */
     private resizeOptions: Map<string, ResizeOverlayOptions> = new Map();
+    /** The current dimensions of the nodes beeing resized. */
     private currentlyResizing: Map<string, Rect> = new Map();
 
+    /** A list of nodeId's with active resize overlays for efficient d3 joins. */
     private resizeOverlays: string[] = [];
 
 
@@ -197,12 +366,22 @@ export class ResizingManager {
         this.resizeStrategies.set('default', new DefaultResizeStrategy());
     }
 
+    /**
+     * Unsubscribe all event subscriptions of this object on the grapheditor instance.
+     */
     public unlink(): void {
         // TODO
         this.graphEditor.removeEventListener('svginitialized', this.svgChange);
         this.graphEditor.removeEventListener('nodepositionchange', this.nodePositionChange);
     }
 
+    /**
+     * Initialize the svg and add a layer for displaying resize-overlays.
+     *
+     * The rsize overlay group will always be raised to the top of the zoom group stack!
+     *
+     * @param graph the zoom group selection of the active svg of the grapheditor instance
+     */
     private initializeGraph(graph: Selection<SVGGElement, any, any, any>) {
         let overlayGroup = graph.select<SVGGElement>('g.resize-overlays');
         if (overlayGroup.empty()) {
@@ -213,6 +392,15 @@ export class ResizingManager {
         this.overlayGroup = overlayGroup;
     }
 
+    /**
+     * Show a resize overlay with the given options for the given node.
+     *
+     * This method will quietly return without changing the resize options
+     * if the overlay is already visible!
+     *
+     * @param nodeId the node id to select the node that should be resized
+     * @param options the options object for the resize overlay
+     */
     public showResizeOverlay(nodeId: number|string, options?: ResizeOverlayOptions): void {
         nodeId = nodeId.toString();
         if (this.resizeOptions.has(nodeId)) {
@@ -232,6 +420,17 @@ export class ResizingManager {
         this.renderOverlays();
     }
 
+    /**
+     * Hide a visible resize overlay.
+     *
+     * This method will completely remove the resize overlay from the dom and
+     * discard the resize options associated with that resize overlay.
+     *
+     * This method will quietly return if the resize overlay is not visible for
+     * the requested node id.
+     *
+     * @param nodeId the node id for which to hide the resize overlay
+     */
     public hideResizeOverlay(nodeId: number|string): void {
         nodeId = nodeId.toString();
 
@@ -244,10 +443,20 @@ export class ResizingManager {
         this.renderOverlays();
     }
 
+    /**
+     * Check if the resize overlay is currently visible for the given node id.
+     *
+     * @param nodeId the node id to check
+     */
     public isResizeOverlayVisible(nodeId: number|string): boolean {
         return this.resizeOptions.has(nodeId.toString());
     }
 
+    /**
+     * Update all resize overlays including positions.
+     *
+     * This method performs the full d3 join.
+     */
     private renderOverlays() {
         const self = this;
         this.overlayGroup.selectAll<SVGGElement, string>('g.resize-overlay')
@@ -267,6 +476,14 @@ export class ResizingManager {
             .call(this.updateOverlayPositions.bind(this));
     }
 
+    /**
+     * Update the content of a single resize overlay.
+     *
+     * Also set drag behaviour for resize handles.
+     *
+     * @param overlaySelection the selection of a single resize overlay to update
+     * @param nodeId the node id for that selection
+     */
     private updateOverlay(overlaySelection: Selection<SVGGElement, any, any, any>, nodeId: string) {
         const bbox: Rect = this.currentlyResizing.get(nodeId) ?? this.graphEditor.getNodeBBox(nodeId);
         const options: ResizeOverlayOptions = this.resizeOptions.get(nodeId);
@@ -333,7 +550,7 @@ export class ResizingManager {
                         // eslint-disable-next-line no-shadow
                         const bbox = this.graphEditor.getNodeBBox(nodeId);
                         this.currentlyResizing.set(nodeId, bbox);
-                        const handler = this.resizeHandlerFromHandle(nodeId, handle);
+                        const handler = this.resizeHandlerFromHandle(options, handle);
                         const resizeStrategy = this.resizeStrategies.get(options.resizeStrategy ?? 'default');
                         if (resizeStrategy == null) {
                             console.warn(`Could not find the resize strategy "${options.resizeStrategy ?? 'default'}"!`);
@@ -353,7 +570,8 @@ export class ResizingManager {
                         const newRect = resizeHandler(event.x - start.x, event.y - start.y, startRect);
 
                         if (options.liveResize) {
-                            const nodeShift = this.resizeNode(event.subject, newRect);
+                            const resizeInfo: ResizeInformation = event.subject;
+                            const nodeShift = this._resizeNode(resizeInfo.resizeStrategy, resizeInfo.node, newRect);
                             const shiftedRect = {
                                 x: newRect.x - nodeShift.dx,
                                 y: newRect.y - nodeShift.dy,
@@ -379,7 +597,8 @@ export class ResizingManager {
                         }
                     })
                     .on('end', () => {
-                        this.resizeNode(event.subject, this.currentlyResizing.get(nodeId));
+                        const resizeInfo: ResizeInformation = event.subject;
+                        this._resizeNode(resizeInfo.resizeStrategy, resizeInfo.node, this.currentlyResizing.get(nodeId));
                         this.currentlyResizing.delete(nodeId);
 
                         // eslint-disable-next-line no-shadow
@@ -391,6 +610,13 @@ export class ResizingManager {
     }
 
 
+    /**
+     * Update only the dimensions of a single resize overlay.
+     *
+     * @param overlaySelection the selection of a single resize overlay
+     * @param nodeId the node id for that selection
+     * @param resizeHandles the resize handle list for that selection (must have the right dimensions)
+     */
     private updateOverlayDimensions(overlaySelection: Selection<SVGGElement, string, SVGGElement, any>, nodeId, resizeHandles: ResizeHandle[]) {
         const bbox: Rect = this.currentlyResizing.get(nodeId) ?? this.graphEditor.getNodeBBox(nodeId);
 
@@ -405,6 +631,11 @@ export class ResizingManager {
             .call(this.updateResizeHandlePositions.bind(this));
     }
 
+    /**
+     * Update the relative positions of the resize handles in the resize overlay.
+     *
+     * @param handleSelection the selection of all resize handles of a resize overlay
+     */
     private updateResizeHandlePositions(handleSelection: Selection<SVGGElement, ResizeHandle, any, any>) {
         handleSelection.attr('transform', (handle) => {
             const translate = `translate(${handle.x},${handle.y})`;
@@ -418,6 +649,11 @@ export class ResizingManager {
         });
     }
 
+    /**
+     * Update the positions of the resize overlays.
+     *
+     * @param overlaySelection a selection of resize overlays
+     */
     private updateOverlayPositions(overlaySelection: Selection<SVGGElement, string, SVGGElement, any>) {
         const self = this;
         overlaySelection.each(function(nodeId) {
@@ -426,28 +662,102 @@ export class ResizingManager {
         });
     }
 
-    private resizeNode(resizeInfo: ResizeInformation, newRect: Rect): RotationVector {
-        const strat = resizeInfo.resizeStrategy;
-        let nodeShift: RotationVector = {dx: 0, dy: 0};
-        try {
-            strat.applyNewDimensions(resizeInfo.node, newRect.width, newRect.height, this.graphEditor);
+    /**
+     * Resize a node to the given dimensions.
+     *
+     * Equivalent to `resizeNodeToBBox(nodeId, {x: - (width / 2), y: - (height / 2), width: width, height: height}, resizeStrategy)`.
+     *
+     * @param nodeId the id of the node to resize
+     * @param width the new width of the node
+     * @param height the new height of the node
+     * @param resizeStrategy the resize strategy to use (default: 'default')
+     */
+    public resizeNode(nodeId: string|number, width: number, height: number, resizeStrategy?: string): void {
+        const dimensions: Rect = {
+            x: - (width / 2),
+            y: - (height / 2),
+            width: width,
+            height: height,
+        };
+        this.resizeNodeToBBox(nodeId, dimensions, resizeStrategy);
+    }
+
+    /**
+     * Resize the node to fit into the given dimensions.
+     *
+     * The dimensions are given as a bounding box relative to the node coordinates.
+     *
+     * @param nodeId the id of the node to resize
+     * @param dimensions the bounding box relative to the node position to which to fit the node into
+     * @param resizeStrategy the resize strategy to use (default: 'default')
+     */
+    public resizeNodeToBBox(nodeId: string|number, dimensions: Rect, resizeStrategy?: string): void {
+        if (this.currentlyResizing.has(nodeId.toString())) {
+            // TODO error Cannot resize node while it is still dragged!
+            return;
+        }
+        if (dimensions.width <= 0) {
+            // TODO error
+            return;
+        }
+        if (dimensions.height <= 0) {
+            // TODO error
+            return;
+        }
+        const node = this.graphEditor.getNode(nodeId);
+        const strat = this.resizeStrategies.get(resizeStrategy ?? 'default');
+        if (node == null) {
+            // TODO error
+            return;
+        }
+        if (strat == null) {
+            // TODO error
+            return;
+        }
+        this._resizeNode(strat, node, dimensions); // TODO add event subject
+    }
+
+    /**
+     * Resize a node to fit into the given bounding box.
+     *
+     * @param resizeStrategy the resize strategy to use to resize the node
+     * @param node the node to resize
+     * @param newRect the new dimesnions to fit the node into
+     */
+    private _resizeNode(resizeStrategy: ResizeStrategy, node: Node, newRect: Rect): RotationVector {
+        const oldBBox = this.graphEditor.getNodeBBox(node);
+        const oldPos: Point = {x: node.x, y: node.y};
+        try { // TODO better error handling for user provided resize strategies
+            resizeStrategy.applyNewDimensions(node, newRect.width, newRect.height, this.graphEditor);
         } catch (error) {
-            console.error(`An error occured while applying the new dimensions to the node ${resizeInfo.node.id}.`, error);
+            console.error(`An error occured while applying the new dimensions to the node ${node.id}.`, error);
         }
         try {
-            nodeShift = strat.moveIntoBoundingBox(resizeInfo.node, newRect, this.graphEditor);
+            resizeStrategy.fitIntoBoundingBox(node, newRect, this.graphEditor);
         } catch (error) {
-            console.error(`An error occured while moving the node ${resizeInfo.node.id} into the new bounding box.`, error);
+            console.error(`An error occured while moving the node ${node.id} into the new bounding box.`, error);
         }
         this.graphEditor.completeRender();
+        const newBBox = this.graphEditor.getNodeBBox(node);
+        const nodeShift: RotationVector = {dx: node.x - oldPos.x, dy: node.y - oldPos.y};
+        // TODO event for resizing node!
         return nodeShift;
     }
 
 
+    /**
+     * Get a resize handler that maps resize handle movement to bounding box resizes.
+     *
+     * The handler respects the options defined in the ResizeOverlayOptions that
+     * constrain the resizing operations.
+     *
+     * @param options the resize options for the resize overlay
+     * @param handle the handle of the resize overlay that is dragged by the user
+     */
     // eslint-disable-next-line complexity
-    private resizeHandlerFromHandle(nodeId: string, handle: ResizeHandle): ResizeHandler {
-        const options = this.resizeOptions.get(nodeId);
+    private resizeHandlerFromHandle(options: ResizeOverlayOptions, handle: ResizeHandle): ResizeHandler {
 
+        // setup option variables for handlers
         let minWidth = 1;
         let minHeight = 1;
         let maxWidth = Infinity;
@@ -472,25 +782,27 @@ export class ResizingManager {
         const symmetricHorizontal = options.symmetric || options.symmetricHorizontal || false;
         const symmetricVertical = options.symmetric || options.symmetricVertical || false;
 
+        // handlers for diagonals
+
         if (handle.type === 'top-left') {
             return (dx: number, dy: number, rect: Rect) => {
-                if (symmetricHorizontal) {
-                    dx *= 2;
+                if (symmetricHorizontal) { // handle symmetry
+                    dx *= 2; // times 2 to mirror the same amount on the other side
                 }
-                if (symmetricVertical) {
+                if (symmetricVertical) { // handle symmetry
                     dy *= 2;
                 }
                 let cdx = -clampDelta(-dx, rect.width, minWidth, maxWidth);
                 let cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
-                if (preserveRatioOnDiagonals) {
+                if (preserveRatioOnDiagonals) { // handle aspect ratio
                     dy = cdy;
                     const ratio = rect.height / rect.width;
-                    dy = cdx * ratio;
-                    cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
-                    if (cdy !== 0) {
+                    dy = cdx * ratio; // calculate height delta from width delta and ratio
+                    cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight); // adjust to fit bounds
+                    if (cdy !== 0) { // do not divide by 0
                         cdx = cdx * (cdy / dy);
                     } else {
-                        cdx = 0;
+                        cdx = 0; // do not alter width if height is not changing
                     }
                 }
                 return {
@@ -504,15 +816,15 @@ export class ResizingManager {
 
         if (handle.type === 'top-right') {
             return (dx: number, dy: number, rect: Rect) => {
-                if (symmetricHorizontal) {
+                if (symmetricHorizontal) { // handle symmetry
                     dx *= 2;
                 }
-                if (symmetricVertical) {
+                if (symmetricVertical) { // handle symmetry
                     dy *= 2;
                 }
                 let cdx = clampDelta(dx, rect.width, minWidth, maxWidth);
                 let cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
-                if (preserveRatioOnDiagonals) {
+                if (preserveRatioOnDiagonals) { // handle aspect ratio
                     dy = cdy;
                     const ratio = rect.height / rect.width;
                     dy = -cdx * ratio;
@@ -534,15 +846,15 @@ export class ResizingManager {
 
         if (handle.type === 'bottom-left') {
             return (dx: number, dy: number, rect: Rect) => {
-                if (symmetricHorizontal) {
+                if (symmetricHorizontal) { // handle symmetry
                     dx *= 2;
                 }
-                if (symmetricVertical) {
+                if (symmetricVertical) { // handle symmetry
                     dy *= 2;
                 }
                 let cdx = -clampDelta(-dx, rect.width, minWidth, maxWidth);
                 let cdy = clampDelta(dy, rect.height, minHeight, maxHeight);
-                if (preserveRatioOnDiagonals) {
+                if (preserveRatioOnDiagonals) { // handle aspect ratio
                     dy = cdy;
                     const ratio = rect.height / rect.width;
                     dy = -cdx * ratio;
@@ -564,15 +876,15 @@ export class ResizingManager {
 
         if (handle.type === 'bottom-right') {
             return (dx: number, dy: number, rect: Rect) => {
-                if (symmetricHorizontal) {
+                if (symmetricHorizontal) { // handle symmetry
                     dx *= 2;
                 }
-                if (symmetricVertical) {
+                if (symmetricVertical) { // handle symmetry
                     dy *= 2;
                 }
                 let cdx = clampDelta(dx, rect.width, minWidth, maxWidth);
                 let cdy = clampDelta(dy, rect.height, minHeight, maxHeight);
-                if (preserveRatioOnDiagonals) {
+                if (preserveRatioOnDiagonals) { // handle aspect ratio
                     dy = cdy;
                     const ratio = rect.height / rect.width;
                     dy = cdx * ratio;
@@ -592,14 +904,16 @@ export class ResizingManager {
             };
         }
 
+        // handlers for vertical
+
         if (handle.type === 'top') {
             return (dx: number, dy: number, rect: Rect) => {
-                if (symmetricVertical) {
+                if (symmetricVertical) { // handle symmetry
                     dy *= 2;
                 }
                 let cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
                 let cdx = 0;
-                if (preserveRatio) {
+                if (preserveRatio) { // handle aspect ratio
                     const ratio = rect.width / rect.height;
                     dx = cdy * ratio;
                     cdx = -clampDelta(-dx, rect.width, minWidth, maxWidth);
@@ -620,12 +934,12 @@ export class ResizingManager {
 
         if (handle.type === 'bottom') {
             return (dx: number, dy: number, rect: Rect) => {
-                if (symmetricVertical) {
+                if (symmetricVertical) { // handle symmetry
                     dy *= 2;
                 }
                 let cdy = clampDelta(dy, rect.height, minHeight, maxHeight);
                 let cdx = 0;
-                if (preserveRatio) {
+                if (preserveRatio) { // handle aspect ratio
                     const ratio = rect.width / rect.height;
                     dx = -cdy * ratio;
                     cdx = -clampDelta(-dx, rect.width, minWidth, maxWidth);
@@ -644,14 +958,16 @@ export class ResizingManager {
             };
         }
 
+        // handlers for horizontal
+
         if (handle.type === 'left') {
             return (dx: number, dy: number, rect: Rect) => {
-                if (symmetricHorizontal) {
+                if (symmetricHorizontal) { // handle symmetry
                     dx *= 2;
                 }
                 let cdx = -clampDelta(-dx, rect.width, minWidth, maxWidth);
                 let cdy = 0;
-                if (preserveRatio) {
+                if (preserveRatio) { // handle aspect ratio
                     const ratio = rect.height / rect.width;
                     dy = cdx * ratio;
                     cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
@@ -672,12 +988,12 @@ export class ResizingManager {
 
         if (handle.type === 'right') {
             return (dx: number, dy: number, rect: Rect) => {
-                if (symmetricHorizontal) {
+                if (symmetricHorizontal) { // handle symmetry
                     dx *= 2;
                 }
                 let cdx = clampDelta(dx, rect.width, minWidth, maxWidth);
                 let cdy = 0;
-                if (preserveRatio) {
+                if (preserveRatio) { // handle aspect ratio
                     const ratio = rect.height / rect.width;
                     dy = -cdx * ratio;
                     cdy = -clampDelta(-dy, rect.height, minHeight, maxHeight);
