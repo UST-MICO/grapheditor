@@ -732,7 +732,9 @@ export default class GraphEditor extends HTMLElement {
         let edgeIdToDelete: string;
         if (typeof(edge) === 'number') {
             edgeIdToDelete = edge.toString();
-        } else if (typeof(edge) !== 'string') {
+        } else if (typeof(edge) === 'string') {
+            edgeIdToDelete = edge;
+        } else {
             edgeIdToDelete = edgeId(edge);
         }
         const index = this._edges.findIndex((e) => edgeId(e) === edgeIdToDelete);
