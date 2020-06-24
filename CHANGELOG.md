@@ -7,6 +7,11 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed removeEdge not working with string ids
+- Potentially fixed removing edge throwing an error when the edge is removed from the object cache
+
 
 ## [0.5.4] - 2020-04-30
 

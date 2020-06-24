@@ -130,10 +130,11 @@ export class GraphObjectCache {
      * @param edge the edge to remove from the object cache
      */
     removeEdgeFromCache(edge: Edge): void {
-        edge = this.edges.get(edgeId(edge));
-        this.edges.delete(edgeId(edge));
-        this.edgesBySource.get(edge.source.toString())?.delete(edge);
-        this.edgesByTarget.get(edge.target.toString())?.delete(edge);
+        const eId = edgeId(edge);
+        const cachedEdge = this.edges.get(eId) ?? edge;
+        this.edges.delete(eId);
+        this.edgesBySource.get(edge.source.toString())?.delete(cachedEdge);
+        this.edgesByTarget.get(edge.target.toString())?.delete(cachedEdge);
     }
 
     /**
