@@ -14,10 +14,12 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - Added 'svginitialized' event when the grapheditor initializes a new svg
 - Added methods `getSVG`, `getGraphGroup`, `getNodesGroup`, `getEdgesGroup`, `getEdgeSelection` and `getDraggedEdgeSelection` to grapheditor
 - Added utility methods `removeAllChildNodes` and `copyTemplateSelectionIntoNode` n util to help working with static templates
+- Added public `updateEdgeGroupClasses` to only update the classes of edges
 
 ### Fixed
 
 - Fixed removeEdge not working with string ids
+- Fixed cancelling 'edgeremove' event leaving the original edge with the `ghost` class until `completeRender` was called
 - Potentially fixed removing edge throwing an error when the edge is removed from the object cache
 
 

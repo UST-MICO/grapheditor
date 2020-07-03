@@ -1229,10 +1229,6 @@ export default class GraphEditor extends HTMLElement {
                             .attr('fill', 'none');
                     })
             )
-            .classed('ghost', (d) => {
-                const id = edgeId(d);
-                return this.draggedEdges.some((edge) => edge.createdFrom === id);
-            })
             .call(self.updateEdgeGroups.bind(this))
             .call(self.updateEdgePositions.bind(this))
             .order()
@@ -2075,7 +2071,7 @@ export default class GraphEditor extends HTMLElement {
      * @param nodeSelection d3 selection of nodes to update with bound data
      */
     public updateNodeClasses(nodeSelection?: Selection<SVGGElement, Node, any, unknown>): void {
-        const calledDirectly = nodeSelection == null;
+        const calledDirectly = (nodeSelection == null);
         if (nodeSelection == null) {
             nodeSelection = this.getNodeSelection();
         }
@@ -2160,9 +2156,17 @@ export default class GraphEditor extends HTMLElement {
     /**
      * Update classes of edgeGroups
      *
-     * @param edgeGroupSelection d3 selection
+     * @param edgeGroupSelection d3 selection of edges to update with bound data
      */
-    private updateEdgeGroupClasses(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>) {
+    public updateEdgeGroupClasses(edgeGroupSelection?: Selection<SVGGElement, Edge, any, unknown>): void {
+        const calledDirectly = (edgeGroupSelection == null);
+        if (edgeGroupSelection == null) {
+            edgeGroupSelection = this.getEdgeSelection();
+        }
+        edgeGroupSelection.classed('ghost', (d) => {
+            const id = edgeId(d);
+            return this.draggedEdges.some((edge) => edge.createdFrom === id);
+        });
         if (this.classesToRemove != null) {
             this.classesToRemove.forEach((className) => {
                 edgeGroupSelection.classed(className, () => false);
@@ -2178,6 +2182,9 @@ export default class GraphEditor extends HTMLElement {
                     return false;
                 });
             });
+        }
+        if (calledDirectly) {
+            this.onRender(EventSource.API, 'classes');
         }
     }
 
@@ -3337,6 +3344,8 @@ export default class GraphEditor extends HTMLElement {
         if (updateEdgeCache) {
             this.objectCache.updateEdgeCache(this._edges);
             this.completeRender(false, EventSource.USER_INTERACTION);
+        } else {
+            this.updateEdgeGroupClasses();
         }
     }
 
