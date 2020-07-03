@@ -28,6 +28,7 @@ Features
 * :ref:`Custom markers <grapheditor:edge markers>` for edges (more powerful than svg markers)
 * :ref:`Text components <grapheditor:text-components>` for edges
 * Powerful :doc:`grouping mechanism <groups>`
+* Node :doc:`resizing <resizing>`
 * Compatible with all web frameworks (behaves like a standard html tag, see also `custom web component <https://www.webcomponents.org>`_)
 * Many :ref:`custom events <grapheditor:component events>`
 
@@ -45,5 +46,6 @@ Documentation
     dynamic-templates
     edge-path-templates
     groups
+    resizing
     api/api-index
     changelog

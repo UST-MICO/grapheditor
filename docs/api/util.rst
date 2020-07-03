@@ -10,3 +10,11 @@ Rect
    :members:
 
 .. js:autofunction:: calculateBoundingRect
+
+
+Static Template Related Functions
+---------------------------------
+
+.. js:autofunction:: removeAllChildNodes
+
+.. js:autofunction:: copyTemplateSelectionIntoNode

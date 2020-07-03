@@ -381,6 +381,20 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
 
     The eventSource can be used in event listeners to ignore all events triggered by using the API.
 
+
+.. describe:: svginitialized
+
+    Fired after the zoom has changed.
+
+    **Example** ``detail``
+
+    .. code-block:: ts
+
+        {
+            "newSVG": this.svg,
+            "oldSVG": oldSVG,
+        }
+
 .. describe:: modechange
 
     Fired after the interaction mode changed.

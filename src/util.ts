@@ -23,7 +23,9 @@ import { Selection } from 'd3-selection';
 export interface Rect {
     x: number;
     y: number;
+    /** The width of the rectangle. Must be `> 0`! */
     width: number;
+    /** The height of the rectangle. Must be `> 0`! */
     height: number;
 }
 
