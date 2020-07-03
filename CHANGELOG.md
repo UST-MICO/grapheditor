@@ -7,6 +7,14 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## [Unreleased]
 
+### Added
+
+- Added ResizeManager that allows node resizing via api and drag and drop
+- Added 'noderesize' event fired when resizing a node with the resize manager
+- Added 'svginitialized' event when the grapheditor initializes a new svg
+- Added methods `getSVG`, `getGraphGroup`, `getNodesGroup`, `getEdgesGroup`, `getEdgeSelection` and `getDraggedEdgeSelection` to grapheditor
+- Added utility methods `removeAllChildNodes` and `copyTemplateSelectionIntoNode` n util to help working with static templates
+
 ### Fixed
 
 - Fixed removeEdge not working with string ids
