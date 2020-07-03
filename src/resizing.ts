@@ -16,6 +16,7 @@
  */
 
 import GraphEditor from './grapheditor';
+import { EventSource } from './grapheditor';
 import { Selection, select, event } from 'd3-selection';
 import { drag } from 'd3-drag';
 import { Rect, removeAllChildNodes, copyTemplateSelectionIntoNode } from './util';
@@ -27,6 +28,23 @@ import { RotationVector } from './rotation-vector';
  * A strategy to apply the new dimensions to a node when a resize happens.
  */
 export interface ResizeStrategy {
+
+    /**
+     * Get the current dimensions of a node.
+     *
+     * If this method is not implemented or fails to return a Rect the
+     * bounding box of the node is fetched from the graphEditor.
+     *
+     * This method only needs to be implemented if the svg bounding box is
+     * not accurate in representing the actual node dimensions. This can happen
+     * with odd shapes, visible link handles that are included in the bounding box
+     * or rotated nodes.
+     *
+     * @param node the node to get the dimensions of
+     * @param graphEditor the grapheditor instance
+     * @param returns the bounding box of the node
+     */
+    getNodeDimensions?: (node: Node, graphEditor: GraphEditor) => Rect;
 
     /**
      * Apply the new width/height dimensions to the given node.
@@ -97,13 +115,12 @@ export class DefaultResizeStrategy implements ResizeStrategy {
      * @param rect the new bounding box (relative to the node) the node should fit into
      * @param graphEditor the grapheditor instance
      */
-    fitIntoBoundingBox(node: Node, rect: Rect, graphEditor: GraphEditor): RotationVector {
+    fitIntoBoundingBox(node: Node, rect: Rect, graphEditor: GraphEditor): void {
         const dx = rect.x + (rect.width / 2);
         const dy = rect.y + (rect.height / 2);
         node.x += dx;
         node.y += dy;
         graphEditor.moveNode(node.id, node.x, node.y);
-        return {dx: dx, dy: dy};
     };
 }
 
@@ -304,23 +321,50 @@ function clampDelta(d: number, value: number, min: number, max: number): number 
 }
 
 /**
+ * Get the node dimensions from the resize strategy or the grapheditor.
+ *
+ * See `ResizeStrategy.getNodeDimensions` for more information.
+ *
+ * @param nodeId the id of the node to get the bounding box from
+ * @param graphEditor the grapheditor instance
+ * @param resizeStrategy the resize strategy used for this node
+ */
+function getNodeBBox(nodeId: string, graphEditor: GraphEditor, resizeStrategy: ResizeStrategy): Rect {
+    let bbox: Rect;
+    if (resizeStrategy?.getNodeDimensions != null) {
+        try {
+            const node = graphEditor.getNode(nodeId);
+            bbox = resizeStrategy.getNodeDimensions(node, graphEditor);
+        } catch (error) {
+            // eslint-disable-next-line max-len
+            console.warn(`Something went wrong when fetching the dimensions of node ${nodeId}. Falling back to bounding box of node.`, error);
+            bbox = graphEditor.getNodeBBox(nodeId);
+        }
+    }
+    if (bbox == null) {
+        bbox = graphEditor.getNodeBBox(nodeId);
+    }
+    return bbox;
+}
+
+/**
  * A class to add interactive node resizing to a grapheditor instance.
  *
  * _Usage:_
  *
- * Initialize a new ResizeManager for a grapheditor instance.
+ * Initialize a new ResizingManager for a grapheditor instance.
  *
- * `const resizeManager = new ResizeManager(grapheditor);`
+ * `const resizeingManager = new ResizeingManager(grapheditor);`
  *
  * Show the resize overlay for a Node
  *
- * `resizeManager.showResizeOverlay(node.id);`
+ * `resizeingManager.showResizeOverlay(node.id);`
  *
  * OR resize Node via api.
  *
- * `resizeManager.resizeNode(node.id, newWidth, newHeight);`
+ * `resizeingManager.resizeNode(node.id, newWidth, newHeight);`
  *
- * For cleanup call `resizeManager.unlink()`!
+ * For cleanup call `resizeingManager.unlink()`!
  */
 export class ResizingManager {
 
@@ -337,15 +381,15 @@ export class ResizingManager {
 
     // overlay group selection
     /** The selection of the group layer containing all resize overlays. */
-    private overlayGroup: Selection<SVGGElement, any, any, any>;
+    protected overlayGroup: Selection<SVGGElement, any, any, any>;
 
     /** The currently active resize overlays by node id with resize options. */
-    private resizeOptions: Map<string, ResizeOverlayOptions> = new Map();
+    protected resizeOptions: Map<string, ResizeOverlayOptions> = new Map();
     /** The current dimensions of the nodes beeing resized. */
-    private currentlyResizing: Map<string, Rect> = new Map();
+    protected currentlyResizing: Map<string, Rect> = new Map();
 
     /** A list of nodeId's with active resize overlays for efficient d3 joins. */
-    private resizeOverlays: string[] = [];
+    protected resizeOverlays: string[] = [];
 
 
     constructor(graphEditor: GraphEditor) {
@@ -370,7 +414,6 @@ export class ResizingManager {
      * Unsubscribe all event subscriptions of this object on the grapheditor instance.
      */
     public unlink(): void {
-        // TODO
         this.graphEditor.removeEventListener('svginitialized', this.svgChange);
         this.graphEditor.removeEventListener('nodepositionchange', this.nodePositionChange);
     }
@@ -382,7 +425,7 @@ export class ResizingManager {
      *
      * @param graph the zoom group selection of the active svg of the grapheditor instance
      */
-    private initializeGraph(graph: Selection<SVGGElement, any, any, any>) {
+    protected initializeGraph(graph: Selection<SVGGElement, any, any, any>) {
         let overlayGroup = graph.select<SVGGElement>('g.resize-overlays');
         if (overlayGroup.empty()) {
             overlayGroup = graph.append('g')
@@ -407,17 +450,25 @@ export class ResizingManager {
             return;
         }
 
+        const resizeStrat = this.resizeStrategies.get(options.resizeStrategy ?? 'default');
+
+        if (resizeStrat == null) {
+            // eslint-disable-next-line max-len
+            console.warn(`Could not find the resize strategy ${options.resizeStrategy ?? 'default'} to use! Resizing will not have any effect on the node without a resize strategy.`);
+        }
+
         const node = this.graphEditor.getNode(nodeId);
-        const bbox = this.graphEditor.getNodeBBox(nodeId);
+        const bbox = getNodeBBox(nodeId, this.graphEditor, resizeStrat);
 
         if (node == null || bbox == null) {
+            console.error(`Could not get the dimensions of the node ${nodeId}! Cannot display a resize overlay without dimensions!`, node);
             return;
         }
 
         this.resizeOptions.set(nodeId, options);
 
         this.resizeOverlays.push(nodeId);
-        this.renderOverlays();
+        this.updateOverlays();
     }
 
     /**
@@ -440,7 +491,7 @@ export class ResizingManager {
 
         this.resizeOptions.delete(nodeId);
         this.resizeOverlays = this.resizeOverlays.filter((id) => id !== nodeId);
-        this.renderOverlays();
+        this.updateOverlays();
     }
 
     /**
@@ -455,9 +506,9 @@ export class ResizingManager {
     /**
      * Update all resize overlays including positions.
      *
-     * This method performs the full d3 join.
+     * Use this method to update the resize overlay manually if needed.
      */
-    private renderOverlays() {
+    public updateOverlays(): void {
         const self = this;
         this.overlayGroup.selectAll<SVGGElement, string>('g.resize-overlay')
             .data<string>(this.resizeOverlays)
@@ -484,9 +535,13 @@ export class ResizingManager {
      * @param overlaySelection the selection of a single resize overlay to update
      * @param nodeId the node id for that selection
      */
-    private updateOverlay(overlaySelection: Selection<SVGGElement, any, any, any>, nodeId: string) {
-        const bbox: Rect = this.currentlyResizing.get(nodeId) ?? this.graphEditor.getNodeBBox(nodeId);
+    protected updateOverlay(overlaySelection: Selection<SVGGElement, any, any, any>, nodeId: string) {
         const options: ResizeOverlayOptions = this.resizeOptions.get(nodeId);
+        let bbox: Rect = this.currentlyResizing.get(nodeId);
+        if (bbox == null) {
+            const resizeStrat = this.resizeStrategies.get(options.resizeStrategy ?? 'default');
+            bbox = getNodeBBox(nodeId, this.graphEditor, resizeStrat);
+        }
 
         overlaySelection.select('rect.outline')
             .attr('x', bbox.x)
@@ -547,14 +602,14 @@ export class ResizingManager {
                             return;
                         }
                         const node = this.graphEditor.getNode(nodeId);
-                        // eslint-disable-next-line no-shadow
-                        const bbox = this.graphEditor.getNodeBBox(nodeId);
-                        this.currentlyResizing.set(nodeId, bbox);
-                        const handler = this.resizeHandlerFromHandle(options, handle);
                         const resizeStrategy = this.resizeStrategies.get(options.resizeStrategy ?? 'default');
                         if (resizeStrategy == null) {
                             console.warn(`Could not find the resize strategy "${options.resizeStrategy ?? 'default'}"!`);
                         }
+                        // eslint-disable-next-line no-shadow
+                        const bbox = getNodeBBox(nodeId, this.graphEditor, resizeStrategy);
+                        this.currentlyResizing.set(nodeId, bbox);
+                        const handler = this.resizeHandlerFromHandle(options, handle);
                         return {
                             handler: handler,
                             start: {x: event.x, y: event.y},
@@ -602,7 +657,7 @@ export class ResizingManager {
                         this.currentlyResizing.delete(nodeId);
 
                         // eslint-disable-next-line no-shadow
-                        const bbox = this.graphEditor.getNodeBBox(nodeId);
+                        const bbox = getNodeBBox(nodeId, this.graphEditor, resizeInfo.resizeStrategy);
 
                         this.updateOverlayDimensions(overlaySelection, nodeId, resizeHandlesFromOptions(options, bbox));
                     })
@@ -617,8 +672,13 @@ export class ResizingManager {
      * @param nodeId the node id for that selection
      * @param resizeHandles the resize handle list for that selection (must have the right dimensions)
      */
-    private updateOverlayDimensions(overlaySelection: Selection<SVGGElement, string, SVGGElement, any>, nodeId, resizeHandles: ResizeHandle[]) {
-        const bbox: Rect = this.currentlyResizing.get(nodeId) ?? this.graphEditor.getNodeBBox(nodeId);
+    protected updateOverlayDimensions(overlaySelection: Selection<SVGGElement, string, SVGGElement, any>, nodeId, resizeHandles: ResizeHandle[]) {
+        const options: ResizeOverlayOptions = this.resizeOptions.get(nodeId);
+        let bbox: Rect = this.currentlyResizing.get(nodeId);
+        if (bbox == null) {
+            const resizeStrat = this.resizeStrategies.get(options.resizeStrategy ?? 'default');
+            bbox = getNodeBBox(nodeId, this.graphEditor, resizeStrat);
+        }
 
         overlaySelection.select('rect.outline')
             .attr('x', bbox.x)
@@ -636,7 +696,7 @@ export class ResizingManager {
      *
      * @param handleSelection the selection of all resize handles of a resize overlay
      */
-    private updateResizeHandlePositions(handleSelection: Selection<SVGGElement, ResizeHandle, any, any>) {
+    protected updateResizeHandlePositions(handleSelection: Selection<SVGGElement, ResizeHandle, any, any>) {
         handleSelection.attr('transform', (handle) => {
             const translate = `translate(${handle.x},${handle.y})`;
 
@@ -654,7 +714,7 @@ export class ResizingManager {
      *
      * @param overlaySelection a selection of resize overlays
      */
-    private updateOverlayPositions(overlaySelection: Selection<SVGGElement, string, SVGGElement, any>) {
+    protected updateOverlayPositions(overlaySelection: Selection<SVGGElement, string, SVGGElement, any>) {
         const self = this;
         overlaySelection.each(function(nodeId) {
             const node = self.graphEditor.getNode(nodeId);
@@ -670,16 +730,17 @@ export class ResizingManager {
      * @param nodeId the id of the node to resize
      * @param width the new width of the node
      * @param height the new height of the node
-     * @param resizeStrategy the resize strategy to use (default: 'default')
+     * @param resizeStrategy the resize strategy to use (defaults to 'default' if null or undefined)
+     * @param updateGrapheditor if `true`, do a complete render of the grapheditor after the resize (see `resizeNodeToBBox`) (default: `true`)
      */
-    public resizeNode(nodeId: string|number, width: number, height: number, resizeStrategy?: string): void {
+    public resizeNode(nodeId: string|number, width: number, height: number, resizeStrategy?: string, updateGrapheditor: boolean= true): void {
         const dimensions: Rect = {
             x: - (width / 2),
             y: - (height / 2),
             width: width,
             height: height,
         };
-        this.resizeNodeToBBox(nodeId, dimensions, resizeStrategy);
+        this.resizeNodeToBBox(nodeId, dimensions, resizeStrategy, updateGrapheditor);
     }
 
     /**
@@ -687,34 +748,49 @@ export class ResizingManager {
      *
      * The dimensions are given as a bounding box relative to the node coordinates.
      *
+     * For batch resizing many nodes in one go it is possible to set `updateGrapheditor` to `false`.
+     * This will prevent any updates to be visible until `graphEditor.completeRender()` is
+     * called manually.
+     * The resize overlays also need to be updated manually if `updateGrapheditor` is `false`.
+     * To update the overlays make sure to call `updateOverlays` __after__
+     * `graphEditor.completeRender()` to ensure that the bounding boxes are up to date.
+     *
+     * If `updateGrapheditor` is set to `false` the 'noderesize' event will still be fired.
+     * But becouse the actual bounding box of the node is not updated as the graph
+     * is not rerendered the new bounding box is guessed from the `dimensions` rect.
+     *
      * @param nodeId the id of the node to resize
      * @param dimensions the bounding box relative to the node position to which to fit the node into
-     * @param resizeStrategy the resize strategy to use (default: 'default')
+     * @param resizeStrategy the resize strategy to use (defaults to 'default' if null or undefined)
+     * @param updateGrapheditor if `true`, do a complete render of the grapheditor after the resize (default: `true`)
      */
-    public resizeNodeToBBox(nodeId: string|number, dimensions: Rect, resizeStrategy?: string): void {
+    public resizeNodeToBBox(nodeId: string|number, dimensions: Rect, resizeStrategy?: string, updateGrapheditor: boolean= true): void {
         if (this.currentlyResizing.has(nodeId.toString())) {
-            // TODO error Cannot resize node while it is still dragged!
+            console.warn('Cannot resize a node while the resize overlay is being dragged!');
             return;
         }
         if (dimensions.width <= 0) {
-            // TODO error
+            console.error('Cannot resize the node to anegative width!');
             return;
         }
         if (dimensions.height <= 0) {
-            // TODO error
+            console.error('Cannot resize the node to anegative height!');
             return;
         }
         const node = this.graphEditor.getNode(nodeId);
         const strat = this.resizeStrategies.get(resizeStrategy ?? 'default');
         if (node == null) {
-            // TODO error
+            console.warn(`Could not resize the node. No node with id "${nodeId}" found!`);
             return;
         }
         if (strat == null) {
-            // TODO error
+            console.warn(`Could not resize the node. No resize strategy "${resizeStrategy ?? 'default'}" found!`);
             return;
         }
-        this._resizeNode(strat, node, dimensions); // TODO add event subject
+        this._resizeNode(strat, node, dimensions, updateGrapheditor, EventSource.API);
+        if (updateGrapheditor) {
+            this.updateOverlays();
+        }
     }
 
     /**
@@ -723,11 +799,16 @@ export class ResizingManager {
      * @param resizeStrategy the resize strategy to use to resize the node
      * @param node the node to resize
      * @param newRect the new dimesnions to fit the node into
+     * @param updateGrapheditor if `true`, do a complete render of the grapheditor after the resize
+     * @param eventSource the source of the resize event to be fired
+     * @returns a vector of how much the node center was moved for the resize
      */
-    private _resizeNode(resizeStrategy: ResizeStrategy, node: Node, newRect: Rect): RotationVector {
-        const oldBBox = this.graphEditor.getNodeBBox(node);
+    // eslint-disable-next-line max-len
+    protected _resizeNode(resizeStrategy: ResizeStrategy, node: Node, newRect: Rect, updateGrapheditor: boolean= true, eventSource: EventSource= EventSource.USER_INTERACTION): RotationVector {
+        const nodeId: string = node.id.toString();
+        const oldBBox = getNodeBBox(nodeId, this.graphEditor, resizeStrategy);
         const oldPos: Point = {x: node.x, y: node.y};
-        try { // TODO better error handling for user provided resize strategies
+        try {
             resizeStrategy.applyNewDimensions(node, newRect.width, newRect.height, this.graphEditor);
         } catch (error) {
             console.error(`An error occured while applying the new dimensions to the node ${node.id}.`, error);
@@ -737,11 +818,52 @@ export class ResizingManager {
         } catch (error) {
             console.error(`An error occured while moving the node ${node.id} into the new bounding box.`, error);
         }
-        this.graphEditor.completeRender();
-        const newBBox = this.graphEditor.getNodeBBox(node);
+        // the amount the node center was moved for this resize
         const nodeShift: RotationVector = {dx: node.x - oldPos.x, dy: node.y - oldPos.y};
-        // TODO event for resizing node!
+
+        if (updateGrapheditor) {
+            this.graphEditor.completeRender();
+            const newBBox = getNodeBBox(nodeId, this.graphEditor, resizeStrategy);
+            this.dispatchNodeResizeEvent(node, newBBox, oldBBox, eventSource);
+        } else {
+            // the actual node BBox only updates when the graph is rerendered
+            // use the target BBox instead but shift it to the correct position
+            const newBBox = {
+                x: newRect.x + nodeShift.dx,
+                y: newRect.y - nodeShift.dy,
+                width: newRect.width,
+                height: newRect.height,
+            };
+            this.dispatchNodeResizeEvent(node, newBBox, oldBBox, eventSource);
+        }
+
         return nodeShift;
+    }
+
+    /**
+     * Dispatch a 'noderesize' event on the grapheditor instance.
+     *
+     * @param node the node that was resized
+     * @param newBBox the new bounding box of the node
+     * @param oldBBox the old bounding box of the node
+     * @param eventSource the source of the event (default EventSource.API)
+     */
+    public dispatchNodeResizeEvent(node: Node, newBBox: Rect, oldBBox?: Rect, eventSource: EventSource= EventSource.API): void {
+        const detail: any = {
+            eventSource: eventSource,
+            node: node,
+            newBBox: newBBox,
+        };
+        if (oldBBox != null) {
+            detail.oldBBox = oldBBox;
+        }
+        const ev = new CustomEvent('noderesize', {
+            bubbles: true,
+            composed: true,
+            cancelable: false,
+            detail: detail,
+        });
+        this.graphEditor.dispatchEvent(ev);
     }
 
 
@@ -755,7 +877,7 @@ export class ResizingManager {
      * @param handle the handle of the resize overlay that is dragged by the user
      */
     // eslint-disable-next-line complexity
-    private resizeHandlerFromHandle(options: ResizeOverlayOptions, handle: ResizeHandle): ResizeHandler {
+    protected resizeHandlerFromHandle(options: ResizeOverlayOptions, handle: ResizeHandle): ResizeHandler {
 
         // setup option variables for handlers
         let minWidth = 1;

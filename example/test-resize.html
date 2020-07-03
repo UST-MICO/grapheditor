@@ -147,6 +147,11 @@
             rm.showResizeOverlay(4, {handleTemplate: 'resize-handle', rotateHandles: false, minWidth: 20, minHeight: 20, liveResize: true, preserveRatioOnDiagonals: true, symmetricHorizontal: true, symmetricVertical: true});
 
             graph.updateNodeClasses();
+
+            rm.resizeNode(1, 30, 30, 'default', false);
+
+            graph.completeRender();
+            rm.updateOverlays();
         </script>
     </body>
 </html>
