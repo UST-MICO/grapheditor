@@ -152,9 +152,9 @@ copyright = '2018, MICO Authors'
 author = 'MICO Authors'
 
 # The short X.Y version
-version = '0.5.4'
+version = '0.6.0'
 # The full version, including alpha/beta/rc tags
-release = '0.5.4'
+release = '0.6.0'
 
 
 # -- General configuration ---------------------------------------------------

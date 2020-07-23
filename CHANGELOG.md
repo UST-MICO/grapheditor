@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## [Unreleased]
 
+## [0.6.0] - 2020-7-23
+
 ### Added
 
 - Added ResizeManager that allows node resizing via api and drag and drop
@@ -304,7 +306,8 @@ First beta version.
 - Initial webcomponent
 - Documentation
 
-[Unreleased]: https://github.com/UST-MICO/grapheditor/compare/v0.5.4...HEAD
+[Unreleased]: https://github.com/UST-MICO/grapheditor/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/UST-MICO/grapheditor/compare/v0.5.4...v0.6.0
 [0.5.4]: https://github.com/UST-MICO/grapheditor/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/UST-MICO/grapheditor/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/UST-MICO/grapheditor/compare/v0.5.1...v0.5.2
