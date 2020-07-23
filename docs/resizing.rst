@@ -42,6 +42,69 @@ Options for the resize overlay can be given when showing the resize overlay.
 For a complete list of possible options see :js:class:`ResizeOverlayOptions`.
 There are also various options to change the overlay handles or only show some of them.
 
+Styling the Overlay
+^^^^^^^^^^^^^^^^^^^
+
+The resize overlay can be styled with css like nodes and edges.
+Below is the structure of an example resize overlay inside the graph svg.
+The ``resize-overlay```group contains one ``rect`` with the class ``outline`` and one group for each resize handle.
+The resize handles use the static templates for markers.
+Use the :js:attr:`~ResizeOverlayOptions.handleTemplate` (or :js:attr:`~ResizeOverlayOptions.cornerHandleTemplate`) setting to set the template to use.
+All resize handles have the class ``resize-handle`` and classes corresponding to their position (``top``, ``bottom``, ``left``, ``right``) and type (``horizontal``, ``vertical``, ``corner``) of handle.
+
+.. code-block:: html
+
+    <svg slot="graph" class="graph-editor" width="100%" height="100%">
+        <g class="zoom-group" transform="translate(473.956,136.98600000000002) scale(3.1212)">
+            <g class="edges">…</g>
+            <g class="nodes">…</g>
+            <g class="resize-overlays"><!-- this will always be the last group in the dom -->
+                <g class="resize-overlay" transform="translate(0,0)">
+                    <rect class="outline" x="-15" y="-15" width="30" height="30" fill="none" stroke="black"></rect>
+                    <g class="resize-handle corner top left" template="resize-handle" transform="translate(-15,-15)">…</g>
+                    <g class="resize-handle corner top right" template="resize-handle" transform="translate(15,-15)">…</g>
+                    <g class="resize-handle corner bottom right" template="resize-handle" transform="translate(15,15)">…</g>
+                    <g class="resize-handle corner bottom left" template="resize-handle" transform="translate(-15,15)">…</g>
+                    <g class="resize-handle horizontal left" template="resize-handle" transform="translate(-15,0)">…</g>
+                    <g class="resize-handle horizontal right" template="resize-handle" transform="translate(15,0)">…</g>
+                    <g class="resize-handle vertical top" template="resize-handle" transform="translate(0,-15)">…</g>
+                    <g class="resize-handle vertical bottom" template="resize-handle" transform="translate(0,15)">…</g>
+                </g>
+            </g>
+        </g>
+    </svg>
+
+
+Example for Styling the Overlay
+"""""""""""""""""""""""""""""""
+
+This example sets the mouse cursor to display a resizing cursor when hovering a resize handle.
+The ``resize-handle`` marker template can be used as the resize handle template.
+
+.. code-block:: html
+
+    <svg slot="graph" class="graph-editor" width="100%" height="100%">
+        <style>
+            /* Limit interactivity of the outline */
+            .resize-overlay > .outline {pointer-events: none;}
+            /* Set cursors for resize handles */
+            .resize-overlay > .vertical.top {cursor: n-resize;}
+            .resize-overlay > .vertical.bottom {cursor: s-resize;}
+            .resize-overlay > .horizontal.right {cursor: e-resize;}
+            .resize-overlay > .horizontal.left {cursor: w-resize;}
+            .resize-overlay > .corner.top.left {cursor: nw-resize;}
+            .resize-overlay > .corner.top.right {cursor: ne-resize;}
+            .resize-overlay > .corner.bottom.left {cursor: sw-resize;}
+            .resize-overlay > .corner.bottom.right {cursor: se-resize;}
+        </style>
+        <defs class="templates">
+            <g id="resize-handle" data-template-type="marker">
+                <rect x="-2" y="-2" width="4" height="4"></rect>
+            </g>
+        </defs>
+    </svg>
+
+
 Some Scenarios
 ^^^^^^^^^^^^^^
 
