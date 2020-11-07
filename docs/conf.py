@@ -16,10 +16,16 @@
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 import os
+from pathlib import Path
+from shutil import copyfile
+from typing import Any, List
 from recommonmark.transform import AutoStructify
 
-on_rtd = os.environ.get('READTHEDOCS') == 'True'
-skip_typedoc = os.environ.get('SKIP_TYPEDOC') == 'True'
+TS_DOC_COMMAND = ["npm", "run", "doc", "--"]
+
+ON_RTD = os.environ.get('READTHEDOCS') == 'True'
+SKIP_TYPEDOC = ON_RTD or os.environ.get('SKIP_TYPEDOC') == 'True'
+
 
 # -- Recommonmark Monkey patch -----------------------------------------------
 
@@ -27,35 +33,59 @@ skip_typedoc = os.environ.get('SKIP_TYPEDOC') == 'True'
 from functools import wraps
 
 # -- sphinx-js Monkey patch --------------------------------------------------
-from sphinx_js import doclets
-from sphinx_js.typedoc import TypeDoc
-from tempfile import NamedTemporaryFile
-import subprocess
-from shutil import copyfile
-from os.path import relpath, join
-from sphinx.errors import SphinxError
-from errno import ENOENT
-from json import load, dump
+
+import os
 from pathlib import Path
+import sphinx_js
+from sphinx_js.typedoc import Analyzer, index_by_id, SuffixTree
+from sphinx_js.analyzer_utils import Command
+from sphinx_js import ir
+import subprocess
+from errno import ENOENT
+from json import dumps, load, dump
+from sphinx.errors import SphinxError
+from typing import List
 
-# analyzer that makes sure the typescript doc json only contains relative paths
-def analyze_typescript(abs_source_paths, app):
-    command = doclets.Command('npm')
-    command.add('run', 'doc', '--')
-    if app.config.jsdoc_config_path:
-        command.add('--tsconfig', app.config.jsdoc_config_path)
 
-    json_path = './docs/typedoc.json'
+class CustomAnalyzer(Analyzer):
 
-    source = abs_source_paths[0]
-    command.add('--json', json_path, *abs_source_paths)
-    if not on_rtd and not skip_typedoc:
-        # only build typedoc json locally as readthedocs build container does not
-        # support it natively (and typedoc process takes a while to finish)
-        try:
-            subprocess.call(command.make(), cwd=source)
-            with open('typedoc.json') as typedoc_json:
-                typedoc = load(typedoc_json)
+    def __init__(self, base_dir, json, **kwargs) -> None:
+        """
+        :arg json: The loaded JSON output from typedoc
+        :arg base_dir: The absolute path of the dir relative to which to
+            construct file-path segments of object paths
+        """
+        super().__init__(base_dir=base_dir, json=json, **kwargs)
+
+    @classmethod
+    def from_disk(cls, abs_source_paths: List[str], app, base_dir: str):
+        assert len(abs_source_paths) == 1, "only one project in this repository"
+        doc_folder = Path(app.confdir)
+        ts_project_folder = Path(abs_source_paths[0])
+
+        json = CustomAnalyzer._load_typedoc_output(ts_project_folder, doc_folder, app.config.jsdoc_config_path)
+        return cls(base_dir=base_dir, json=json)
+
+    @staticmethod
+    def _load_typedoc_output(abs_source_path: Path, sphinx_conf_dir: Path, jsdoc_config_path):
+        command = Command(TS_DOC_COMMAND[0])
+        if len(TS_DOC_COMMAND) > 1:
+            command.add(*TS_DOC_COMMAND[1:])
+        if jsdoc_config_path:
+            command.add('--tsconfig', jsdoc_config_path)
+
+        json_path = sphinx_conf_dir / Path('typedoc.json')
+
+        command.add('--json', str(json_path), str(abs_source_path))
+
+        if not SKIP_TYPEDOC:
+            try:
+                subprocess.call(command.make())
+            except OSError as exc:
+                if exc.errno == ENOENT:
+                    raise SphinxError('%s was not found. Install it using "npm install -g typedoc".' % command.program)
+                else:
+                    raise
 
             def sanitize_typedoc_json(typedoc):
                 """Make all paths relative to not leak path info to github."""
@@ -70,91 +100,133 @@ def analyze_typescript(abs_source_paths, app):
                     if key == 'originalName':
                         filepath = typedoc[key]
                         if filepath:
-                            typedoc[key] = relpath(filepath)
-            sanitize_typedoc_json(typedoc)
-            with open('typedoc.json', mode='w') as typedoc_json:
-                dump(typedoc, typedoc_json)
-        except OSError as exc:
-            if exc.errno == ENOENT:
-                print(exc)
-                raise SphinxError('%s was not found. Install it using "npm install -g typedoc".' % command.program)
-            else:
-                raise
+                            p = Path(filepath)
+                            typedoc[key] = str(p.relative_to(abs_source_path))
+            sanitized_doc = {}
+            with json_path.open() as typedoc_json:
+                typedoc = load(typedoc_json)
+                sanitize_typedoc_json(typedoc)
+                sanitized_doc = typedoc
+            with json_path.open(mode='w') as typedoc_json:
+                dump(sanitized_doc, typedoc_json)
+
+
+        with json_path.open() as typedoc:
             # typedoc emits a valid JSON file even if it finds no TS files in the dir:
-    with open('typedoc.json') as temp:
-        return doclets.parse_typedoc(temp)
+            return load(typedoc)
 
 
-doclets.ANALYZERS['custom_typescript'] = analyze_typescript
+    def _type_name(self, type):
+        """Return a string description of a type.
 
+        :arg type: A TypeDoc-emitted type node
 
-# fix relative path resolution
-def new_relpath(path, basedir):
-    if Path(path).drive != Path(basedir).drive:
-        return path
-    return relpath(path, basedir)
+        """
+        type_of_type = type.get('type')
 
-doclets.relpath = new_relpath
-
-# fix type name resolution:
-old_make_type_name = TypeDoc.make_type_name
-
-
-def new_make_type_name(self, type):
-    if type.get('type') == 'reflection':
-        declaration = type.get('declaration', {})
-        if declaration.get('signatures'):
-            names = []
-            for signature in declaration.get('signatures'):
-                name = '(' + ', '.join(
-                    p.get('name') + ': ' + '|'.join(new_make_type_name(self, p.get('type')))
-                    for p in signature.get('parameters', [])
-                    if p.get('type')
-                ) + ') => ' + '|'.join(new_make_type_name(self, signature.get('type')))
-                names.append(name)
-            return names
-        elif declaration.get('children'):
-            variables = ', '.join(
-                v.get('name') + ': ' + '|'.join(new_make_type_name(self, v.get('type')))
-                for v in declaration.get('children')
-                if v.get('type')
-            )
-            names = []
-            if declaration.get('indexSignature'):
-                extras = [variables]
-                for sig in declaration.get('indexSignature'):
-                    inner_text = ''
-                    if sig.get('parameters'):
-                        p = sig.get('parameters')[0]
-                        inner_text += p.get('name') + ': ' + '|'.join(new_make_type_name(self, p.get('type')))
-                    extras.append('[' + inner_text + ']: ' + '|'.join(new_make_type_name(self, sig.get('type'))))
-                names.append('{' + ', '.join(extras) + '}')
+        if type_of_type == 'reflection':
+            declaration = type.get('declaration', {})
+            if declaration.get('signatures'):
+                names = []
+                for signature in declaration.get('signatures'):
+                    name = '(' + ', '.join(
+                        p.get('name') + ': ' + self._type_name(p.get('type'))
+                        for p in signature.get('parameters', [])
+                        if p.get('type')
+                    ) + ') => ' + self._type_name(signature.get('type'))
+                    names.append(name)
+                return ' '.join(names)
+            elif declaration.get('children'):
+                variables = ', '.join(
+                    v.get('name') + ': ' + self._type_name(v.get('type'))
+                    for v in declaration.get('children')
+                    if v.get('type')
+                )
+                names = []
+                if declaration.get('indexSignature'):
+                    extras = [variables]
+                    for sig in declaration.get('indexSignature'):
+                        inner_text = ''
+                        if sig.get('parameters'):
+                            p = sig.get('parameters')[0]
+                            inner_text += p.get('name') + ': ' + self._type_name(p.get('type'))
+                        extras.append('[' + inner_text + ']: ' + self._type_name(sig.get('type')))
+                    names.append('{' + ', '.join(extras) + '}')
+                else:
+                    names.append('{' + variables + '}')
+                return ''.join(names)
+        elif type_of_type == 'typeParameter':
+            names = [type.get('name')]
+            constraint_type = type.get('constraint').get('type')
+            if constraint_type == 'union' or constraint_type == 'reference':
+                names.append("extends")
+                names.append(self._type_name(type.get('constraint')))
             else:
-                names.append('{' + variables + '}')
-            return names
-    elif type.get('type') == 'typeParameter':
-        names = old_make_type_name(self, type)
-        constraint_type = type.get('constraint').get('type')
-        if constraint_type == 'union' or constraint_type == 'reference':
-            names[-1] = '|'.join(names[-1])
-        else:
-            print('Encountered unknown constraint type for typeParameter', constraint_type)
-        return names
-    return old_make_type_name(self, type)
+                print('Encountered unknown constraint type for typeParameter', constraint_type)
+            return ' '.join(names)
+        return super()._type_name(type)
+
+sphinx_js.TsAnalyzer = CustomAnalyzer
+
+# fix jsrenderer for fields
+
+from sphinx_js.renderers import JsRenderer
+
+old_fields = JsRenderer._fields
+
+def new_fields(self, obj):
+    for heads, tail in old_fields(self, obj):
+        # also escape spaces in head as typescript types can have spaces...
+        yield [h.replace(' ', r'\ ') for h in heads], tail
+
+JsRenderer._fields = new_fields
+
+# -- Load information from config --------------------------------------------
+
+from tomlkit import loads as toml_load
+
+current_path = Path(".").absolute()
+
+project_root: Path
+pyproject_path: Path
+package_path: Path
+
+if current_path.name == "docs":
+    project_root = current_path.parent
+    pyproject_path = current_path / Path("pyproject.toml")
+    package_path = current_path / Path("../package.json")
+else:
+    project_root = current_path
+    pyproject_path = current_path / Path("docs/pyproject.toml")
+    package_path = current_path / Path("package.json")
+
+pyproject_toml: Any
+
+with pyproject_path.open() as pyproject:
+    content = '\n'.join(pyproject.readlines())
+    pyproject_toml = toml_load(content)
+
+package_json: Any
+
+with package_path.open() as package:
+    package_json = load(package)
 
 
-TypeDoc.make_type_name = new_make_type_name
+doc_package_config = pyproject_toml["tool"]["poetry"]
+sphinx_config = pyproject_toml["tool"].get("sphinx", {})
 
 # -- Project information -----------------------------------------------------
 
 project = 'MICO Grapheditor Documentation'
-copyright = '2018, MICO Authors'
-author = 'MICO Authors'
+project_urlsafe = 'MICOGrapheditorDocumentation'
+author = package_json.get("author", ", ".join(doc_package_config.get("authors", 'MICO Authors')))
+copyright_year = sphinx_config.get("copyright-year", 2020)
+copyright = '{year}, {authors}'.format(year=copyright_year, authors=author)
 
 # The short X.Y version
-version = '0.6.0'
+version = package_json.get("version", doc_package_config.get("version"))
 # The full version, including alpha/beta/rc tags
-release = '0.6.0'
+release = sphinx_config.get("release", version)
 
 
 # -- General configuration ---------------------------------------------------
@@ -212,7 +284,7 @@ pygments_style = 'sphinx'
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-if on_rtd:
+if ON_RTD:
     html_theme = 'default'
 else:
     html_theme = 'sphinx_rtd_theme'
@@ -242,7 +314,7 @@ html_static_path = []
 # -- Options for HTMLHelp output ---------------------------------------------
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'MICOGrapheditorDocumentationdoc'
+htmlhelp_basename = project_urlsafe
 
 
 # -- Options for LaTeX output ------------------------------------------------
@@ -269,8 +341,8 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'MICOGrapheditorDocumentation.tex', 'MICO Grapheditor Documentation',
-     'MICO Authors', 'manual'),
+    (master_doc, '{}.tex'.format(project_urlsafe), project,
+     author, 'manual'),
 ]
 
 
@@ -279,7 +351,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'micographeditordocumentation', 'MICO Grapheditor Documentation',
+    (master_doc, project_urlsafe.lower(), project,
      [author], 1)
 ]
 
@@ -290,8 +362,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'MICOGrapheditorDocumentation', 'MICO Grapheditor Documentation',
-     author, 'MICOGrapheditorDocumentation', 'One line description of project.',
+    (master_doc, project_urlsafe, project,
+     author, project_urlsafe, package_json.get("description", ""),
      'Miscellaneous'),
 ]
 
@@ -308,8 +380,8 @@ intersphinx_mapping = {
 # -- Options for todo extension ----------------------------------------------
 
 # If true, `todo` and `todoList` produce output, else they produce nothing.
-todo_include_todos = not on_rtd
-todo_emit_warnings = not on_rtd
+todo_include_todos = not ON_RTD
+todo_emit_warnings = not ON_RTD
 
 # -- Options for recommonmark ------------------------------------------------
 autosectionlabel_prefix_document = True
@@ -323,11 +395,11 @@ def setup(app):
         'enable_math': True,
         'enable_inline_math': True,
     }, True)
-    app.add_config_value('on_rtd', on_rtd, 'env')
+    app.add_config_value('on_rtd', ON_RTD, 'env')
     app.add_transform(AutoStructify)
 
 # -- Options for jsdoc -------------------------------------------------------
-js_language = 'custom_typescript'
+js_language = 'typescript'
 root_for_relative_js_paths = '.'
 js_source_path = '../.'
 
