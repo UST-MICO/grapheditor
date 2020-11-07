@@ -212,8 +212,12 @@ function wrapSingleLine(element: SVGTextElement|SVGTSpanElement, width: number,
     if (text.node().getComputedTextLength() <= width) {
         return suffix;
     }
+    const boundary = /\b\s*|$/g;
+    boundary.lastIndex = 1;
+    const nextWordBoundary = boundary.exec(newText)?.index ?? 0;
+    const isOneWord = nextWordBoundary === 0 || nextWordBoundary === newText.length
 
-    if (wordBreak === 'break-all' || newText.indexOf(' ') < 0) {
+    if (wordBreak === 'break-all' || isOneWord) {
         return wrapCharacters(newText, text, width, mode === 'clip' ? '' : '…') + suffix;
     } else {
         return wrapWords(newText, text, width, mode === 'clip' ? '' : '…') + suffix;
@@ -229,28 +233,38 @@ function wrapSingleLine(element: SVGTextElement|SVGTSpanElement, width: number,
  * @param overflowChar wrapping mode
  */
 function wrapCharacters(newText: string, text: any, width: number, overflowChar: string) {
-    let divider = newText.length;
-    const lastText = newText;
-    let step = newText.length;
-    let counter = 0;
-    // upper bound to catch infinite loops
-    const maxStepsAllowed = Math.log2(newText.length) + 10;
-    // perform binary search for division point
-    while (step > 1 && counter < maxStepsAllowed) {
-        counter++;
-        step = Math.ceil(step / 2);
-        if (text.node().getComputedTextLength() > width) {
-            divider -= step;
-        } else {
-            divider += step;
+    // find out width of overflow char
+    let overflowCharWidth = 0;
+    if (overflowChar) {
+        text.text(overflowChar);
+        overflowCharWidth = text.node().getExtentOfChar(0).width;
+        text.text(newText);
+    }
+    // find better upper bound from svg
+    const start = text.node().getStartPositionOfChar(0);
+    start.x += (width - overflowCharWidth);
+    // always a char here as this method only gets called when the line is too long
+    let firstOutside = text.node().getCharNumAtPosition(start);
+    if (firstOutside < 0) { // because firefox sometimes does this...
+        firstOutside = bruteForceLastOutside(text.node(), newText.length, start.x)
+    }
+    let lastNonClippingChar = firstOutside;
+
+    for (let char = firstOutside; char > 0; char--) {
+        const charStart = text.node().getEndPositionOfChar(char);
+        if (charStart.x < start.x) {
+            lastNonClippingChar = char;
+            break;
         }
-        text.text(rTrim(newText.substr(0, divider)) + overflowChar);
     }
-    if (text.node().getComputedTextLength() > width) {
-        divider -= step;
-        text.text(rTrim(newText.substr(0, divider)) + overflowChar);
+
+    const newSubstring = rTrim(newText.substr(0, lastNonClippingChar));
+    if (overflowChar) {
+        text.text(newSubstring + overflowChar);
+    } else {
+        text.text(newSubstring);
     }
-    return newText.substr(divider);
+    return lTrim(newText.substr(lastNonClippingChar));
 }
 
 
@@ -263,6 +277,23 @@ function wrapCharacters(newText: string, text: any, width: number, overflowChar:
  * @param overflowChar wrapping mode
  */
 function wrapWords(newText: string, text: any, width: number, overflowChar: string) {
+    // find out width of overflow char
+    let overflowCharWidth = 0;
+    if (overflowChar) {
+        text.text(overflowChar);
+        overflowCharWidth = text.node().getExtentOfChar(0).width;
+        text.text(newText);
+    }
+    console.log(text.node().getComputedTextLength(), text.text())
+    // find better upper bound from svg
+    const start = text.node().getStartPositionOfChar(0);
+    start.x += (width - overflowCharWidth);
+    // always a char here as this method only gets called when the line is too long
+    let firstOutside = text.node().getCharNumAtPosition(start);
+    if (firstOutside < 0) { // because firefox sometimes does this...
+        firstOutside = bruteForceLastOutside(text.node(), newText.length, start.x)
+    }
+
     const WORD_BOUNDARY = /\b\s*|$/g;
     // start searching from the first charcter in the string
     // don't start with 0 because 0 is always a word boundary
@@ -271,7 +302,7 @@ function wrapWords(newText: string, text: any, width: number, overflowChar: stri
     let lastBoundary: RegExpExecArray;
     let boundary: RegExpExecArray = WORD_BOUNDARY.exec(newText);
 
-
+    let lastInsideBoundary = null;
 
     let counter = 0; // counter to catch infinite loops
     while (boundary.index < (newText.length - 1) && !(lastBoundary == null && boundary == null)) {
@@ -280,9 +311,9 @@ function wrapWords(newText: string, text: any, width: number, overflowChar: stri
             console.warn('Wrapping the text encountered a loop!', 'Text to wrap:', newText);
             break;
         }
-        text.text(rTrim(newText.substr(0, boundary.index)) + overflowChar);
-        if (text.node().getComputedTextLength() > width) {
-            // last word was too much
+        if (boundary.index <= firstOutside) {
+            lastInsideBoundary = boundary.index;
+        } else {
             break;
         }
         lastBoundary = boundary;
@@ -299,10 +330,28 @@ function wrapWords(newText: string, text: any, width: number, overflowChar: stri
             }
         }
     }
-    if (lastBoundary == null) {
+    if (lastInsideBoundary == null) {
         // one long word
         return wrapCharacters(newText, text, width, '-');
     }
-    text.text(rTrim(newText.substr(0, lastBoundary.index)) + overflowChar);
-    return lTrim(newText.substr(lastBoundary.index));
+    text.text(rTrim(newText.substr(0, lastInsideBoundary)) + overflowChar);
+    return lTrim(newText.substr(lastInsideBoundary));
+}
+
+
+function bruteForceLastOutside(textNode, textLength: number, xBoundary: number): number {
+    const maxChars = textNode.getNumberOfChars();
+    for (let i = 0; i < textLength; i++) {
+        if (maxChars !== 0 && i >= maxChars) { // firefox may also report getNumberOfChars() as 0
+            return i;
+        }
+        try {
+            const end = textNode.getEndPositionOfChar(i);
+            if (end.x > xBoundary) {
+                return i;
+            }
+        } catch (error) { // catch error when trying to access character that cannot be accessed
+            return i;
+        }
+    }
 }

@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## [Unreleased]
 
+### Refactored
+
+- Refactored text wrapping code to cause less dom updates
+
 ### Fixed
 
 - Text wrapping only worked if the `text` tag also had a `text` css class. Now all `text` tags will be wrapped automatically.
