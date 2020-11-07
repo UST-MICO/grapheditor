@@ -1982,7 +1982,7 @@ export default class GraphEditor extends HTMLElement {
         const self = this;
         nodeSelection.each(function (d) {
             const singleNodeSelection = select(this);
-            const textSelection = singleNodeSelection.selectAll<SVGTextElement, unknown>('text.text').datum(function () {
+            const textSelection = singleNodeSelection.selectAll<SVGTextElement, unknown>('text').datum(function () {
                 return this.getAttribute('data-content');
             });
             textSelection.each(function (attr) {
@@ -2008,7 +2008,7 @@ export default class GraphEditor extends HTMLElement {
         groupSelection.each(function (d) {
             const singleGoupSelection = select(this);
             // update text
-            singleGoupSelection.selectAll<Element, any>('[data-content]:not(.text)').datum(function () {
+            singleGoupSelection.selectAll<Element, any>('[data-content]:not(text)').datum(function () {
                 const attribute = this.getAttribute('data-content');
                 return self.recursiveAttributeGet(d, attribute)?.toString();
             }).text(text => text);

@@ -40,7 +40,7 @@ Text injection for Node Templates
 ---------------------------------
 
 It is possible to use text from the :js:class:`Node` object inside a templated node.
-The template has to contain a ``text`` tag with a ``data-content`` attribute and the ``text`` class.
+The template has to contain a ``text`` tag with a ``data-content`` attribute.
 The ``data-content`` attribute is used to determine wich attribute of the :js:class:`Node` is used as text for this element.
 To use a value of a nested Object as text source a path can be provided in ``data-content`` where the path segments are seperated by ``.``.
 The property is resolved by the :js:func:`recursiveAttributeGet <GraphEditor.recursiveAttributeGet>` function.

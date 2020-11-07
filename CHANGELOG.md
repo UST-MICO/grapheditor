@@ -7,6 +7,11 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## [Unreleased]
 
+### Fixed
+
+- Text wrapping only worked if the `text` tag also had a `text` css class. Now all `text` tags will be wrapped automatically.
+
+
 ## [0.6.0] - 2020-7-23
 
 ### Added
