@@ -18,7 +18,8 @@ Features
 * Fully :doc:`dynamic templates <dynamic-templates>`
 * Changeable :doc:`edge paths <edge-path-templates>`
 * Dynamic styling with :ref:`css classes <grapheditor:styling nodes and edges with custom css classes>`
-* :ref:`Text wrapping <static-templates:text injection for node templates>` in plain svg (this is not supported natively by browsers!)
+* :ref:`Text wrapping <static-templates:text wrapping for node templates>` in plain svg (this is not supported natively by browsers!)
+* :ref:`Wrap text in circles and other shapes <static-templates:extra text wrapping options>`
 * Pan and zoom using mouse or touch
 * :ref:`Highly configurable <grapheditor:component attributes>`
 * :ref:`View only mode <view-mode-attribute>`

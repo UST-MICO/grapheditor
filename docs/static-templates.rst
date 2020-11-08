@@ -26,7 +26,7 @@ Where the edge attaches can be customized by setting the ``data-line-attachement
                 <!-- templates go here -->
                 <g id="default" data-template-type="node">
                     <rect x="-20" y="-8" width="40" height="16"></rect>
-                    <text class="text" data-content="title" x="-18" y="5" width="36"></text>
+                    <text data-content="title" x="-18" y="5" width="36"></text>
                 </g>
                 <g id="arrow" data-template-type="marker" data-line-attachement-point="-9 0">
                     <path d="M -9 -4 L 0 0 L -9 4 z" />
@@ -47,13 +47,54 @@ The property is resolved by the :js:func:`recursiveAttributeGet <GraphEditor.rec
 
 .. code-block:: html
 
-    <text class="text" data-content="type" x="-40" y="10" width="80"></text>
+    <text data-content="type" x="-40" y="10" width="80"></text>
 
-For text wrapping a ``width`` or ``data-width`` attribute must be supplied.
+Text Wrapping for Node Templates
+--------------------------------
+
+.. note:: Text wrapping only works if the text is set dynamically with the ``data-content`` attribute.
+
+For text wrapping a ``width`` or ``data-width`` attribute must be specified on the ``text`` tag.
 To enable multiline text wrapping an additional ``height`` or ``data-height`` attribute must be supplied.
 The wrapping behaviour can be partially controlled with the css attributes ``text-overflow``, ``word-break`` and ``line-height``.
 
 .. note:: This will also work for ``text`` tags inside marker templates if the template is instantiated for a link handle of a node.
+
+
+Extra Text Wrapping Options
+"""""""""""""""""""""""""""
+
+Text wrapping can be further customised by setting the ``data-text-center-y`` attribute or the ``data-wrap-lines`` attribute.
+The attribute ``data-text-center-y`` must contain a single number.
+If set the text is centered vertically around the y coordinate specified with ``data-text-center-y``.
+
+.. code-block:: html
+
+    <text data-content="type" data-text-center-y="10" x="-40" y="10" width="80"></text>
+
+The attribute ``data-wrap-lines`` contains a a list of line widths to be used for wrapping.
+If this attribute is specified it overrides any set width or height.
+In fact width or height can be omitted if this attribute is present.
+The list of line widths is a list of numbers seperated by a single space.
+
+It is possible to specify multiple line width lists with this attribute.
+For this the lists must be seperated by a single ``|`` character.
+If multiple lists are specified the first list (from left to right) that produces no overflow text when wrapping is used.
+If all lists produce overflow text then the last list is used for wrapping.
+
+This attribute can be used to wrap text inside more complex shapes like a circle or simple polygons.
+
+An example for a node template that wraps text in a circle:
+
+.. code-block:: html
+
+    <g id="circle-wrap-node" data-template-type="node">
+        <circle r="50" cx="0" cy="0" data-link-handles="minimal"></circle>
+        <text data-content="description" data-text-center-y="0" data-wrap-lines="90|87 87|85 90 85|80 87 87 80|75 85 90 85 75|70 80 87 87 80 70|60 75 85 90 85 75 60|50 70 80 87 87 80 70 50" x="0" y="0"></text>
+    </g>
+
+
+
 
 Dynamic content
 ---------------

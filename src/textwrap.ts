@@ -44,6 +44,9 @@ export function wrapText(element: SVGTextElement, newText, force: boolean= false
     if (isNaN(y)) {
         y = 0;
     }
+
+    const wrapLines = text.attr('data-wrap-lines');
+
     let width = parseFloat(text.attr('width'));
     if (isNaN(width)) {
         width = parseFloat(text.attr('data-width'));
@@ -52,7 +55,7 @@ export function wrapText(element: SVGTextElement, newText, force: boolean= false
     if (isNaN(height)) {
         height = parseFloat(text.attr('data-height'));
     }
-    if (isNaN(width)) {
+    if (isNaN(width) && wrapLines == null) {
         text.text(newText);
         return;
     }
@@ -69,10 +72,18 @@ export function wrapText(element: SVGTextElement, newText, force: boolean= false
         wordBreak = 'break-word';
     }
 
+    if (wrapLines != null) {
+        // handle special wrap lines!
+        wrapTextLines(text, newText, wrapLines, overflowMode, wordBreak, force);
+        centerTextVertically(text, true);
+        return;
+    }
 
     if (isNaN(height)) {
+        // no height => wrap a single line
         const overflow = lTrim(wrapSingleLine(element, width, newText, overflowMode, wordBreak, force));
         text.attr('data-wrapped', overflow !== '' ? 'true' : 'false');
+        centerTextVertically(text, false);
         return;
     }
 
@@ -84,6 +95,16 @@ export function wrapText(element: SVGTextElement, newText, force: boolean= false
         const notLast = index < (lines.length - 1);
         newText = lTrim(wrapSingleLine(line, width, newText, notLast ? 'clip' : overflowMode, notLast ? wordBreak : 'break-all', force));
     }
+    centerTextVertically(text, true);
+}
+
+/**
+ * Trim trailing and leading whitespace
+ *
+ * @param text to trim
+ */
+export function trim(text: string) {
+    return text.replace(/^\s+|\s+$/g, '');
 }
 
 /**
@@ -91,7 +112,7 @@ export function wrapText(element: SVGTextElement, newText, force: boolean= false
  *
  * @param text to trim
  */
-function rTrim(text: string) {
+export function rTrim(text: string) {
     return text.replace(/\s+$/, '');
 }
 
@@ -100,8 +121,148 @@ function rTrim(text: string) {
  *
  * @param text to trim
  */
-function lTrim(text: string) {
+export function lTrim(text: string) {
     return text.replace(/^\s+/, '');
+}
+
+/**
+ * Wrap the text based on a supplied lines definition.
+ *
+ * The lines definition is a string containing the maximum widths of the lines
+ * to wrap text into. The widths can be floats, are seperated by single spaces
+ * and parsed with `paseFloat`. Multiple line definitions are seperated by a
+ * single '|' character.
+ *
+ * @param text the selection of the text element to wrap the text into
+ * @param newText the new text to wrap
+ * @param lines the line defs to use for wrapping
+ * @param overflowMode the overflow mode
+ * @param wordBreak the word break mode
+ * @param force if wrapping should be forced
+ */
+export function wrapTextLines(text: Selection<SVGTextElement, unknown, null, undefined>, newText: string, lines: string, overflowMode, wordBreak, force: boolean) {
+    const lineDefs = lines.split('|').map(lineDef => trim(lineDef));
+
+    let lineheight = parseFloat(text.attr('data-lineheight'));
+    if (force || isNaN(lineheight)) {
+        lineheight = parseFloat(text.style('line-height'));
+        if (isNaN(lineheight)) {
+            text.selectAll('tspan').remove(); // remove all child elements before calculation
+            text.text('M'); // use M as measurement character.
+            lineheight = text.node().getExtentOfChar(0).height;
+            text.text(null);
+            text.attr("data-wrap-lines-used", null);
+        }
+        text.attr('data-lineheight', lineheight);
+    }
+    lineheight = Math.abs(lineheight); // don't allow negative lineheight
+
+    const x = text.attr("x");
+    const yBaseline = parseFloat(text.attr('y'));
+    if (isNaN(yBaseline)) {
+        console.error('Could not read attribute "y" of the text element!', text.node());
+        return;
+    }
+
+    // calculate minimal length needed
+    text.selectAll('tspan').remove();
+    text.text(newText);
+    const minimalCumulativeLineLength = text.node().getComputedTextLength();
+    text.text(null);
+
+    // iterate over line defs
+    for (let lineDefIndex = 0; lineDefIndex < lineDefs.length; lineDefIndex++) {
+        const lineDef = lineDefs[lineDefIndex];
+        let currentNewText = newText;
+        const lineWidths = lineDef.split(' ').map(parseFloat);
+        if (lineWidths.some(isNaN)) {
+            // cannot use this line def (use next)
+            console.error('Could not parse lines def {lineDef}!');
+            continue;
+        }
+        const cumulativeWidth = lineWidths.reduce((numA, numB) => {return numA + numB;}, 0);
+        if (cumulativeWidth < minimalCumulativeLineLength && lineDefIndex < (lineDefs.length -1)) {
+            // if not last linedef and wrap is expected to exceed all lines
+            continue;
+        }
+
+        const lines = lineWidths.map((width, index) => {
+            return {width: width, y: yBaseline + (lineheight * index)};
+        });
+        // generate tSpan elements for line def
+        const spanSelection = text.selectAll<SVGTSpanElement, unknown>('tspan')
+            .data(lines)
+            .join(
+                (enter) => {
+                    return enter.append('tspan')
+                        .attr('x', x)
+                        .attr('y', d => d.y)
+                        .attr('data-deltay', d => d.y - yBaseline);
+                },
+                (update) => {
+                    return update
+                        .attr('y', d => d.y)
+                        .attr('data-deltay', d => d.y - yBaseline);
+                }
+            );
+
+        const spans = spanSelection.nodes();
+        let hasOverflow = true;
+        for (let index = 0; index < spans.length; index++) { // wrap lines
+            const line = spans[index];
+            const width = lines[index].width;
+            const notLast = index < (spans.length - 1);
+            currentNewText = lTrim(wrapSingleLine(line, width, currentNewText, notLast ? 'clip' : overflowMode, notLast ? wordBreak : 'break-all', force));
+            if (currentNewText.length == 0) {
+                // no text left to wrap
+                hasOverflow = false;
+                break;
+            }
+        }
+        if (!hasOverflow) {
+            // no more overflow, stop iterating and use the current line def
+            break;
+        }
+    }
+}
+
+/**
+ * Center a svg text element vertically around the y coordinate specified in the
+ * 'data-text-center-y' attribute of the text element.
+ *
+ * If the attribute is not set or cannot be parsed into a float this method does nothing.
+ *
+ * @param text the text selection to center vertically around the attribute 'data-text-center-y'
+ * @param multiline true if the text is a multiline text containing tSpans
+ */
+export function centerTextVertically(text: Selection<SVGTextElement, unknown, null, undefined>, multiline: boolean=false) {
+    const centerVertical = text.attr('data-text-center-y');
+    if (centerVertical == null) {
+        return;
+    }
+    const centerY = parseFloat(centerVertical);
+    if (isNaN(centerY)) {
+        return;
+    }
+    const textNode = text.node();
+    const bbox = textNode.getBBox();
+    const currentCy = ((bbox.y + bbox.height) + bbox.y) / 2;
+
+    const delta = centerY - currentCy;
+    if (Math.abs(delta) > 0.00001) {
+        if (!multiline) {
+            // center single line strings by directly adjusting y
+            const yBaseline = parseFloat(text.attr("y"));
+            if (isNaN(yBaseline)) {
+                console.error('Could not read attribute "y" of the text element that should be centered vertically!', textNode);
+                return;
+            }
+            text.attr("y", yBaseline + delta);
+        } else {
+            // use a transform for multiline strings to transform all tSpans at once
+            text.attr("transform", `translate(0,${delta})`);
+        }
+    }
 }
 
 /**
@@ -114,14 +275,14 @@ function lTrim(text: string) {
  * @param force force rewrap
  * @param linespacing 'auto' or number (default: 'auto')
  */
-function calculateMultiline(text: Selection<SVGTextElement, unknown, null, undefined>, height: number, x: number, y: number, force: boolean= false, linespacing: string= 'auto') {
+export function calculateMultiline(text: Selection<SVGTextElement, unknown, null, undefined>, height: number, x: number, y: number, force: boolean= false, linespacing: string= 'auto') {
     let lineheight = parseFloat(text.attr('data-lineheight'));
     if (force || isNaN(lineheight)) {
         lineheight = parseFloat(text.style('line-height'));
         if (isNaN(lineheight)) {
             text.selectAll('tspan').remove(); // remove all child elements before calculation
             text.text('M'); // use M as measurement character.
-            lineheight = text.node().getBBox().height;
+            lineheight = text.node().getExtentOfChar(0).height;
             text.text(null);
         }
         text.attr('data-lineheight', lineheight);
@@ -167,9 +328,10 @@ function calculateMultiline(text: Selection<SVGTextElement, unknown, null, undef
  * @param mode wrapping mode
  * @param wordBreak break mode
  * @param force force rewrap
+ * @returns the overflow text
  */
 // eslint-disable-next-line complexity
-function wrapSingleLine(element: SVGTextElement|SVGTSpanElement, width: number,
+export function wrapSingleLine(element: SVGTextElement|SVGTSpanElement, width: number,
     newText: string, mode: string = 'ellipsis', wordBreak: string = 'break-word', force: boolean= false
 ): string {
 
@@ -212,8 +374,7 @@ function wrapSingleLine(element: SVGTextElement|SVGTSpanElement, width: number,
     if (text.node().getComputedTextLength() <= width) {
         return suffix;
     }
-    const boundary = /\b\s*|$/g;
-    boundary.lastIndex = 1;
+    const boundary = /(?<!^)(?<!\d[,.])\b(?![,.]\d)\s*|\s+|$/gmu;
     const nextWordBoundary = boundary.exec(newText)?.index ?? 0;
     const isOneWord = nextWordBoundary === 0 || nextWordBoundary === newText.length
 
@@ -232,26 +393,27 @@ function wrapSingleLine(element: SVGTextElement|SVGTSpanElement, width: number,
  * @param width width of the  line
  * @param overflowChar wrapping mode
  */
-function wrapCharacters(newText: string, text: any, width: number, overflowChar: string) {
+function wrapCharacters(newText: string, text: Selection<SVGTextElement|SVGTSpanElement, unknown, null, undefined>, width: number, overflowChar: string) {
     // find out width of overflow char
+    const textNode = text.node();
     let overflowCharWidth = 0;
     if (overflowChar) {
         text.text(overflowChar);
-        overflowCharWidth = text.node().getExtentOfChar(0).width;
+        overflowCharWidth = textNode.getExtentOfChar(0).width;
         text.text(newText);
     }
     // find better upper bound from svg
-    const start = text.node().getStartPositionOfChar(0);
+    const start = textNode.getStartPositionOfChar(0);
     start.x += (width - overflowCharWidth);
     // always a char here as this method only gets called when the line is too long
-    let firstOutside = text.node().getCharNumAtPosition(start);
+    let firstOutside = textNode.getCharNumAtPosition(start);
     if (firstOutside < 0) { // because firefox sometimes does this...
-        firstOutside = bruteForceLastOutside(text.node(), newText.length, start.x)
+        firstOutside = bruteForceLastOutside(textNode, newText.length, start.x)
     }
     let lastNonClippingChar = firstOutside;
 
     for (let char = firstOutside; char > 0; char--) {
-        const charStart = text.node().getEndPositionOfChar(char);
+        const charStart = textNode.getEndPositionOfChar(char);
         if (charStart.x < start.x) {
             lastNonClippingChar = char;
             break;
@@ -276,28 +438,27 @@ function wrapCharacters(newText: string, text: any, width: number, overflowChar:
  * @param width width of the  line
  * @param overflowChar wrapping mode
  */
-function wrapWords(newText: string, text: any, width: number, overflowChar: string) {
+function wrapWords(newText: string, text: Selection<SVGTextElement|SVGTSpanElement, unknown, null, undefined>, width: number, overflowChar: string) {
     // find out width of overflow char
+    const textNode = text.node();
     let overflowCharWidth = 0;
     if (overflowChar) {
         text.text(overflowChar);
-        overflowCharWidth = text.node().getExtentOfChar(0).width;
+        overflowCharWidth = textNode.getExtentOfChar(0).width;
         text.text(newText);
     }
-    console.log(text.node().getComputedTextLength(), text.text())
     // find better upper bound from svg
-    const start = text.node().getStartPositionOfChar(0);
+    const start = textNode.getStartPositionOfChar(0);
     start.x += (width - overflowCharWidth);
     // always a char here as this method only gets called when the line is too long
-    let firstOutside = text.node().getCharNumAtPosition(start);
-    if (firstOutside < 0) { // because firefox sometimes does this...
-        firstOutside = bruteForceLastOutside(text.node(), newText.length, start.x)
+    let firstOutside = textNode.getCharNumAtPosition(start);
+    if (firstOutside < 0 || textNode.getStartPositionOfChar(firstOutside).x > start.x) { // because firefox sometimes does this...
+        // sometimes firefox does not find the char (firstOutside == -1)
+        // sometimes the char firefox found is not correct (second check tests if that char actually starts inside the bounds)
+        firstOutside = bruteForceLastOutside(textNode, newText.length, start.x)
     }
 
-    const WORD_BOUNDARY = /\b\s*|$/g;
-    // start searching from the first charcter in the string
-    // don't start with 0 because 0 is always a word boundary
-    WORD_BOUNDARY.lastIndex = 1;
+    const WORD_BOUNDARY = /(?<!^)(?<!\d[,.])\b(?![,.]\d)\s*|\s+|$/gmu;
     let lastIndex = WORD_BOUNDARY.lastIndex;
     let lastBoundary: RegExpExecArray;
     let boundary: RegExpExecArray = WORD_BOUNDARY.exec(newText);
@@ -323,7 +484,6 @@ function wrapWords(newText: string, text: any, width: number, overflowChar: stri
         }
         boundary = WORD_BOUNDARY.exec(newText);
         if (boundary.index === lastIndex) {
-            WORD_BOUNDARY.lastIndex++;
             boundary = WORD_BOUNDARY.exec(newText);
             if (boundary == null) {
                 break; // WORD_BOUNDARY.lastIndex already exceeds newText.length
@@ -338,8 +498,14 @@ function wrapWords(newText: string, text: any, width: number, overflowChar: stri
     return lTrim(newText.substr(lastInsideBoundary));
 }
 
-
-function bruteForceLastOutside(textNode, textLength: number, xBoundary: number): number {
+/**
+ * Brute force find the character that crosses the xBoundary (because firefox).
+ *
+ * @param textNode the text or tSpan node in question
+ * @param textLength the maximum length of the string inside that node
+ * @param xBoundary the x coordinate that the text element must not cross
+ */
+function bruteForceLastOutside(textNode: SVGTextElement|SVGTSpanElement, textLength: number, xBoundary: number): number {
     const maxChars = textNode.getNumberOfChars();
     for (let i = 0; i < textLength; i++) {
         if (maxChars !== 0 && i >= maxChars) { // firefox may also report getNumberOfChars() as 0
@@ -354,4 +520,5 @@ function bruteForceLastOutside(textNode, textLength: number, xBoundary: number):
             return i;
         }
     }
+    return textLength;
 }

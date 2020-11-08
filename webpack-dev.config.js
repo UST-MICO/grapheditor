@@ -30,6 +30,12 @@ module.exports = merge(common, {
             hash: true,
             inject: 'head',
         }),
+        new HtmlWebpackPlugin({
+            filename: 'textwrap.html',
+            template: 'example/test-textwrap.html',
+            hash: true,
+            inject: 'head',
+        }),
     ],
     devServer: {
         contentBase: path.resolve(__dirname, '_bundles'),

@@ -7,6 +7,12 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## [Unreleased]
 
+### Added
+
+- Added ability to vertically center wrapped text (with `data-text-center-y` attribute)
+- Added `data-wrap-lines` attribute for wrapping text in lines with different max widths
+- Added ability to wrap text into more complex shapes (e.g. circles) with the `data-wrap-lines` attribute
+
 ### Refactored
 
 - Refactored text wrapping code to cause less dom updates
