@@ -5,6 +5,28 @@ Grapheditor
 Component Attributes
 --------------------
 
+.. describe:: svg-template
+
+    A **css selector** for the html template containing the full svg template to use in the grapheditor.
+
+    .. note::
+        Loading the svg from a html template into the shadow dom fully isolates the css from the main page.
+        This makes it easier to have multiple grapheditors at the same time with different styles.
+        Because of that loading the svg from a html template is the preferred method.
+
+    .. code-block:: html
+
+        <template id="graph-template">
+            <svg>
+                <style></style>
+            </svg>
+        </template>
+        <network-graph svg-template="#graph-template"></network-graph>
+
+    .. warning:: The html template must be in the dom before the grapheditor node.
+        Otherwise the grapheditor may not be able to select and use the template.
+        The template can also be manually loaded later with :js:func:`GraphEditor.reloadSvgTemplate`.
+
 .. describe:: nodes
 
    A json list of :js:class:`Node` objects. All ``'`` characters will be replaced with ``"`` before parsing the json!
@@ -50,7 +72,8 @@ Example Usage
             edges="[{'source': 1, 'target': 2}]"
             classes="bg-red bg-blue"
             mode="layout"
-            zoom="both">
+            zoom="both"
+            svg-template="#graph-template">
     </network-graph>
 
 
@@ -62,10 +85,17 @@ Component Styling
 It is possible to inject styles, :js:class:`Node` and :js:class:`Marker` templates into the component.
 This is achieved by using the `slots <https://developer.mozilla.org/en-US/docs/Web/Web_Components/Using_templates_and_slots>`_ mechanic.
 
-To use custom styles with the component place a ``<style slot="style">`` tag inside the ``<network-graph>`` tag.
-Styles can also be placed in a ``<style>`` tag inside the ``<svg slot="graph">`` used to render the graph.
+.. warning:: The old styling method meant that every style was added to the global css scope.
+    This makes the style slot essentially useless, thus it is deprecated.
+    Styling is still supported with a ``<style>`` tag from inside the svg.
+
+Styles can also be placed in a ``<style>`` tag inside the ``<svg>`` used to render the graph.
 Placing all graph related styles in the svg is recommended as it allows to simply save the current graph as a self contained svg.
+When the svg is loaded from a html template all styles are fully isolated from the global css styles.
 There is also very limited support for completely dynamic styles with :ref:`dynamic content <static-templates:dynamic content>`.
+
+.. warning:: The current preferred method to load an svg is to load it from an html template.
+    See :ref:`grapheditor:component attributes` above for more information.
 
 .. seealso:: It is possible to set the svg content of Nodes and Markers using templates.
 
@@ -73,10 +103,19 @@ There is also very limited support for completely dynamic styles with :ref:`dyna
 
 .. code-block:: html
 
+    <!-- new method (strongly recommended) -->
+    <template id="graph-template">
+        <svg>
+            <style>/* graph styles go here (styles here are isolated!) */</style>
+        </svg>
+    </template>
+    <network-graph svg-template="#graph-template"></network-graph>
+
+    <!-- old method (discouraged) -->
     <network-graph>
-        <style slot="style">/* general styles go here */</style>
+        <!--<style slot="style">/* deprecated do not use / use normal css stylesheet */</style>-->
         <svg slot="graphs">
-            <style>/* graph styles go here */</style>
+            <style>/* graph styles go here (styles here are global!) */</style>
         </svg>
     </network-graph>
 
@@ -84,14 +123,14 @@ It is also possible to change the default layering (nodes rendering above edges)
 
 .. code-block:: html
 
-    <network-graph>
-        <svg slot="graphs">
+    <template id="graph-template">
+        <svg>
             <g class="zoom-group"> <!-- the zoom-groop is used for the pan and zoom transormations -->
                 <g class="nodes"></g> <!-- the first group will be rendered below the following groups-->
                 <g class="edges"></g>
             </g>
         </svg>
-    </network-graph>
+    </template>
 
 
 Styling Nodes
@@ -297,12 +336,10 @@ Example Styling Usage
 
 .. code-block:: html
 
-    <network-graph>
-        <style slot="style">
-            svg {width:100%; height: 100%}
-        </style>
-        <svg slot="graph">
+    <template id="graph-template">
+        <svg>
             <style>
+                svg {width:100%; height: 100%}
                 .node {fill: aqua;}
                 .link-handle {display: none; fill: black; opacity: 0.1;}
                 .edge-group .link-handle {display: initial}
@@ -331,7 +368,8 @@ Example Styling Usage
                 </g>
             </defs>
         </svg>
-    </network-graph>
+    </template>
+    <network-graph svg-template="#graph-template"></network-graph>
 
 
 Styling nodes and edges with custom css classes
@@ -788,7 +826,7 @@ For custom buttons in :js:class:`Edges <Edge>` use markers with the :js:attr:`cl
 
 .. code-block:: html
 
-    <network-graph>
+    <template id="graph-template">
         <svg slot="graph">
             <defs>
                 <g id="simple-node" template-type="node">
@@ -797,7 +835,8 @@ For custom buttons in :js:class:`Edges <Edge>` use markers with the :js:attr:`cl
                 </g>
             </defs>
         </svg>
-    </network-graph>
+    </template>
+    <network-graph svg-template="#graph-template"></network-graph>
     <script>
         var graph = document.querySelector('network-graph');
         graph.addEventListener('nodeclick', function test(event) {

@@ -20,8 +20,8 @@ Where the edge attaches can be customized by setting the ``data-line-attachement
 
 .. code-block:: html
 
-    <network-graph>
-        <svg slot="graphs">
+    <template id="graph-template">
+        <svg>
             <defs>
                 <!-- templates go here -->
                 <g id="default" data-template-type="node">
@@ -33,7 +33,8 @@ Where the edge attaches can be customized by setting the ``data-line-attachement
                 </g>
             </defs>
         </svg>
-    </network-graph>
+    </template>
+    <network-graph svg-template="#graph-template"></network-graph>
 
 
 Text injection for Node Templates

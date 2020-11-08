@@ -17,12 +17,14 @@ Create a new html file with the following content:
         </head>
         <body>
             <script src="https://cdn.jsdelivr.net/npm/@ustutt/grapheditor-webcomponent@latest/_bundles/grapheditor-webcomponent.js"></script>
-            <network-graph classes="red blue" mode="layout" zoom="both">
-                <style slot="style">
-                    svg {width:100%; height: 100%}
-                </style>
-                <svg slot="graph"></svg>
-            </network-graph>
+            <template id="graph-template">
+                <svg>
+                    <style>
+                        svg {width:100%; height: 100%}
+                    </style>
+                </svg>
+            </template>
+            <network-graph classes="red blue" mode="layout" zoom="both" svg-template="#graph-template"></network-graph>
 
             <script>
                 var graph = document.querySelector('network-graph');
@@ -65,7 +67,7 @@ To change this add the following ``<styles>`` tag to the svg.
 
 .. code-block:: html
 
-    <svg slot="graph">
+    <svg>
         <style>
             .node {fill: lightgray;}
             .link-handle {display: none; fill: black; opacity: 0.1; transition:opacity 0.25s ease-out;}
@@ -87,7 +89,7 @@ A node template is added in the ``<svg>`` tag inside a ``<defs>`` tag.
 
 .. code-block:: html
 
-    <svg slot="graph">
+    <svg>
         <style>/* ... */</style>
         <defs>
             <g id="default" data-template-type="node">

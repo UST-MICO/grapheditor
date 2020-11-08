@@ -54,7 +54,7 @@ All resize handles have the class ``resize-handle`` and classes corresponding to
 
 .. code-block:: html
 
-    <svg slot="graph" class="graph-editor" width="100%" height="100%">
+    <svg class="graph-editor" width="100%" height="100%">
         <g class="zoom-group" transform="translate(473.956,136.98600000000002) scale(3.1212)">
             <g class="edges">…</g>
             <g class="nodes">…</g>
@@ -83,7 +83,7 @@ The ``resize-handle`` marker template can be used as the resize handle template.
 
 .. code-block:: html
 
-    <svg slot="graph" class="graph-editor" width="100%" height="100%">
+    <svg class="graph-editor" width="100%" height="100%">
         <style>
             /* Limit interactivity of the outline */
             .resize-overlay > .outline {pointer-events: none;}

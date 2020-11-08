@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Added
 
+- Added `svg-template` attribute to specify a css selector of a html template containing the svg to load
+- Added isolation of grapheditor styles when loading the svg from an html template
 - Added ability to vertically center wrapped text (with `data-text-center-y` attribute)
 - Added `data-wrap-lines` attribute for wrapping text in lines with different max widths
 - Added ability to wrap text into more complex shapes (e.g. circles) with the `data-wrap-lines` attribute

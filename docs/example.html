@@ -10,13 +10,11 @@
     </head>
     <body>
         <script src="https://cdn.jsdelivr.net/npm/@ustutt/grapheditor-webcomponent@latest/_bundles/grapheditor-webcomponent.js"></script>
-        <!-- for local developement <script src="../_bundles/grapheditor-webcomponent.js"></script>-->
-        <network-graph classes="red blue" mode="layout" zoom="both">
-            <style slot="style">
-                svg {width:100%; height: 100%}
-            </style>
-            <svg slot="graph">
+        <!-- for local development use <script src="../_bundles/grapheditor-webcomponent.js"></script>-->
+        <template id="graph-template">
+            <svg>
                 <style>
+                    svg {width:100%; height: 100%}
                     .node {fill: lightgray;}
                     .link-handle {display: none; fill: black; opacity: 0.1; transition:opacity 0.25s ease-out;}
                     .edge-group .link-handle {display: initial}
@@ -31,7 +29,8 @@
                     </g>
                 </defs>
             </svg>
-        </network-graph>
+        </template>
+        <network-graph classes="red blue" mode="layout" zoom="both" svg-template="#graph-template"></network-graph>
 
         <script>
             var graph = document.querySelector('network-graph');

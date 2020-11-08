@@ -57,6 +57,9 @@ export default class GraphEditor extends HTMLElement {
 
     private resizeObserver;
 
+    private svgTemplate: string;
+    private svgDocument;
+
     private svg: Selection<SVGSVGElement, any, any, any>;
     private graph: Selection<SVGGElement, any, any, any>;
     private nodesGroup: Selection<SVGGElement, any, any, any>;
@@ -418,7 +421,9 @@ export default class GraphEditor extends HTMLElement {
         // update size if window was resized
         if ((window as any).ResizeObserver != null) {
             this.resizeObserver = new (window as any).ResizeObserver((entries) => {
-                this.updateSize();
+                if (this.svg != null) { // only if svg is initialized
+                    this.updateSize();
+                }
             });
         }
     }
@@ -434,6 +439,9 @@ export default class GraphEditor extends HTMLElement {
             this.resizeObserver.observe(this.parentElement);
         }
 
+        // load svg template
+        this.loadSvgFromTemplate();
+
         // initial render after connect
         this.completeRender(false, EventSource.INTERNAL);
         this.zoomToBoundingBox(false);
@@ -443,7 +451,7 @@ export default class GraphEditor extends HTMLElement {
      * Get all observed attributes of this webcomponent.
      */
     static get observedAttributes(): string[] {
-        return ['nodes', 'edges', 'classes', 'mode', 'zoom'];
+        return ['nodes', 'edges', 'classes', 'mode', 'zoom', 'svg-template'];
     }
 
     /**
@@ -454,6 +462,10 @@ export default class GraphEditor extends HTMLElement {
      * @param newValue new value
      */
     attributeChangedCallback(name: string, oldValue: string, newValue: string): void {
+        if (name == 'svg-template') {
+            this.svgTemplate = newValue;
+            this.loadSvgFromTemplate();
+        }
         if (name === 'nodes') {
             newValue = newValue.replace(/'/g, '"');
             this.nodeList = JSON.parse(newValue);
@@ -876,6 +888,41 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
+     * Reload the svg template.
+     *
+     * Use this method to manually load the svg template if the template
+     * is defined later in the dom than the grapheditor.
+     */
+    public reloadSvgTemplate() {
+        this.loadSvgFromTemplate();
+    }
+
+    /**
+     * Load the svg for the grapheditor from an svg template.
+     *
+     * The html template containing the svg is found with `this.svgTemplate`
+     * that can be set with an attribute on the network-graph tag.
+     * 
+     * If `this.svgTemplate` is not set this method does nothing.
+     */
+    private loadSvgFromTemplate() {
+        if (!this.isConnected || this.svgTemplate == null) {
+            return;
+        }
+        const svgTemplate = select<HTMLTemplateElement, unknown>(this.svgTemplate);
+        if (svgTemplate.empty()) {
+            return;
+        }
+        const clone = document.importNode(svgTemplate.node().content, true);
+        const slotSelection = select(this.root).select<HTMLDivElement>('slot[name="graph"]');
+        slotSelection.selectAll('svg').remove();
+        slotSelection.node().append(clone);
+        const svgSelection = slotSelection.select<SVGSVGElement>('svg');
+        this.initialize(svgSelection.node());
+        this.svgDocument = this.shadowRoot;
+    }
+
+    /**
      * Determine the svg element to be used to render the graph.
      *
      * @param slot the slot that changed
@@ -890,6 +937,9 @@ export default class GraphEditor extends HTMLElement {
             svg = slot.assignedElements().find(el => el.tagName === 'svg');
         }
         if (svg == null) {
+            if (this.svg != null || this.svgTemplate != null) {
+                return; // svg not loaded via slot
+            }
             // TODO use fallback svg here
             console.error('No svg provided for the "graph" slot!');
             return;
@@ -900,6 +950,7 @@ export default class GraphEditor extends HTMLElement {
         }
         this.completeRender(false, EventSource.INTERNAL);
         this.zoomToBoundingBox(false);
+        this.svgDocument = document;
     }
 
     /**
@@ -982,6 +1033,9 @@ export default class GraphEditor extends HTMLElement {
      * Calculate and store the size of the svg.
      */
     private updateSize() {
+        if (this.svg == null) {
+            console.trace("NO SVG")
+        }
         const svg = this.svg;
         this.contentMaxHeight = parseInt(svg.style('height').replace('px', ''), 10);
         this.contentMaxWidth = parseInt(svg.style('width').replace('px', ''), 10);
@@ -1249,7 +1303,7 @@ export default class GraphEditor extends HTMLElement {
      * @param clientY the y coordinate in the client coordinate system
      */
     public getNodesFromPoint(clientX: number, clientY: number): Node[] {
-        const possibleTargets = document.elementsFromPoint(clientX, clientY);
+        const possibleTargets = this.svgDocument.elementsFromPoint(clientX, clientY);
         if (possibleTargets.length === 0) {
             return [];
         }
