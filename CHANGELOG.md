@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## [Unreleased]
 
+
+## [0.6.1] - 2020-11-08
+
 ### Added
 
 - Added `svg-template` attribute to specify a css selector of a html template containing the svg to load
@@ -323,7 +326,8 @@ First beta version.
 - Initial webcomponent
 - Documentation
 
-[Unreleased]: https://github.com/UST-MICO/grapheditor/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/UST-MICO/grapheditor/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/UST-MICO/grapheditor/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/UST-MICO/grapheditor/compare/v0.5.4...v0.6.0
 [0.5.4]: https://github.com/UST-MICO/grapheditor/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/UST-MICO/grapheditor/compare/v0.5.2...v0.5.3
