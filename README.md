@@ -41,11 +41,18 @@ The file is served by `npm run start` on port `9009`.
 ### Compiling the documentation locally
 
 ```bash
+# install is needed to run typedoc later as part of the sphix build
 npm install
 
 cd docs
-pipenv install
-pipenv run doc
+poetry install
+poetry run make html
+
+# debug docs build
+poetry run make html SPHINXOPTS="-v"
+
+# update requirements.txt from poetry dependencies
+poetry export --format requirements.txt --output requirements.txt
 ```
 
 The compiled documentation can be found under `docs/_build/html`.

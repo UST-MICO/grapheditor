@@ -18,7 +18,7 @@
 import os
 from pathlib import Path
 from shutil import copyfile
-from typing import Any, List
+from typing import Any, List, Tuple
 from recommonmark.transform import AutoStructify
 
 TS_DOC_COMMAND = ["npm", "run", "doc", "--"]
@@ -37,7 +37,7 @@ from functools import wraps
 import os
 from pathlib import Path
 import sphinx_js
-from sphinx_js.typedoc import Analyzer, index_by_id, SuffixTree
+from sphinx_js.typedoc import Analyzer, index_by_id, SuffixTree, make_path_segments
 from sphinx_js.analyzer_utils import Command
 from sphinx_js import ir
 import subprocess
@@ -145,7 +145,10 @@ class CustomAnalyzer(Analyzer):
                 names = []
                 if declaration.get('indexSignature'):
                     extras = [variables]
-                    for sig in declaration.get('indexSignature'):
+                    index_signature = declaration.get('indexSignature')
+                    if isinstance(index_signature, dict):
+                        index_signature = [index_signature]
+                    for sig in index_signature:
                         inner_text = ''
                         if sig.get('parameters'):
                             p = sig.get('parameters')[0]
@@ -165,6 +168,46 @@ class CustomAnalyzer(Analyzer):
                 print('Encountered unknown constraint type for typeParameter', constraint_type)
             return ' '.join(names)
         return super()._type_name(type)
+
+    def _convert_node(self, node) -> Tuple[ir.TopLevel, List[dict]]:
+        # override convert to fix errors with build
+        kind_string = node.get('kindString')
+        if kind_string in ('Function', 'Constructor', 'Method'):
+            # grab source from parent node if possible (should always be possible?)
+            parent = node
+            while parent:
+                if 'sources' in parent:
+                    break
+                parent = node.get('__parent')
+            else:
+                raise KeyError('Node of Kind {} has no "sources" attribute and no parent node could provide one!'.format(kind_string))
+            if parent:
+                node['sources'] = parent['sources']
+        if kind_string == 'Class':
+            if node.get('name') == 'default':
+                # default exports somehow get the name 'default' from typedoc, this tries to fix it
+                DEFAULT_EXPORT_NAME_FIXES = {
+                    'grapheditor.ts': 'GraphEditor',
+                }
+                for source in node.get('sources'):
+                    file_name = source.get('fileName')
+                    if file_name in DEFAULT_EXPORT_NAME_FIXES:
+                        node['name'] = DEFAULT_EXPORT_NAME_FIXES[file_name]
+        return super()._convert_node(node)
+
+    def _related_types(self, node, kind):
+        types = []
+        for type in node.get(kind, []):
+            if type['type'] == 'reference':
+                if 'id' in type:
+                    pathname = ir.Pathname(
+                        make_path_segments(self._index[type['id']], self._base_dir)
+                    )
+                    types.append(pathname)
+                else:
+                    types.append(ir.Pathname([type['name']]))
+            # else it's some other thing we should go implement
+        return types
 
 sphinx_js.TsAnalyzer = CustomAnalyzer
 
