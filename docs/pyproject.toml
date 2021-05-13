@@ -2,14 +2,14 @@
 name = "grapheditor-webcomponent-docs"
 version = "0.1.0"
 description = ""
-authors = ["Fabian Bühler <17296905+buehlefs@users.noreply.github.com>"]
+authors = ["Fabian Bühler <fabian.buehler@iaas.uni-stuttgart.de>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
 python = "^3.7"
-Sphinx = "^3.3.0"
-recommonmark = "^0.6.0"
-sphinx_rtd_theme = "^0.5.0"
+Sphinx = "^4.0.0"
+recommonmark = "^0.7.0"
+sphinx-rtd-theme = "^0.5.0"
 sphinx-js = "^3.1"
 tomlkit = "^0.7.0"
 
