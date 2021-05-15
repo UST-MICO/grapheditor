@@ -45,7 +45,20 @@ from errno import ENOENT
 from json import dumps, load, dump
 from sphinx.errors import SphinxError
 from typing import List
+import re
 
+LINK_REGEX = re.compile(r'\{\@link\s+(\w+)\s*\}')
+
+TYPE_LINK_REPLACERS = {
+    'Module': ':js:mod:`~{}`',
+    'Function': ':js:func:`~{}`',
+    'Method': ':js:meth:`~{}`',
+    'Class': ':js:class:`~{}`',
+    'Interface': ':js:class:`~{}`',
+    'Enumeration': ':js:class:`~{}`',
+    'Property': ':js:attr:`~{}`',
+    'Accessor': ':js:meth:`~{}`',
+}
 
 class CustomAnalyzer(Analyzer):
 
@@ -55,7 +68,9 @@ class CustomAnalyzer(Analyzer):
         :arg base_dir: The absolute path of the dir relative to which to
             construct file-path segments of object paths
         """
+        self._index_by_name_and_kind = {}
         super().__init__(base_dir=base_dir, json=json, **kwargs)
+        del self._index_by_name_and_kind
 
     @classmethod
     def from_disk(cls, abs_source_paths: List[str], app, base_dir: str):
@@ -115,6 +130,20 @@ class CustomAnalyzer(Analyzer):
             # typedoc emits a valid JSON file even if it finds no TS files in the dir:
             return load(typedoc)
 
+    def _convert_all_nodes(self, root):
+        # the only place wher building _index_by_name_and_kind makes sense
+        for type_ in self._index.values():
+            if "name" in type_ and "kindString" in type_:
+                self._index_by_name_and_kind[(type_["name"], type_["kindString"])] = type_
+        return super()._convert_all_nodes(root)
+
+    def _get_js_role_for_type(self, type_name: str, default_replacer=None):
+        for kind, replacer in TYPE_LINK_REPLACERS.items():
+            if (type_name, kind) in self._index_by_name_and_kind:
+                return replacer.format(type_name)
+        if default_replacer:
+            return default_replacer.format(type_name)
+        return type_name
 
     def _type_name(self, type):
         """Return a string description of a type.
@@ -167,6 +196,14 @@ class CustomAnalyzer(Analyzer):
             else:
                 print('Encountered unknown constraint type for typeParameter', constraint_type)
             return ' '.join(names)
+        elif type_of_type == 'literal':
+            value = type.get('value')
+            if isinstance(value, str):
+                return '"{}"'.format(value)
+            elif value is None:
+                return "null"
+            else:
+                return str(value)
         return super()._type_name(type)
 
     def _convert_node(self, node) -> Tuple[ir.TopLevel, List[dict]]:
@@ -208,6 +245,15 @@ class CustomAnalyzer(Analyzer):
                     types.append(ir.Pathname([type['name']]))
             # else it's some other thing we should go implement
         return types
+
+    def _top_level_properties(self, node):
+        result = super()._top_level_properties(node)
+        if isinstance(result, dict):
+            # replace single ` with double `` to get correct rendering of inline code
+            description = result.get("description", "").replace('`', '``')
+            if description:
+                result["description"] = LINK_REGEX.sub(lambda m: self._get_js_role_for_type(m[1], r"{\@link ``\1``}"), description)
+        return result
 
 sphinx_js.TsAnalyzer = CustomAnalyzer
 
