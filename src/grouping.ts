@@ -443,6 +443,18 @@ export class GroupingManager {
     }
 
     /**
+     * Get all known group ids.
+     *
+     * Use `getGroupForNode` or `getGroupBehaviourOf` to get
+     * more information about the groups.
+     *
+     * @returns a new set of all group ids
+     */
+    getAllRegisteredGroups(): Set<string> {
+        return new Set(this.groupsById.keys());
+    }
+
+    /**
      * Clears all group information stored in this GroupingManager instance.
      *
      * Can be useful when redrawing/resetting the graph.
