@@ -17,8 +17,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Incompatible changes
 
-- All wrapped text elements will now have a transform origin set that allows scaling them to be more inuitive. This may break some css layouts. See "Api > Text Wrapping > `resetTextTransform`" for more information on how this is calculated.
-- Secified text height is now always interpreted as maximum allowed text height in all wrapping modes
+- All wrapped text elements will now have a transform origin set that allows scaling them to be more intuitive. This may break some css layouts. See "Api > Text Wrapping > `resetTextTransform`" for more information on how this is calculated.
+- Specified text height is now always interpreted as maximum allowed text height in all wrapping modes
 
 
 ## [0.6.1] - 2020-11-08
