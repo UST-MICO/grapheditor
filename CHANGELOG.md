@@ -7,6 +7,15 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## [Unreleased]
 
+### Added
+
+- Option to scale text by specifying a scale in the `data-line-wraps` attribute
+
+### Incompatible changes
+
+- All wrapped text elements will now have a transform origin set that allows scaling them to be more inuitive. This may break some css layouts. See "Api > Text Wrapping > `resetTextTransform`" for more information on how this is calculated.
+- Secified text height is now always interpreted as maximum allowed text height in all wrapping modes
+
 
 ## [0.6.1] - 2020-11-08
 

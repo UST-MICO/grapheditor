@@ -65,6 +65,8 @@ The wrapping behaviour can be partially controlled with the css attributes ``tex
 Extra Text Wrapping Options
 """""""""""""""""""""""""""
 
+.. versionadded:: 0.6.1
+
 Text wrapping can be further customised by setting the ``data-text-center-y`` attribute or the ``data-wrap-lines`` attribute.
 The attribute ``data-text-center-y`` must contain a single number.
 If set the text is centered vertically around the y coordinate specified with ``data-text-center-y``.
@@ -94,7 +96,16 @@ An example for a node template that wraps text in a circle:
         <text data-content="description" data-text-center-y="0" data-wrap-lines="90|87 87|85 90 85|80 87 87 80|75 85 90 85 75|70 80 87 87 80 70|60 75 85 90 85 75 60|50 70 80 87 87 80 70 50" x="0" y="0"></text>
     </g>
 
+.. versionadded:: 0.6.2
 
+The line width lists can optionally start with a scale, a number ending with ``x`` (``1.5x 50|1x 75``).
+The text will be scaled by that number *after* beeing wrapped using the ``transform`` attribute of the text element.
+A scale is only active for one line wrapping definition (e.g. until the next ``|``).
+This can be used to grow or shrink text dynamically.
+
+If ``height`` (or ``data-height``) is specified then the value will be treated as the maximum allowed height of the text element.
+All line definitions that need more height than that max height (with the current font size) will not be considered for wrapping the text.
+This makes text wrapping more robust in cases where different browsers use different fonts or font sizes.
 
 
 Dynamic content

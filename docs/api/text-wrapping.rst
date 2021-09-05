@@ -11,6 +11,10 @@ Text Wrapping
 
 .. js:autofunction:: wrapTextLines
 
+.. js:autofunction:: resetTextTransform
+
+.. js:autofunction:: scaleText
+
 .. js:autofunction:: centerTextVertically
 
 .. js:autofunction:: calculateMultiline
