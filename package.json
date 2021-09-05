@@ -1,6 +1,6 @@
 {
   "name": "@ustutt/grapheditor-webcomponent",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Webcomponent for displaying and editing graphs.",
   "author": "Fabian Bühler <fabian.buehler@iaas.uni-stuttgart.de>",
   "main": "./lib/index.js",
