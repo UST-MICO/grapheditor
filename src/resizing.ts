@@ -17,8 +17,8 @@
 
 import GraphEditor from './grapheditor';
 import { EventSource } from './grapheditor';
-import { Selection, select, event } from 'd3-selection';
-import { drag } from 'd3-drag';
+import { Selection, select } from 'd3-selection';
+import { D3DragEvent, drag } from 'd3-drag';
 import { Rect, removeAllChildNodes, copyTemplateSelectionIntoNode } from './util';
 import { Point } from './edge';
 import { Node } from './node';
@@ -597,7 +597,7 @@ export class ResizingManager {
             .call(this.updateResizeHandlePositions.bind(this))
             .call(
                 drag<SVGGElement, ResizeHandle, ResizeInformation>()
-                    .subject((handle) => {
+                    .subject((event, handle) => {
                         if (this.currentlyResizing.has(nodeId)) {
                             return;
                         }
@@ -609,16 +609,20 @@ export class ResizingManager {
                         // eslint-disable-next-line no-shadow
                         const bbox = getNodeBBox(nodeId, this.graphEditor, resizeStrategy);
                         this.currentlyResizing.set(nodeId, bbox);
-                        const handler = this.resizeHandlerFromHandle(options, handle);
+                        const handler = this.resizeHandlerFromHandle(options, handle as any);
                         return {
                             handler: handler,
-                            start: {x: event.x, y: event.y},
+                            start: {x: 0, y: 0},
                             startRect: bbox,
                             node: node,
                             resizeStrategy: resizeStrategy,
                         };
                     })
-                    .on('drag', () => {
+                    .on('start', (event) => {
+                        (event as any).subject.start = {x: event.x, y: event.y};
+                    })
+                    .on('drag', (e) => {
+                        const event = e as unknown as D3DragEvent<SVGGElement, ResizeHandle, ResizeInformation>;
                         const resizeHandler: ResizeHandler = event.subject.handler;
                         const start: Point = event.subject.start;
                         const startRect: Rect = event.subject.startRect;
@@ -651,8 +655,8 @@ export class ResizingManager {
                             this.updateOverlayDimensions(overlaySelection, nodeId, resizeHandlesFromOptions(options, newRect));
                         }
                     })
-                    .on('end', () => {
-                        const resizeInfo: ResizeInformation = event.subject;
+                    .on('end', (event) => {
+                        const resizeInfo: ResizeInformation = (event as any).subject;
                         this._resizeNode(resizeInfo.resizeStrategy, resizeInfo.node, this.currentlyResizing.get(nodeId));
                         this.currentlyResizing.delete(nodeId);
 

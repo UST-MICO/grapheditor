@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { select, event, Selection } from 'd3-selection';
-import { zoom, zoomIdentity, zoomTransform, ZoomBehavior, ZoomTransform } from 'd3-zoom';
-import { drag } from 'd3-drag';
+import { select, Selection } from 'd3-selection';
+import { zoom, zoomIdentity, zoomTransform, ZoomBehavior, ZoomTransform, D3ZoomEvent } from 'd3-zoom';
+import { D3DragEvent, drag } from 'd3-drag';
 import { curveBasis } from 'd3-shape';
 
 import { Node, NodeMovementInformation } from './node';
@@ -902,7 +902,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * The html template containing the svg is found with `this.svgTemplate`
      * that can be set with an attribute on the network-graph tag.
-     * 
+     *
      * If `this.svgTemplate` is not set this method does nothing.
      */
     private loadSvgFromTemplate() {
@@ -979,8 +979,8 @@ export default class GraphEditor extends HTMLElement {
         }
         graph.classed('zoom-group', true);
 
-        const newZoom = zoom().on('zoom', (d) => {
-            graph.attr('transform', event.transform);
+        const newZoom = zoom().on('zoom', (event: D3ZoomEvent<SVGGElement, unknown>, d) => {
+            graph.attr('transform', event.transform.toString());
             const oldZoom = this.currentZoom;
             this.currentZoom = event.transform;
             let eventSource = EventSource.USER_INTERACTION;
@@ -1018,9 +1018,9 @@ export default class GraphEditor extends HTMLElement {
         this.edgesGroup = edgesGroup;
 
         // listener for clicks on the graph background
-        newSvg.on('click', () => {
+        newSvg.on('click', (event: Event) => {
             if (event.target === newSvg.node()) {
-                this.onBackgroundClick();
+                this.onBackgroundClick(event);
             }
         });
 
@@ -1192,15 +1192,15 @@ export default class GraphEditor extends HTMLElement {
             .call(this.updateNodes.bind(this))
             .call(this.updateNodePositions.bind(this))
             .order()
-            .on('mouseover', (d) => { this.onNodeEnter.bind(this)(d); })
-            .on('mouseout', (d) => { this.onNodeLeave.bind(this)(d); })
-            .on('click', (d) => { this.onNodeClick.bind(this)(d); });
+            .on('mouseover', (event, d) => { this.onNodeEnter.bind(this)(d); })
+            .on('mouseout', (event, d) => { this.onNodeLeave.bind(this)(d); })
+            .on('click', (event, d) => { this.onNodeClick.bind(this)(event, d); });
 
         if (this.isInteractive) {
             nodeSelection.call(
                 drag<SVGGElement, Node, NodeMovementInformation>()
-                    .subject((node) => {
-                        const movementInfo = this.getNodeMovementInformation(node, event.x, event.y);
+                    .subject((event, node) => {
+                        const movementInfo = this.getNodeMovementInformation(node as unknown as Node, event.x, event.y);
                         if (movementInfo == null) {
                             return; // move was cancelled by callback
                         }
@@ -1216,8 +1216,11 @@ export default class GraphEditor extends HTMLElement {
                         }
                         return movementInfo;
                     })
-                    .on('start', () => this.onNodeDrag('start', event.subject, EventSource.USER_INTERACTION))
-                    .on('drag', () => {
+                    .on('start', (event) => {
+                        this.onNodeDrag('start', event.subject, EventSource.USER_INTERACTION)
+                    })
+                    .on('drag', (e) => {
+                        const event = e as unknown as D3DragEvent<SVGGElement, Node, NodeMovementInformation>;
                         let x = event.x;
                         let y = event.y;
                         if (event.subject != null) {
@@ -1229,8 +1232,8 @@ export default class GraphEditor extends HTMLElement {
                                 y -= movementInfo.offset.dy;
                             }
                             movementInfo.needsFullRender = movementInfo.needsFullRender ?? false;
-                            movementInfo.needsFullRender = this.tryToLeaveCurrentGroup(event.subject, x, y, EventSource.USER_INTERACTION, event) || movementInfo.needsFullRender;
-                            movementInfo.needsFullRender = this.tryJoinNodeIntoGroup(event.subject, x, y, EventSource.USER_INTERACTION, event) || movementInfo.needsFullRender;
+                            movementInfo.needsFullRender = this.tryToLeaveCurrentGroup(event.subject, x, y, EventSource.USER_INTERACTION, event as unknown as Event) || movementInfo.needsFullRender;
+                            movementInfo.needsFullRender = this.tryJoinNodeIntoGroup(event.subject, x, y, EventSource.USER_INTERACTION, event as unknown as Event) || movementInfo.needsFullRender;
                             movementInfo.needsFullRender = this._moveNode(event.subject, event.x, event.y, EventSource.USER_INTERACTION) || movementInfo.needsFullRender;
                             if (movementInfo.needsFullRender) {
                                 this.completeRender(false, EventSource.USER_INTERACTION);
@@ -1240,7 +1243,7 @@ export default class GraphEditor extends HTMLElement {
                             movementInfo.needsFullRender = false;
                         }
                     })
-                    .on('end', () => {
+                    .on('end', (event) => {
                         const movementInfo: NodeMovementInformation = event.subject;
                         const node = movementInfo.node;
                         const endTreeParent = this.groupingManager.getTreeParentOf(node.id);
@@ -1286,7 +1289,7 @@ export default class GraphEditor extends HTMLElement {
             .call(self.updateEdgeGroups.bind(this))
             .call(self.updateEdgePositions.bind(this))
             .order()
-            .on('click', (d) => { this.onEdgeClick.bind(this)(d); });
+            .on('click', (event, d) => { this.onEdgeClick.bind(this)(event, d); });
 
         this.classesToRemove.clear();
 
@@ -1952,23 +1955,24 @@ export default class GraphEditor extends HTMLElement {
             if (self.isInteractive) {
                 handleSelection.call(
                     drag<SVGGElement, LinkHandle, {edge: DraggedEdge; capturingGroup?: string}>()
-                        .subject((handle) => {
+                        .subject((event) => {
                             const groupCapturingEdge = self.groupingManager.getGroupCapturingOutgoingEdge(node);
                             if (groupCapturingEdge != null && groupCapturingEdge !== node.id.toString()) {
                                 const groupNode = self.getNode(groupCapturingEdge);
                                 if (groupNode != null) {
-                                    return {edge: self.createDraggedEdge(groupNode), capturingGroup: groupCapturingEdge};
+                                    return {edge: self.createDraggedEdge(event as any, groupNode), capturingGroup: groupCapturingEdge};
                                 }
                             }
-                            return {edge: self.createDraggedEdge(node), capturingGroup: node.id.toString()};
+                            return {edge: self.createDraggedEdge(event as any, node), capturingGroup: node.id.toString()};
                         })
                         .container(() => self.svg.select('g.zoom-group').select<SVGGElement>('g.edges').node())
-                        .on('drag', () => {
-                            self.updateDraggedEdge(event.subject.edge, event.subject.capturingGroup);
+                        .on('drag', (event) => {
+                            const subject: {edge: DraggedEdge; capturingGroup?: string} = (event as any).subject;
+                            self.updateDraggedEdge(event as any, subject.edge, subject.capturingGroup);
                             self.updateDraggedEdgeGroups();
                         })
-                        .on('end', () => {
-                            self.dropDraggedEdge(event.subject.edge, false);
+                        .on('end', (event) => {
+                            self.dropDraggedEdge(event as any, (event as any).subject.edge, false);
                         })
                 );
             } else {
@@ -2305,10 +2309,12 @@ export default class GraphEditor extends HTMLElement {
         if (this.isInteractive) {
             edgeDragHandles.call(
                 drag<SVGGElement, EdgeDragHandle, {edge: DraggedEdge; capturingGroup?: string; isReversedEdge: boolean}>()
-                    .subject((handle) => {
+                    .subject((e, h) => {
+                        const event = e as unknown as Event;
+                        const handle = h as unknown as EdgeDragHandle;
                         const edge = d;
                         let sourceNode: Node;
-                        if (handle.isReverseHandle ?? false) {
+                        if ((handle).isReverseHandle ?? false) {
                             // a reverse handle flips the edge direction
                             sourceNode = this.getNode(edge.target);
                         } else {
@@ -2318,7 +2324,7 @@ export default class GraphEditor extends HTMLElement {
                         if (groupCapturingEdge != null && groupCapturingEdge !== sourceNode.id.toString()) {
                             const groupNode = this.getNode(groupCapturingEdge);
                             if (groupNode != null) {
-                                const newEdge = this.createDraggedEdgeFromExistingEdge(edge);
+                                const newEdge = this.createDraggedEdgeFromExistingEdge(event, edge);
                                 newEdge.source = groupCapturingEdge;
                                 return {
                                     edge: newEdge,
@@ -2328,19 +2334,19 @@ export default class GraphEditor extends HTMLElement {
                             }
                         }
                         return {
-                            edge: this.createDraggedEdgeFromExistingEdge(edge, handle.isReverseHandle ?? false),
+                            edge: this.createDraggedEdgeFromExistingEdge(event, edge, handle.isReverseHandle ?? false),
                             capturingGroup: sourceNode.id.toString(),
                             isReversedEdge: handle.isReverseHandle ?? false,
                         };
                     })
                     .container(() => this.edgesGroup.node() as any)
                     .on('start', () => this.completeRender(false, EventSource.USER_INTERACTION))
-                    .on('drag', () => {
-                        this.updateDraggedEdge(event.subject.edge, event.subject.capturingGroup);
+                    .on('drag', (event) => {
+                        this.updateDraggedEdge(event as any, (event as any).subject.edge, (event as any).subject.capturingGroup);
                         this.updateDraggedEdgeGroups();
                     })
-                    .on('end', () => {
-                        this.dropDraggedEdge(event.subject.edge, event.subject.isReversedEdge);
+                    .on('end', (event) => {
+                        this.dropDraggedEdge(event as any, (event as any).subject.edge, (event as any).subject.isReversedEdge);
                     })
             );
         } else {
@@ -2405,10 +2411,10 @@ export default class GraphEditor extends HTMLElement {
             if (self.isInteractive) {
                 const path = edgeGroupSelection.select<SVGPathElement>('path.edge');
                 textSelection.call(drag()
-                    .on('start', (text: TextComponent) => {
-                        self.onEdgeTextDrag('start', text, edge, EventSource.USER_INTERACTION);
+                    .on('start', (event, text) => {
+                        self.onEdgeTextDrag('start', text as unknown as TextComponent, edge, EventSource.USER_INTERACTION);
                     })
-                    .on('drag', (text: TextComponent) => {
+                    .on('drag', ((event, text: TextComponent) => {
                         const length = path.node().getTotalLength();
                         const positionOnLine = normalizePositionOnLine(text.positionOnLine);
                         const absolutePositionOnLine = self.calculateAbsolutePositionOnLine(length, positionOnLine, text.absolutePositionOnLine);
@@ -2417,10 +2423,10 @@ export default class GraphEditor extends HTMLElement {
                         text.offsetY = event.y - referencePoint.y;
                         self.onEdgeTextPositionChange(text, edge);
                         self.updateEdgeTextPositions(edgeGroupSelection, edge);
-                    })
-                    .on('end', (text: TextComponent) => {
+                    }) as any) // FIXME: remove type hack when types are up to date
+                    .on('end', ((event, text: TextComponent) => {
                         self.onEdgeTextDrag('end', text, edge, EventSource.USER_INTERACTION);
-                    })
+                    }) as any) // FIXME: remove type hack when types are up to date
                 );
             } else {
                 textSelection.on('drag', null);
@@ -3165,7 +3171,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param sourceNode node that edge was dragged from
      */
-    private createDraggedEdge(sourceNode: Node): DraggedEdge {
+    private createDraggedEdge(event: Event, sourceNode: Node): DraggedEdge {
         const validTargets = new Set<string>();
         this._nodes.forEach(node => validTargets.add(node.id.toString()));
         this.objectCache.getEdgesBySource(sourceNode.id).forEach(edge => validTargets.delete(edge.target.toString()));
@@ -3175,7 +3181,7 @@ export default class GraphEditor extends HTMLElement {
             source: sourceNode.id,
             target: null,
             validTargets: validTargets,
-            currentTarget: { x: event.x, y: event.y },
+            currentTarget: { x: (event as any).x, y: (event as any).y },
         };
         if (this.onCreateDraggedEdge != null) {
             draggedEdge = this.onCreateDraggedEdge(draggedEdge);
@@ -3194,7 +3200,7 @@ export default class GraphEditor extends HTMLElement {
      * @param reverseEdgeDirection reverse the direction of the returned edge
      */
     // eslint-disable-next-line complexity
-    private createDraggedEdgeFromExistingEdge(edge: Edge, reverseEdgeDirection: boolean= false): DraggedEdge {
+    private createDraggedEdgeFromExistingEdge(event: Event, edge: Edge, reverseEdgeDirection: boolean= false): DraggedEdge {
         const validTargets = new Set<string>();
         this._nodes.forEach(node => validTargets.add(node.id.toString()));
         const source = reverseEdgeDirection ? edge.target : edge.source;
@@ -3211,7 +3217,7 @@ export default class GraphEditor extends HTMLElement {
             type: edge.type,
             pathType: edge.pathType,
             validTargets: validTargets,
-            currentTarget: { x: event.x, y: event.y },
+            currentTarget: { x: (event as any).x, y: (event as any).y },
             markers: [],
             texts: [],
             dragHandles: null,
@@ -3276,13 +3282,13 @@ export default class GraphEditor extends HTMLElement {
      * Update dragged edge on drag event.
      */
     // eslint-disable-next-line complexity
-    private updateDraggedEdge(edge: DraggedEdge, capturingGroup?: string) {
+    private updateDraggedEdge(event: Event, edge: DraggedEdge, capturingGroup?: string) {
         const oldTarget = edge.target;
         edge.target = null;
-        edge.currentTarget.x = event.x;
-        edge.currentTarget.y = event.y;
+        edge.currentTarget.x = (event as any).x;
+        edge.currentTarget.y = (event as any).y;
 
-        const sourceEvent = event.sourceEvent;
+        const sourceEvent = (event as any).sourceEvent;
         const possibleTargetNodes = this.getNodesFromPoint(sourceEvent.clientX, sourceEvent.clientY);
         if (possibleTargetNodes.length > 0) {
             const targetNode = possibleTargetNodes[0];
@@ -3354,7 +3360,7 @@ export default class GraphEditor extends HTMLElement {
      *      from a reverse handle flipping the edge direction
      */
     // eslint-disable-next-line complexity
-    private dropDraggedEdge(edge: DraggedEdge, isReversedEdge: boolean) {
+    private dropDraggedEdge(event: Event, edge: DraggedEdge, isReversedEdge: boolean) {
         let updateEdgeCache = false;
         const existingEdge = this.objectCache.getEdge(edge.createdFrom);
         let existingTarget = existingEdge?.target.toString();
@@ -3393,7 +3399,7 @@ export default class GraphEditor extends HTMLElement {
                 }
             }
         } else {
-            this.onEdgeDrop(edge, {x: event.x, y: event.y});
+            this.onEdgeDrop(edge, {x: (event as any).x, y: (event as any).y});
         }
         if (updateEdgeCache) {
             this.objectCache.updateEdgeCache(this._edges);
@@ -3479,7 +3485,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param edgeDatum Corresponding datum of edge
      */
-    private onEdgeClick(edgeDatum) {
+    private onEdgeClick(event: Event, edgeDatum) {
         const eventDetail: any = {};
         eventDetail.eventSource = EventSource.USER_INTERACTION;
         const path = event.composedPath();
@@ -3488,7 +3494,7 @@ export default class GraphEditor extends HTMLElement {
             let target;
             // search in event path for data-click attribute
             while (i === 0 || target != null && i < path.length) {
-                target = select(path[i]);
+                target = select(path[i] as any);
                 const key = target.attr('data-click');
                 if (key != null) {
                     eventDetail.key = key;
@@ -3683,7 +3689,7 @@ export default class GraphEditor extends HTMLElement {
      * @param nodeDatum Corresponding datum of node
      */
     // eslint-disable-next-line complexity
-    private onNodeClick = (nodeDatum: Node) => {
+    private onNodeClick = (event: Event, nodeDatum: Node) => {
         const eventDetail: any = {};
         eventDetail.eventSource = EventSource.USER_INTERACTION;
         eventDetail.sourceEvent = event;
@@ -3694,7 +3700,7 @@ export default class GraphEditor extends HTMLElement {
             let target;
             // search in event path for data-click attribute
             while (i === 0 || target != null && i < path.length) {
-                target = select(path[i]);
+                target = select(path[i] as any);
                 const key = target.attr('data-click');
                 if (key != null) {
                     eventDetail.key = key;
@@ -3853,7 +3859,7 @@ export default class GraphEditor extends HTMLElement {
     /**
      * Create and dispatch a 'backgroundclick' event.
      */
-    private onBackgroundClick() {
+    private onBackgroundClick(event: Event) {
         if (this.currentZoom == null) {
             this.currentZoom = zoomTransform(this.graph.node());
         }
@@ -3865,8 +3871,8 @@ export default class GraphEditor extends HTMLElement {
                 eventSource: EventSource.USER_INTERACTION,
                 sourceEvent: event,
                 point: {
-                    x: this.currentZoom.invertX(event.x),
-                    y: this.currentZoom.invertY(event.y),
+                    x: this.currentZoom.invertX((event as any).x),
+                    y: this.currentZoom.invertY((event as any).y),
                 },
             },
         });
