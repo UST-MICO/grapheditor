@@ -50,7 +50,7 @@ module.exports = merge(common, {
         }),
     ],
     devServer: {
-        contentBase: path.resolve(__dirname, '_bundles'),
+        static: path.resolve(__dirname, '_bundles'),
         port: 9009
     },
 });
