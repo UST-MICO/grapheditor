@@ -34,36 +34,27 @@ export interface Rect {
  *
  * @param rectangles the rectangles to calculate the bounding rectangle for
  */
-export function calculateBoundingRect(...rectangles: Rect[]): Rect {
+ export function calculateBoundingRect(...rectangles: Rect[]): Rect {
     if (rectangles.length === 0) {
         return;
     }
-    const rect = rectangles.pop();
-    const result = {
-        x: rect.x,
-        y: rect.y,
-        width: rect.width,
-        height: rect.height,
-    };
-    rectangles.forEach(r => {
-        if (r.x < result.x) {
-            const delta = result.x - r.x;
-            result.x = r.x;
-            result.width += delta;
+    const result={left:null, right:null, up:null,down:null}
+    rectangles.forEach(box => {
+        if(result.left == null || box.x - box.width/2 < result.left) {
+            result.left = box.x - box.width/2;
         }
-        if (r.y < result.y) {
-            const delta = result.y - r.y;
-            result.y = r.y;
-            result.height += delta;
+        if(result.right == null || box.x + box.width/2 > result.right) {
+            result.right = box.x + box.width/2;
         }
-        if (r.x + r.width > result.x + result.width) {
-            result.width += (r.x + r.width) - (result.x + result.width);
+        if(result.up == null || box.y - box.height/2 < result.up) {
+            result.up = box.y - box.height/2;
         }
-        if (r.y + r.height > result.y + result.height) {
-            result.height += (r.y + r.height) - (result.y + result.height);
+        if(result.down == null || box.y + box.height/2 > result.down) {
+            result.down = box.y + box.height/2;
         }
     });
-    return result;
+
+    return {x: result.left, y: result.down-(result.down-result.up)/2,width: result.right-result.left, height: result.down-result.up};
 }
 
 /**
