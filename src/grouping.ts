@@ -451,7 +451,13 @@ export class GroupingManager {
      * @returns a new set of all group ids
      */
     getAllRegisteredGroups(): Set<string> {
-        return new Set(this.groupsById.keys());
+        let allParentElementsOfGroups: Set<string>;
+        this.groupsById.forEach((value,key) => {
+            if(value.children.size != 0) {
+                allParentElementsOfGroups.add(key)
+            }
+        });
+        return allParentElementsOfGroups;
     }
 
     /**
