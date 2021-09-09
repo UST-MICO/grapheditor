@@ -54,8 +54,8 @@ export interface Rect {
         }
     });
 
-    return {x: result.left, y: result.down-(result.down-result.up)/2,width: result.right-result.left, height: result.down-result.up};
-}
+    return {x: result.left+(result.right-result.left)/2, y: result.up+(result.down-result.up)/2,width: result.right-result.left, height: result.down-result.up};
+    }
 
 /**
  * Remove all child nodes from a single node.
