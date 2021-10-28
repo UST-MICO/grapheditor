@@ -47,6 +47,7 @@ Documentation
     dynamic-templates
     edge-path-templates
     groups
+    coordinates
     resizing
     api/api-index
     changelog
