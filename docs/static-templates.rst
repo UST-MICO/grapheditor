@@ -9,6 +9,7 @@ Templates are read from the first ``<defs>`` tag of the provided svg.
 The type of a node also determines which template is used for the node.
 The content of the node template should be centered around (0, 0).
 This can be helpful if the force layout of d3 is to be used as collisions are calculated in a circle around the node position.
+See :ref:`coordinates:node coordinates` for a more detailed explanation.
 
 :js:class:`Marker` templates need to have the attribute ``data-template-type="marker"`` and must also have a unique id.
 Marker templates can be used as edge markers and link handles.

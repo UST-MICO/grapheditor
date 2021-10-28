@@ -44,6 +44,8 @@ Component Attributes
 .. _view-mode-attribute:
 .. describe:: mode
 
+   .. deprecated:: 7.0
+
    The interaction mode of the graph.
 
    *  ``display`` allow no user interaction with the graph except selecting nodes.
@@ -58,7 +60,63 @@ Component Attributes
    *  ``none`` graph will not pan/zoom at all.
    *  ``manual`` allow free pan/zoom by user.
    *  ``automatic`` graph will pan/zoom after (re-)render to show all nodes.
-   *  ``both`` both manual and automatic.
+   *  ``both`` DEFAULT; both manual and automatic.
+
+.. describe:: select
+
+   Controls the default node selection behaviour.
+   This setting affects all interactive behaviours (node click, brush select) and the grapheditor API (e.g. :js:func:`~GraphEditor.changeSelected`, :js:func:`~GraphEditor.selectNode` and :js:func:`~GraphEditor.deselectNode`).
+
+   Changes to this setting only apply to new selections.
+   An already existing node selection will not be changed automatically.
+
+   *  ``none`` prevents all node selections
+   *  ``single`` only a single node can be selected at the same time
+   *  ``multiple`` DEFAULT; multiple nodes can be selected at the same time
+
+.. describe:: node-click
+
+   Controls the default behaviour when clicking on a node.
+   Events for node clicks will always fire.
+
+   *  ``none`` no default action will be performed. Use this when a node click should trigger a custom action
+   *  ``select`` DEFAULT; the selected status of the node will be toggled. If the selection mode is `single` all selected nodes will be deselected.
+   *  ``link`` clicking on a node selects the node as the temporary edge source. Clicking on a second node creates (or removes)) an edge from the selected edge source to the clicked node.
+
+.. describe:: node-drag
+
+   Controls the drag behaviour of nodes.
+
+   *  ``none`` nodes cannot be dragged around.
+   *  ``move`` DEFAULT; dragging a node moves the node.
+   *  ``link`` currently not implemented, will allow dragging links from the whole node instead of just the link handles of the node.
+
+.. describe:: edge-drag
+
+   Controls the drag behaviour of edges (when dragged from their drag handles).
+
+   *  ``none`` edges cannot be dragged around.
+   *  ``link`` DEFAULT; dragging edges can change to which nodes they are linkednd node creates (or removes)) an edge from the selected edge source to the clicked node.
+
+.. describe:: background-drag
+
+   Controls the drag behaviour when the whole graph is dragged around.
+   Moving the graph around and zooming the graph are interdependent so this behaviour can also affect how zooming works.
+
+   All modes (except ``none`` and ``move``) draw a visible brush on the screen.
+   When the drag gesture is finished the action indicated by the current setting is performed.
+
+   The brush can be styled using css.
+   It uses the css class ``brush`` and is a direct decendent of the ``g.zoom-group`` node in the dom.
+
+   *  ``none`` disables this behaviour completely. Only mousewheel zoom is allowed.
+   *  ``move`` DEFAULT; dragging the graph moves it around (panning the graph).
+   *  ``zoom`` zoom to fit the brush area to the available screen space.
+   *  ``select`` select all nodes with coordinates that are inside of the brush box.
+      This works best if the node coordinates correspond to the visual centers of the nodes.
+      In single select mode the node closest to the brush center will be chosen.
+      The brush does not work if the current selection mode is ``none``.
+   *  ``custom`` draws the brush and fires the brush events without an active default behaviour. Use this to implement custom brush behaviours.
 
 
 
@@ -113,7 +171,6 @@ There is also very limited support for completely dynamic styles with :ref:`dyna
 
     <!-- old method (discouraged) -->
     <network-graph>
-        <!--<style slot="style">/* deprecated do not use / use normal css stylesheet */</style>-->
         <svg slot="graphs">
             <style>/* graph styles go here (styles here are global!) */</style>
         </svg>
@@ -435,16 +492,7 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
 
 .. describe:: modechange
 
-    Fired after the interaction mode changed.
-
-    **Example** ``detail``
-
-    .. code-block:: ts
-
-        {
-            "oldMode": "layout",
-            "newMode": "select"
-        }
+    .. warning:: This event was removed with the deprecation of the mode attribute.
 
 .. describe:: zoommodechange
 
@@ -519,6 +567,48 @@ The graph component uses `custom events <https://developer.mozilla.org/en-US/doc
                 x: 0,
                 y: 0,
             },
+        }
+
+.. describe:: brushdrag
+
+    Fired when the brush area changes.
+
+    The event contains the current brush area and the current brush interaction settings (the value of the ``background-drag`` attribute; see :ref:`grapheditor:component attributes`).
+
+    **Example** ``detail``
+
+    .. code-block:: ts
+
+        {
+            sourceEvent: {},
+            brushArea: {
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 100,
+            },
+            brushMode: "select",
+        }
+
+.. describe:: brush
+
+    Fired before the current active brush action is performed.
+
+    The event contains the current brush area and the current brush interaction settings (the value of the ``background-drag`` attribute; see :ref:`grapheditor:component attributes`).
+
+    **Example** ``detail``
+
+    .. code-block:: ts
+
+        {
+            sourceEvent: {},
+            brushArea: {
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 100,
+            },
+            brushMode: "select",
         }
 
 .. describe:: selection
