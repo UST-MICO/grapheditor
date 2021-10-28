@@ -51,6 +51,9 @@ poetry run make html
 # debug docs build
 poetry run make html SPHINXOPTS="-v"
 
+# list all reference keys of known to sphinx (only available after building the documentation!)
+poetry run python -m sphinx.ext.intersphinx _build/html/objects.inv
+
 # update requirements.txt from poetry dependencies
 poetry export --format requirements.txt --output requirements.txt
 ```
