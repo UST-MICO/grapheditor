@@ -83,6 +83,8 @@ export interface TextComponent extends PathPositionRotationAndScale {
     attributePath?: string;
     /** The key used if the user clicked on the text. */
     clickEventKey?: string;
+    /** Wether the text component can be dragged by the user (defaults to true). */
+    draggable?: boolean;
     /** The width used for wrapping the text. */
     width: number;
     /** The height used for wrapping multiline text. */
