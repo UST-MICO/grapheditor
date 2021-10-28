@@ -16,6 +16,7 @@
  */
 
 import { Selection } from 'd3-selection';
+import { Point } from '.';
 
 /**
  * Interface compatible with DOMRect and SVGRect.
@@ -27,6 +28,19 @@ export interface Rect {
     width: number;
     /** The height of the rectangle. Must be `> 0`! */
     height: number;
+}
+
+/**
+ * Calculate the **squared** euklidean distance between two points.
+ *
+ * Use `Math.sqrt` to calculate the normal euklidean distance bewteen two points.
+ *
+ * @param pointA the first point
+ * @param pointB the second point
+ * @returns the **squared** euklidean distance between the points
+ */
+export function squaredPointDistance(pointA: Point, pointB: Point): number {
+    return Math.pow(pointA.x - pointB.x, 2) + Math.pow(pointA.y - pointB.y, 2);
 }
 
 /**
