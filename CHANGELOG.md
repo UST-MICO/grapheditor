@@ -7,6 +7,30 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## [Unreleased]
 
+### Added
+
+- Added more fine grained options for controlling how the user can interact with the grapheditor
+- "select" attribute to control the default selection behaviour (default: `multiple`; other: `none`, `single`)
+- "node-click" attribute to control the default node click behaviour (default: `select`; other: `none`, `link`)
+- "node-drag" attribute to control the default node drag behaviour (default: `move`; other: `none`, `link`)
+- "edge-drag" attribute to control the default edge drag behaviour (default: `link`; other: `none`)
+- "background-drag" attribute to control the default node drag behaviour (default: `move`; other: `none`, `select`, `zoom`, `custom`)
+- "brushdrag" and "brush" events. Used when "background-drag" is set to `select`, `zoom` or `custom`
+- Added flag in text components to mark them as draggable (defaults to true)
+
+### Deprecated
+
+- Deprecated "mode" attribute on the network-graph html node. See the list of added attributes that allow more fine grained control
+
+### Incompatible changes
+
+- Updated D3 dependecies to version 7. Please carfeully read about the changes in version 6 and 7 ([changelog](https://github.com/d3/d3/blob/main/CHANGES.md#changes-in-d3-70)) if your code uses D3 functions.
+- Removed the `style` slot in the default template as it did not work to isolate style anyway
+- Removed deprecated `rotation` property of edge markers
+- Partially removed support for deprecated "mode" attribute on the network-graph html node
+- Removed event, getter and setter associated with the "mode" attribute
+- Removed deprecated `style` slot
+
 
 ## [0.6.2] - 2021-09-05
 
