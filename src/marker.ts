@@ -30,13 +30,6 @@ export interface Marker extends PathPositionRotationAndScale {
     scale?: number;
     /** If true the marker and lineOffset is scaled relative to the stroke width. */
     scaleRelative?: boolean;
-    /** @deprecated Rotation information for the marker. (Use `absoluteRotation` and `relativeRotation attributes instead!) */
-    rotate?: {
-        /** Absolute rotation via direction vector. */
-        normal?: RotationVector;
-        /** Relative angle in degree. */
-        relativeAngle: number;
-    };
     /** A key used in a click event when the marker was clicked. */
     clickEventKey?: string;
 }
