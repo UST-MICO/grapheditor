@@ -33,10 +33,9 @@ import { getNodeLinkHandles, applyUserLinkHandleCalculationCallback, calculateNe
 import { SmoothedEdgePathGenerator, EdgePathGenerator } from './dynamic-templates/edge-path-generators';
 import { GroupingManager } from './grouping';
 import { NodeDropZone } from './drop-zone';
-import { Rect, copyTemplateSelectionIntoNode, removeAllChildNodes } from './util';
+import { Rect, copyTemplateSelectionIntoNode, removeAllChildNodes, squaredPointDistance } from './util';
 
 const SHADOW_DOM_TEMPLATE = `
-<slot name="style"></slot>
 <slot name="graph"></slot>
 `.trim();
 
@@ -67,7 +66,6 @@ export default class GraphEditor extends HTMLElement {
 
     private root: ShadowRoot;
     private zoom: ZoomBehavior<any, any>;
-    private zoomActive: boolean = false;
     private currentZoom: ZoomTransform;
 
     private contentMaxHeight = 1;
@@ -80,9 +78,18 @@ export default class GraphEditor extends HTMLElement {
     private _nodes: Node[];
     private _edges: Edge[];
     private draggedEdges: DraggedEdge[];
-    private _mode: string = 'display'; // interaction mode ['display', 'layout', 'link', 'select']
-    private _zoomMode: string = 'both'; // ['none', 'manual', 'automatic', 'both']
 
+    // interaction modifiers
+    private _zoomMode: 'none' | 'manual' | 'automatic' | 'both' = 'both';
+    private _nodeClickInteraction: 'none' | 'select' | 'link' = 'select';
+    private _nodeDragInteraction: 'none' | 'move' | 'link' = 'move';
+    private _edgeDragInteraction: 'none' | 'link' = 'link';
+    private _backgroundDragInteraction: 'none' | 'move' | 'zoom' | 'select' | 'custom' = 'move';
+    private _selectionMode: 'none' | 'single' | 'multiple' = 'multiple';
+
+    private _selectedNodes: Set<string> = new Set<string>();
+    private _selectedLinkSource: string|number = null;
+    private _selectedLinkTarget: string|number = null;
     /**
      * The static template registry.
      *
@@ -112,21 +119,10 @@ export default class GraphEditor extends HTMLElement {
      */
     private objectCache: GraphObjectCache;
 
-    private interactionStateData: {
-        source?: number | string;
-        target?: number | string;
-        selected?: Set<string>;
-        fromMode?: string;
-        [property: string]: any;
-    } = null;
 
     /** Private property to determine if the graph can be drawn. */
     private get initialized(): boolean {
         return this.svg != null && !this.svg.empty() && this.isConnected;
-    }
-
-    private get isInteractive(): boolean {
-        return (this._mode !== 'display') && !(this._mode === 'select' && this.interactionStateData.fromMode === 'display');
     }
 
     /**
@@ -210,7 +206,7 @@ export default class GraphEditor extends HTMLElement {
      * @param the target node of the edge (may be `null` for dragged edges without a target)
      * @returns `true` iff the class should be set for this edge, false if not
      */
-    public setEdgeClass: (className: string, edge: Edge|DraggedEdge, sourceNode: Node, targetNode?: Node) => boolean;
+    public setEdgeClass: (className: string, edge: Edge | DraggedEdge, sourceNode: Node, targetNode?: Node) => boolean;
 
     /**
      * Callback to calculate LinkHandle lists used for rendering edges.
@@ -229,7 +225,7 @@ export default class GraphEditor extends HTMLElement {
      * @returns an object containing the (altered) link handle lists
      */
     // eslint-disable-next-line max-len
-    public calculateLinkHandlesForEdge: (edge: Edge|DraggedEdge, sourceHandles: LinkHandle[], source: Node, targetHandles: LinkHandle[], target: Node|Point) => {sourceHandles: LinkHandle[]; targetHandles: LinkHandle[]};
+    public calculateLinkHandlesForEdge: (edge: Edge | DraggedEdge, sourceHandles: LinkHandle[], source: Node, targetHandles: LinkHandle[], target: Node | Point) => { sourceHandles: LinkHandle[]; targetHandles: LinkHandle[] };
 
 
     /**
@@ -250,7 +246,7 @@ export default class GraphEditor extends HTMLElement {
         return {
             x: minX,
             y: minY,
-            width: maxX -  minX,
+            width: maxX - minX,
             height: maxY - minY,
         };
     }
@@ -363,20 +359,8 @@ export default class GraphEditor extends HTMLElement {
      * The currently selected nodes.
      */
     get selected(): Set<string> {
-        const selected: Set<string> = this.interactionStateData?.selected ?? new Set();
+        const selected: Set<string> = this._selectedNodes ?? new Set();
         return selected;
-    }
-
-    get mode(): string {
-        return this._mode;
-    }
-
-    /**
-     * The interaction mode of the grapheditor.
-     */
-    set mode(mode: string) {
-        this.setMode(mode.toLowerCase());
-        select(this).attr('mode', mode);
     }
 
     get zoomMode(): string {
@@ -389,6 +373,26 @@ export default class GraphEditor extends HTMLElement {
     set zoomMode(mode: string) {
         this.setZoomMode(mode.toLowerCase());
         select(this).attr('zoom', mode);
+    }
+
+    get nodeClickInteraction(): 'none' | 'select' | 'link' {
+        return this._nodeClickInteraction;
+    }
+
+    get nodeDragInteraction(): 'none' | 'move' | 'link' {
+        return this._nodeDragInteraction;
+    }
+
+    get edgeDragInteraction(): 'none' | 'link' {
+        return this._edgeDragInteraction;
+    }
+
+    get backgroundDragInteraction(): 'none' | 'move' | 'zoom' | 'select' | 'custom' {
+        return this._backgroundDragInteraction;
+    }
+
+    get selectionMode(): 'none' | 'single' | 'multiple' {
+        return this._selectionMode;
     }
 
     constructor() {
@@ -410,11 +414,11 @@ export default class GraphEditor extends HTMLElement {
         this.root = this.attachShadow({ mode: 'open' });
 
         // preload shadow dom with html
-        select(this.root).html(SHADOW_DOM_TEMPLATE);
+        select(this.root as any).html(SHADOW_DOM_TEMPLATE);
 
         // monitor graph slot
         const self = this;
-        select(this.root).select('slot[name="graph"]').on('slotchange', function () {
+        select(this.root as any).select('slot[name="graph"]').on('slotchange', function () {
             self.graphSlotChanged(this as HTMLSlotElement);
         });
 
@@ -451,7 +455,8 @@ export default class GraphEditor extends HTMLElement {
      * Get all observed attributes of this webcomponent.
      */
     static get observedAttributes(): string[] {
-        return ['nodes', 'edges', 'classes', 'mode', 'zoom', 'svg-template'];
+        // TODO remove deprecated mode attribute later
+        return ['nodes', 'edges', 'classes', 'mode', 'zoom', 'selection', 'node-click', 'node-drag', 'edge-drag', 'background-drag', 'svg-template'];
     }
 
     /**
@@ -462,17 +467,22 @@ export default class GraphEditor extends HTMLElement {
      * @param newValue new value
      */
     attributeChangedCallback(name: string, oldValue: string, newValue: string): void {
+        let needsRender = false;
+        let needsZoom = false;
         if (name == 'svg-template') {
             this.svgTemplate = newValue;
             this.loadSvgFromTemplate();
+            needsRender = true;
         }
         if (name === 'nodes') {
             newValue = newValue.replace(/'/g, '"');
             this.nodeList = JSON.parse(newValue);
+            needsRender = true;
         }
         if (name === 'edges') {
             newValue = newValue.replace(/'/g, '"');
             this.edgeList = JSON.parse(newValue);
+            needsRender = true;
         }
         if (name === 'classes') {
             if (newValue.startsWith('[')) {
@@ -481,15 +491,89 @@ export default class GraphEditor extends HTMLElement {
             } else {
                 this.classes = newValue.split(' ');
             }
+            needsRender = true;
         }
         if (name === 'zoom') {
             this.setZoomMode(newValue.toLowerCase());
+            needsZoom = true;
         }
         if (name === 'mode') {
-            this.setMode(newValue.toLowerCase());
+            // fallback setter, deprecated!
+            // TODO remove in version >=0.8
+            console.warn(
+                'Using the "mode" attribute is deprecated and only partially supported in this version.'
+                + ' Support will be completely removed in the next major version!\n'
+                + 'Please use the new attributes ("selection", "node-click", "node-drag", "edge-drag", and "background-drag") instead.'
+            )
+            const val = newValue.toLowerCase();
+            if (val === 'display') {
+                this._selectionMode = 'multiple';
+                this._backgroundDragInteraction = 'none';
+                this._nodeClickInteraction = 'select';
+                this._nodeDragInteraction = 'none';
+                this._edgeDragInteraction = 'none';
+            }
+            if (val === 'layout' || val === 'select') {
+                this._selectionMode = 'multiple';
+                this._backgroundDragInteraction = 'move';
+                this._nodeClickInteraction = 'select';
+                this._nodeDragInteraction = 'move';
+                this._edgeDragInteraction = 'link';
+            }
+            if (val === 'link') {
+                this._selectionMode = 'multiple';
+                this._backgroundDragInteraction = 'move';
+                this._nodeClickInteraction = 'link';
+                this._nodeDragInteraction = 'move';
+                this._edgeDragInteraction = 'link';
+            }
         }
-        this.completeRender(false, EventSource.INTERNAL);
-        this.zoomToBoundingBox(false);
+        if (name === 'selection') {
+            const val = newValue.toLowerCase();
+            if (val === 'none' || val === 'single' || val === 'multiple') {
+                this._selectionMode = val;
+            } else {
+                console.warn(`Only "none", "single" and "multiple" are valid values for the selection attribute (got "${newValue}").`);
+            }
+        }
+        if (name === 'node-click') {
+            const val = newValue.toLowerCase();
+            if (val === 'none' || val === 'select' || val === 'link') {
+                this._nodeClickInteraction = val;
+            } else {
+                console.warn(`Only "none", "select" and "link" are valid values for the node-click attribute (got "${newValue}").`);
+            }
+        }
+        if (name === 'node-drag') {
+            const val = newValue.toLowerCase();
+            if (val === 'none' || val === 'move' || val === 'link') {
+                this._nodeDragInteraction = val;
+            } else {
+                console.warn(`Only "none", "move" and "link" are valid values for the node-drag attribute (got "${newValue}").`);
+            }
+        }
+        if (name === 'edge-drag') {
+            const val = newValue.toLowerCase();
+            if (val === 'none' || val === 'link') {
+                this._edgeDragInteraction = val;
+            } else {
+                console.warn(`Only "none" and "link" are valid values for the edge-drag attribute (got "${newValue}").`);
+            }
+        }
+        if (name === 'background-drag') {
+            const val = newValue.toLowerCase();
+            if (val === 'none' || val === 'move' || val === 'zoom' || val === 'select' || val === 'custom') {
+                this._backgroundDragInteraction = val;
+            } else {
+                console.warn(`Only "none", "move", "zoom" and "select" are valid values for the background-drag attribute (got "${newValue}").`);
+            }
+        }
+        if (needsRender) {
+            this.completeRender(false, EventSource.INTERNAL);
+        }
+        if (needsRender || needsZoom) {
+            this.zoomToBoundingBox(false);
+        }
     }
 
     /**
@@ -530,7 +614,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param nodeId the id of the node
      */
-    public getNode(nodeId: number|string): Node {
+    public getNode(nodeId: number | string): Node {
         return this.objectCache.getNode(nodeId);
     }
 
@@ -613,6 +697,8 @@ export default class GraphEditor extends HTMLElement {
      *
      * This method will cause a 'selection' event if the selection has changed.
      * This method does not check if the nodeId exists.
+     * If the selection mode is single this method ensures that only the passed node is selected.
+     * This method returns silently if the selection mode is none.
      *
      * To update the graph the `updateHighlights` method is used iff `updateHighlights` is `true`.
      *
@@ -620,13 +706,17 @@ export default class GraphEditor extends HTMLElement {
      * @param updateHighlights set this to true to update highlights immediately (default `false`)
      */
     public selectNode(nodeId: number | string, updateHighlights: boolean = false): void {
-        if (this._mode !== 'select') {
-            this.setMode('select');
+        if (this._selectionMode === 'none') {
+            return; // selections are disabled
         }
-        if (this.interactionStateData.selected.has(nodeId.toString())) {
+        if (this._selectedNodes.has(nodeId.toString())) {
             return; // nothing changed
         }
-        this.interactionStateData.selected.add(nodeId.toString());
+        if (this._selectionMode === 'single') {
+            // remove any previous selected node when only one node can be selected
+            this._selectedNodes.clear();
+        }
+        this._selectedNodes.add(nodeId.toString());
         this.onSelectionChangeInternal(EventSource.API);
         if (updateHighlights) {
             this.updateHighlights();
@@ -638,6 +728,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * This method will cause a 'selection' event if the selection has changed.
      * This method does not check if the nodeId exists.
+     * This method returns silently if the selection mode is none.
      *
      * To update the graph the `updateHighlights` method is used iff `updateHighlights` is `true`.
      *
@@ -645,17 +736,14 @@ export default class GraphEditor extends HTMLElement {
      * @param updateHighlights set this to true to update highlights immediately (default `false`)
      */
     public deselectNode(nodeId: number | string, updateHighlights: boolean = false): void {
-        if (this._mode !== 'select') {
-            return; // no selection
+        if (this._selectionMode === 'none') {
+            return; // selections are disabled
         }
-        if (!this.interactionStateData.selected.has(nodeId.toString())) {
+        if (!this._selectedNodes.has(nodeId.toString())) {
             return; // nothing changed
         }
-        this.interactionStateData.selected.delete(nodeId.toString());
+        this._selectedNodes.delete(nodeId.toString());
         this.onSelectionChangeInternal(EventSource.API);
-        if (this.interactionStateData.selected.size <= 0) {
-            this.setMode(this.interactionStateData.fromMode);
-        }
         if (updateHighlights) {
             this.updateHighlights();
         }
@@ -668,22 +756,24 @@ export default class GraphEditor extends HTMLElement {
      *
      * This method will cause a 'selection' event if the selection has changed.
      * This method does not check if the node id's in the set exist.
+     * If selection mode is 'single' th given set must only contain one node!
+     * This method returns silently if the selection mode is none.
      *
      * @param selected the new set of selected node id's
      * @param updateHighlights set this to true to update highlights immediately (default `false`)
      */
     public changeSelected(selected: Set<string>, updateHighlights: boolean = false): void {
+        if (this._selectionMode === 'none') {
+            return; // selections are disabled
+        }
         if (selected == null || selected.size <= 0) {
-            if (this._mode === 'select') {
-                // selection is not empty
-                this.setMode(this.interactionStateData.fromMode);
-                this.onSelectionChangeInternal(EventSource.API);
-            }
+            this._selectedNodes.clear();
+            this.onSelectionChangeInternal(EventSource.API);
         } else {
-            if (this._mode !== 'select') {
-                this.setMode('select');
+            if (this._selectionMode === 'single' && selected.size > 1) {
+                throw Error('In "single" selection mode only a single node can be selected at a time!');
             }
-            this.interactionStateData.selected = selected;
+            this._selectedNodes = selected;
             this.onSelectionChangeInternal(EventSource.API);
         }
         if (updateHighlights) {
@@ -730,7 +820,7 @@ export default class GraphEditor extends HTMLElement {
      * @param edgeId the id of the edge (use the `edgeId` function to compute the id)
      */
     // eslint-disable-next-line no-shadow
-    public getEdge(edgeId: number|string): Edge {
+    public getEdge(edgeId: number | string): Edge {
         return this.objectCache.getEdge(edgeId);
     }
 
@@ -740,11 +830,11 @@ export default class GraphEditor extends HTMLElement {
      * @param edge edge to remove
      * @param redraw if the graph should be redrawn (default: `false`)
      */
-    public removeEdge(edge: Edge|number|string, redraw: boolean = false): void {
+    public removeEdge(edge: Edge | number | string, redraw: boolean = false): void {
         let edgeIdToDelete: string;
-        if (typeof(edge) === 'number') {
+        if (typeof (edge) === 'number') {
             edgeIdToDelete = edge.toString();
-        } else if (typeof(edge) === 'string') {
+        } else if (typeof (edge) === 'string') {
             edgeIdToDelete = edge;
         } else {
             edgeIdToDelete = edgeId(edge);
@@ -767,7 +857,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param sourceNodeId the node id of the edge source
      */
-    public getEdgesBySource(sourceNodeId: number|string): Set<Edge> {
+    public getEdgesBySource(sourceNodeId: number | string): Set<Edge> {
         return this.objectCache.getEdgesBySource(sourceNodeId);
     }
 
@@ -776,67 +866,8 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param targetNodeId the node id of the edge target
      */
-    public getEdgesByTarget(targetNodeId: number|string): Set<Edge> {
+    public getEdgesByTarget(targetNodeId: number | string): Set<Edge> {
         return this.objectCache.getEdgesByTarget(targetNodeId);
-    }
-
-    /**
-     * Set the graph interaction mode and cleanup temp data from old interaction mode.
-     *
-     * @param mode interaction mode (one of ["display", "layout", "link", "select"])
-     */
-    // eslint-disable-next-line complexity
-    public setMode(mode: string): void {
-        if (mode === this._mode) {
-            return;
-        }
-        const oldMode = this._mode;
-        if (mode === 'display') {
-            if (this._mode !== 'display') {
-                this.interactionStateData = null;
-                this._mode = 'display';
-            }
-        } else if (mode === 'layout') {
-            if (this._mode !== 'layout') {
-                this.interactionStateData = null;
-                this._mode = 'layout';
-            }
-        } else if (mode === 'link') {
-            if (this._mode !== 'link') {
-                this.interactionStateData = {
-                    source: null,
-                    target: null,
-                    allowedTargets: new Set(),
-                };
-                this._mode = 'link';
-            }
-        } else if (mode === 'select') {
-            if (this._mode !== 'select') {
-                this.interactionStateData = {
-                    selected: new Set(),
-                    fromMode: this._mode,
-                };
-                this._mode = 'select';
-            }
-        } else {
-            console.warn(`Wrong mode "${mode}". Allowed are: ["display", "layout", "link", "select"]`);
-            return;
-        }
-
-        if (oldMode !== mode) {
-            const ev = new CustomEvent('modechange', {
-                bubbles: true,
-                composed: true,
-                cancelable: false,
-                detail: {
-                    eventSource: EventSource.INTERNAL,
-                    oldMode: oldMode,
-                    newMode: mode,
-                },
-            });
-            this.dispatchEvent(ev);
-            this.completeRender(false, EventSource.INTERNAL);
-        }
     }
 
     /**
@@ -846,10 +877,10 @@ export default class GraphEditor extends HTMLElement {
      */
     // eslint-disable-next-line complexity
     public setZoomMode(mode: string): void {
-        if (mode === this._mode) {
+        if (mode === this._zoomMode) {
             return;
         }
-        const oldMode = this._mode;
+        const oldMode = this._zoomMode;
         if (mode === 'none') {
             if (this._zoomMode !== 'none') {
                 this._zoomMode = 'none';
@@ -859,11 +890,11 @@ export default class GraphEditor extends HTMLElement {
                 this._zoomMode = 'manual';
             }
         } else if (mode === 'automatic') {
-            if (this._mode !== 'automatic') {
+            if (this._zoomMode !== 'automatic') {
                 this._zoomMode = 'automatic';
             }
         } else if (mode === 'both') {
-            if (this._mode !== 'both') {
+            if (this._zoomMode !== 'both') {
                 this._zoomMode = 'both';
             }
         } else {
@@ -914,7 +945,7 @@ export default class GraphEditor extends HTMLElement {
             return;
         }
         const clone = document.importNode(svgTemplate.node().content, true);
-        const slotSelection = select(this.root).select<HTMLDivElement>('slot[name="graph"]');
+        const slotSelection = select(this.root as any).select<HTMLDivElement>('slot[name="graph"]');
         slotSelection.selectAll('svg').remove();
         slotSelection.node().append(clone);
         const svgSelection = slotSelection.select<SVGSVGElement>('svg');
@@ -979,17 +1010,42 @@ export default class GraphEditor extends HTMLElement {
         }
         graph.classed('zoom-group', true);
 
-        const newZoom = zoom().on('zoom', (event: D3ZoomEvent<SVGGElement, unknown>, d) => {
-            graph.attr('transform', event.transform.toString());
-            const oldZoom = this.currentZoom;
-            this.currentZoom = event.transform;
-            let eventSource = EventSource.USER_INTERACTION;
-            if (event.sourceEvent == null) {
-                // only direct user interaction has a source event
-                eventSource = EventSource.API;
-            }
-            this.onZoomChange(oldZoom, event.transform, eventSource);
-        });
+        const newZoom = zoom()
+            .filter((event: MouseEvent|TouchEvent) => {
+                if (this._zoomMode === 'none' || this._zoomMode === 'automatic') {
+                    return false; // no user zoom
+                }
+                if (this._backgroundDragInteraction === 'none') {
+                    return event.type !== 'wheel'; // only mouse wheel zoom
+                }
+                const mouseButton: number = (event as MouseEvent).button ?? 0;
+                if (mouseButton !== 0) {
+                    // did not press primary button
+                    return false;
+                }
+                if (this._backgroundDragInteraction === 'move') {
+                    return !event.ctrlKey || event.type === 'wheel';
+                }
+                if (
+                    this._backgroundDragInteraction === 'select'
+                    || this._backgroundDragInteraction === 'zoom'
+                    || this._backgroundDragInteraction === 'custom'
+                ) {
+                    return event.type === 'wheel'; // only zoom on mouse wheel interaction
+                }
+                return false;
+            })
+            .on('zoom', (event: D3ZoomEvent<SVGGElement, unknown>, d) => {
+                graph.attr('transform', event.transform.toString());
+                const oldZoom = this.currentZoom;
+                this.currentZoom = event.transform;
+                let eventSource = EventSource.USER_INTERACTION;
+                if (event.sourceEvent == null) {
+                    // only direct user interaction has a source event
+                    eventSource = EventSource.API;
+                }
+                this.onZoomChange(oldZoom, event.transform, eventSource);
+            });
 
         let edgesGroup = graph.select<SVGGElement>('g.edges');
         if (edgesGroup.empty()) {
@@ -1144,6 +1200,134 @@ export default class GraphEditor extends HTMLElement {
         }
     }
 
+    private attachZoomAndBrush() {
+        const svg = this.svg;
+
+        // attach zoom behaviour, current interaction modes are applied in event filter
+        svg.call(this.zoom);
+
+        // attach brush behaviour for background drag interaction
+        const container = svg.select<SVGGElement>('g.zoom-group').node();
+        svg.call(drag<SVGGElement, {rect: Selection<SVGRectElement, unknown, SVGGElement, unknown>, start: Point}>()
+            .container(() => container)
+            .subject(() => {
+                if (this._backgroundDragInteraction === 'none') {
+                    return; // no drag interaction
+                }
+                if (this._backgroundDragInteraction === 'move') {
+                    return; // handled by zoom behaviour
+                }
+                if (this._backgroundDragInteraction === 'select' && this._selectionMode === 'none') {
+                    return; // selection brush should only work if selections are allowed
+                }
+                const rect = select(container).append('rect').classed('brush', true);
+                return {
+                    rect: rect,
+                    start: {x: 0, y: 0},
+                };
+            })
+            .on('start', (event) => {
+                const start: Point = (event as any).subject.start;
+                start.x = (event as any).x;
+                start.y = (event as any).y;
+            })
+            .on('drag', (e) => {
+                const event = e as unknown as D3DragEvent<SVGGElement, unknown, {rect: Selection<SVGRectElement, unknown, SVGGElement, unknown>, start: Point}>;
+                const start = event.subject.start;
+                const minX = event.x < start.x ? event.x : start.x;
+                const minY = event.y < start.y ? event.y : start.y;
+                const width = Math.abs(start.x - event.x);
+                const height = Math.abs(start.y - event.y);
+                // update visible brush dimensions
+                event.subject.rect
+                    .attr('x', minX)
+                    .attr('y', minY)
+                    .attr('width', width)
+                    .attr('height', height);
+                // dispatch event
+                this.onBrushMove(event as unknown as Event, {
+                    x: minX,
+                    y: minY,
+                    width: width,
+                    height: height,
+                });
+            })
+            .on('end', (e) => {
+                const event = e as unknown as D3DragEvent<SVGGElement, unknown, {rect: Selection<SVGRectElement, unknown, SVGGElement, unknown>, start: Point}>;
+                event.subject.rect.remove(); // remove visible brush
+                const start = event.subject.start;
+                const minX = event.x < start.x ? event.x : start.x;
+                const minY = event.y < start.y ? event.y : start.y;
+                const width = Math.abs(start.x - event.x);
+                const height = Math.abs(start.y - event.y);
+                const maxX = event.x > start.x ? event.x : start.x;
+                const maxY = event.y > start.y ? event.y : start.y;
+                const brushRect = {
+                    x: minX,
+                    y: minY,
+                    width: width,
+                    height: height,
+                }
+                // dispatch brush end event
+                this.onBrushRelease(event as unknown as Event, brushRect);
+
+                if (this._backgroundDragInteraction === 'zoom') {
+                    // zoom to drawn box
+                    this.zoomToBox(brushRect);
+                    return;
+                }
+                if (this._backgroundDragInteraction === 'select') {
+                    const selected = new Set<string>();
+                    this._nodes.forEach(node => {
+                        if (node.x < minX || node.x > maxX) {
+                            return; // node is not in drawn box
+                        }
+                        if (node.y < minY || node.y > maxY) {
+                            return; // node is not in drawn box
+                        }
+                        selected.add(node.id.toString());
+                    });
+                    if (event.sourceEvent.shiftKey) {
+                        // add existing selection if shift was pressed
+                        this._selectedNodes.forEach(nodeId => selected.add(nodeId));
+                    }
+                    if (this._selectionMode === 'single' && selected.size > 1) {
+                        // select the node that is closest to the brush center
+                        // this should lead to predictable selections if only
+                        // single node selection is allowed
+                        const center: Point = {
+                            x: brushRect.x + (brushRect.width / 2),
+                            y: brushRect.y + (brushRect.height / 2),
+                        }
+                        let distance = Infinity;
+                        let selectedNode: string = null;
+                        selected.forEach(nodeId => {
+                            const node = this.getNode(nodeId);
+                            if (node == null) {
+                                return; // safety check
+                            }
+                            const nodeDistance = squaredPointDistance(center, node);
+                            if (nodeDistance < distance) {
+                                distance = nodeDistance;
+                                selectedNode = nodeId;
+                            }
+                        });
+                        if (selectedNode != null) {
+                            // only the node closest to the brush center will get selected
+                            selected.clear();
+                            selected.add(selectedNode);
+                        } else {
+                            // selection a single node has failed
+                            return;
+                        }
+                    }
+                    this._selectedNodes = selected;
+                    this.onSelectionChangeInternal(EventSource.USER_INTERACTION);
+                }
+            })
+        );
+    }
+
     /**
      * Render all changes of the data to the graph.
      *
@@ -1162,17 +1346,7 @@ export default class GraphEditor extends HTMLElement {
             console.warn('Executing onBeforeCompleteRender callback produced an error.', err);
         }
 
-        const svg = this.svg;
-
-        if (this._zoomMode === 'manual' || this._zoomMode === 'both') {
-            if (!this.zoomActive) {
-                this.zoomActive = true;
-                svg.call(this.zoom);
-            }
-        } else {
-            this.zoomActive = false;
-            svg.on('.zoom', null);
-        }
+        this.attachZoomAndBrush();
 
         this.updateSize();
 
@@ -1192,80 +1366,82 @@ export default class GraphEditor extends HTMLElement {
             .call(this.updateNodes.bind(this))
             .call(this.updateNodePositions.bind(this))
             .order()
-            .on('mouseover', (event, d) => { this.onNodeEnter.bind(this)(d); })
-            .on('mouseout', (event, d) => { this.onNodeLeave.bind(this)(d); })
+            .on('mouseover', (event, d) => { this.onNodeEnter.bind(this)(event, d); })
+            .on('mouseout', (event, d) => { this.onNodeLeave.bind(this)(event, d); })
             .on('click', (event, d) => { this.onNodeClick.bind(this)(event, d); });
 
-        if (this.isInteractive) {
-            nodeSelection.call(
-                drag<SVGGElement, Node, NodeMovementInformation>()
-                    .subject((event, node) => {
-                        const movementInfo = this.getNodeMovementInformation(node as unknown as Node, event.x, event.y);
-                        if (movementInfo == null) {
-                            return; // move was cancelled by callback
+        nodeSelection.call(
+            drag<SVGGElement, Node, NodeMovementInformation>()
+                .subject((event, node) => {
+                    if (this._nodeDragInteraction === 'none') {
+                        return; // no node dragging allowed!
+                    }
+                    if (this._nodeDragInteraction === 'link') {
+                        return; // FIXME add dragging new edges from a node as possible behaviour!
+                    }
+                    const movementInfo = this.getNodeMovementInformation(node as unknown as Node, event.x, event.y);
+                    if (movementInfo == null) {
+                        return; // move was cancelled by callback
+                    }
+                    const startTreeParent = this.groupingManager.getTreeParentOf(movementInfo.node.id);
+                    if (startTreeParent != null) {
+                        const behaviour = this.groupingManager.getGroupBehaviourOf(startTreeParent);
+                        if (behaviour.onNodeMoveStart != null) {
+                            const needRender = Boolean(
+                                behaviour.onNodeMoveStart(startTreeParent, movementInfo.node.id.toString(), this.objectCache.getNode(startTreeParent), movementInfo.node, this)
+                            );
+                            movementInfo.needsFullRender = needRender || movementInfo.needsFullRender;
                         }
-                        const startTreeParent = this.groupingManager.getTreeParentOf(movementInfo.node.id);
-                        if (startTreeParent != null) {
-                            const behaviour = this.groupingManager.getGroupBehaviourOf(startTreeParent);
-                            if (behaviour.onNodeMoveStart != null) {
-                                const needRender = Boolean(
-                                    behaviour.onNodeMoveStart(startTreeParent, movementInfo.node.id.toString(), this.objectCache.getNode(startTreeParent), movementInfo.node, this)
-                                );
-                                movementInfo.needsFullRender = needRender || movementInfo.needsFullRender;
-                            }
-                        }
-                        return movementInfo;
-                    })
-                    .on('start', (event) => {
-                        this.onNodeDrag('start', event.subject, EventSource.USER_INTERACTION)
-                    })
-                    .on('drag', (e) => {
-                        const event = e as unknown as D3DragEvent<SVGGElement, Node, NodeMovementInformation>;
-                        let x = event.x;
-                        let y = event.y;
-                        if (event.subject != null) {
-                            const movementInfo: NodeMovementInformation = event.subject;
-                            if (movementInfo.offset?.dx !== null) {
-                                x -= movementInfo.offset.dx;
-                            }
-                            if (movementInfo.offset?.dy !== null) {
-                                y -= movementInfo.offset.dy;
-                            }
-                            movementInfo.needsFullRender = movementInfo.needsFullRender ?? false;
-                            movementInfo.needsFullRender = this.tryToLeaveCurrentGroup(event.subject, x, y, EventSource.USER_INTERACTION, event as unknown as Event) || movementInfo.needsFullRender;
-                            movementInfo.needsFullRender = this.tryJoinNodeIntoGroup(event.subject, x, y, EventSource.USER_INTERACTION, event as unknown as Event) || movementInfo.needsFullRender;
-                            movementInfo.needsFullRender = this._moveNode(event.subject, event.x, event.y, EventSource.USER_INTERACTION) || movementInfo.needsFullRender;
-                            if (movementInfo.needsFullRender) {
-                                this.completeRender(false, EventSource.USER_INTERACTION);
-                            } else {
-                                this.updateGraphPositions(EventSource.USER_INTERACTION);
-                            }
-                            movementInfo.needsFullRender = false;
-                        }
-                    })
-                    .on('end', (event) => {
+                    }
+                    return movementInfo;
+                })
+                .on('start', (event) => {
+                    this.onNodeDrag('start', event.subject, EventSource.USER_INTERACTION)
+                })
+                .on('drag', (e) => {
+                    const event = e as unknown as D3DragEvent<SVGGElement, Node, NodeMovementInformation>;
+                    let x = event.x;
+                    let y = event.y;
+                    if (event.subject != null) {
                         const movementInfo: NodeMovementInformation = event.subject;
-                        const node = movementInfo.node;
-                        const endTreeParent = this.groupingManager.getTreeParentOf(node.id);
-                        if (endTreeParent != null) {
-                            const behaviour = this.groupingManager.getGroupBehaviourOf(endTreeParent);
-                            if (behaviour.onNodeMoveEnd != null) {
-                                behaviour.onNodeMoveEnd(endTreeParent, node.id.toString(), this.objectCache.getNode(endTreeParent), node, this);
-                            }
+                        if (movementInfo.offset?.dx !== null) {
+                            x -= movementInfo.offset.dx;
                         }
-
-                        // rerender if needed
+                        if (movementInfo.offset?.dy !== null) {
+                            y -= movementInfo.offset.dy;
+                        }
+                        movementInfo.needsFullRender = movementInfo.needsFullRender ?? false;
+                        movementInfo.needsFullRender = this.tryToLeaveCurrentGroup(event.subject, x, y, EventSource.USER_INTERACTION, event as unknown as Event) || movementInfo.needsFullRender;
+                        movementInfo.needsFullRender = this.tryJoinNodeIntoGroup(event.subject, x, y, EventSource.USER_INTERACTION, event as unknown as Event) || movementInfo.needsFullRender;
+                        movementInfo.needsFullRender = this._moveNode(event.subject, event.x, event.y, EventSource.USER_INTERACTION) || movementInfo.needsFullRender;
                         if (movementInfo.needsFullRender) {
                             this.completeRender(false, EventSource.USER_INTERACTION);
-                            movementInfo.needsFullRender = false;
+                        } else {
+                            this.updateGraphPositions(EventSource.USER_INTERACTION);
                         }
+                        movementInfo.needsFullRender = false;
+                    }
+                })
+                .on('end', (event) => {
+                    const movementInfo: NodeMovementInformation = event.subject;
+                    const node = movementInfo.node;
+                    const endTreeParent = this.groupingManager.getTreeParentOf(node.id);
+                    if (endTreeParent != null) {
+                        const behaviour = this.groupingManager.getGroupBehaviourOf(endTreeParent);
+                        if (behaviour.onNodeMoveEnd != null) {
+                            behaviour.onNodeMoveEnd(endTreeParent, node.id.toString(), this.objectCache.getNode(endTreeParent), node, this);
+                        }
+                    }
 
-                        this.onNodeDrag('end', event.subject, EventSource.USER_INTERACTION);
-                    })
-            );
-        } else {
-            nodeSelection.on('.drag', null);
-        }
+                    // rerender if needed
+                    if (movementInfo.needsFullRender) {
+                        this.completeRender(false, EventSource.USER_INTERACTION);
+                        movementInfo.needsFullRender = false;
+                    }
+
+                    this.onNodeDrag('end', event.subject, EventSource.USER_INTERACTION);
+                })
+        );
 
         // update edges ////////////////////////////////////////////////////////
         if (forceUpdateTemplates) {
@@ -1353,7 +1529,7 @@ export default class GraphEditor extends HTMLElement {
      * @param y the y coordinate from where the move should start (can be substituted by node.y)
      */
     private getNodeMovementInformation(node: Node, x: number, y: number): NodeMovementInformation {
-        const movementInfo: NodeMovementInformation = {node: node};
+        const movementInfo: NodeMovementInformation = { node: node };
         const groupId = this.groupingManager.getGroupCapturingMovementOfChild(node);
         if (groupId != null && groupId !== node.id.toString()) {
             const groupNode = this.objectCache.getNode(groupId);
@@ -1404,7 +1580,7 @@ export default class GraphEditor extends HTMLElement {
      * @returns true iff the graph possibly needs a complete render to correctly display all changes
      */
     // eslint-disable-next-line complexity
-    public moveNode(nodeId: string | number, x: number, y: number, updatePositions: boolean= false): boolean {
+    public moveNode(nodeId: string | number, x: number, y: number, updatePositions: boolean = false): boolean {
         const node = this.objectCache.getNode(nodeId);
         const nodeMovementInfo = this.getNodeMovementInformation(node, node.x, node.y);
         if (nodeMovementInfo == null) {
@@ -1458,7 +1634,7 @@ export default class GraphEditor extends HTMLElement {
      * @returns the absolute node position (or null)
      */
     private getGroupDictatedPositionOfNode(node: Node): Point {
-        let groupRelativePosition: string|Point;
+        let groupRelativePosition: string | Point;
         let relativeToGroup: string;
         const treeParent = this.groupingManager.getTreeParentOf(node.id);
         if (treeParent != null) {
@@ -1477,7 +1653,7 @@ export default class GraphEditor extends HTMLElement {
                 }
             });
         }
-        if (typeof(groupRelativePosition) === 'string') {
+        if (typeof (groupRelativePosition) === 'string') {
             const dropZone = this.objectCache.getDropZone(relativeToGroup, groupRelativePosition);
             if (dropZone == null) {
                 return null;
@@ -1526,7 +1702,7 @@ export default class GraphEditor extends HTMLElement {
             const groupBehaviour = this.groupingManager.getGroupBehaviourOf(currentTreeParent);
             if (groupBehaviour.beforeNodeMove != null) {
                 const groupNode = this.objectCache.getNode(currentTreeParent);
-                needsFullRender = Boolean(groupBehaviour.beforeNodeMove(currentTreeParent, node.id.toString(), groupNode, node, {x: x, y: y}, this));
+                needsFullRender = Boolean(groupBehaviour.beforeNodeMove(currentTreeParent, node.id.toString(), groupNode, node, { x: x, y: y }, this));
             }
         }
 
@@ -1617,7 +1793,7 @@ export default class GraphEditor extends HTMLElement {
             return false; // group does not allow dragged nodes to leave
         }
 
-        const clientPoint = this.getClientPointFromGraphCoordinates({x: x, y: y});
+        const clientPoint = this.getClientPointFromGraphCoordinates({ x: x, y: y });
 
         const possibleTargetNodes = this.getNodesFromPoint(clientPoint.x, clientPoint.y);
         const allChildren = this.groupingManager.getAllChildrenOf(currentGroup);
@@ -1664,7 +1840,7 @@ export default class GraphEditor extends HTMLElement {
             return false;
         }
 
-        const clientPoint = this.getClientPointFromGraphCoordinates({x: x, y: y});
+        const clientPoint = this.getClientPointFromGraphCoordinates({ x: x, y: y });
 
         const possibleTargetNodes = this.getNodesFromPoint(clientPoint.x, clientPoint.y);
         const targetNode = possibleTargetNodes.find(target => target.id !== node.id);
@@ -1675,7 +1851,7 @@ export default class GraphEditor extends HTMLElement {
                     // canJoinGroup is not part of a tree => mark it as a tree root
                     this.groupingManager.markAsTreeRoot(canJoinGroup, eventSource, sourceEvent);
                 }
-                this.groupingManager.addNodeToGroup(canJoinGroup, node.id, {x: x, y: y}, eventSource, sourceEvent);
+                this.groupingManager.addNodeToGroup(canJoinGroup, node.id, { x: x, y: y }, eventSource, sourceEvent);
                 if (this.groupingManager.getTreeDepthOf(node.id) === 0) {
                     this.groupingManager.joinTreeOfParent(node.id, canJoinGroup, eventSource, sourceEvent);
                 }
@@ -1719,7 +1895,7 @@ export default class GraphEditor extends HTMLElement {
      * @param dynamic `true` iff the template is a dynamic template (default: `false`)
      */
     // eslint-disable-next-line complexity, max-len
-    private updateContentTemplate<T extends Node|Marker|LinkHandle|TextComponent>(element: Selection<SVGGElement, T, any, unknown>, templateId: string, templateType: string, dynamic: boolean= false, parent?: Node|Edge) {
+    private updateContentTemplate<T extends Node | Marker | LinkHandle | TextComponent>(element: Selection<SVGGElement, T, any, unknown>, templateId: string, templateType: string, dynamic: boolean = false, parent?: Node | Edge) {
         const oldTemplateID = element.attr('data-template');
         const oldDynamic = element.attr('data-dynamic-template') === 'true';
         if (oldTemplateID != null && oldTemplateID === templateId && dynamic === oldDynamic) {
@@ -1745,9 +1921,9 @@ export default class GraphEditor extends HTMLElement {
                 const g = element as Selection<SVGGElement, Marker, any, unknown>;
                 if (dynTemplate != null) {
                     try {
-                        dynTemplate.renderInitialTemplate(g, this, {parent: parent});
+                        dynTemplate.renderInitialTemplate(g, this, { parent: parent });
                     } catch (error) {
-                        console.error('An error occured while rendering the dynamic marker template!', {parent: parent}, error);
+                        console.error('An error occured while rendering the dynamic marker template!', { parent: parent }, error);
                     }
                 } else {
                     this.updateStaticContentTemplate<Marker>(g, templateId, templateType);
@@ -1760,9 +1936,9 @@ export default class GraphEditor extends HTMLElement {
                 const g = element as Selection<SVGGElement, TextComponent, any, unknown>;
                 if (dynTemplate != null) {
                     try {
-                        dynTemplate.renderInitialTemplate(g, this, {parent: parent});
+                        dynTemplate.renderInitialTemplate(g, this, { parent: parent });
                     } catch (error) {
-                        console.error('An error occured while rendering the dynamic text component template!', {parent: parent}, error);
+                        console.error('An error occured while rendering the dynamic text component template!', { parent: parent }, error);
                     }
                 } else {
                     console.error(`No template found for textcomponent! (templateID: ${templateId})`);
@@ -1772,7 +1948,7 @@ export default class GraphEditor extends HTMLElement {
             }
         } else {
             // static templates
-            const g = element as Selection<SVGGElement, Node|Marker|LinkHandle, any, unknown>;
+            const g = element as Selection<SVGGElement, Node | Marker | LinkHandle, any, unknown>;
             this.updateStaticContentTemplate(g, templateId, templateType);
         }
         // set template id used by the element to new id
@@ -1866,7 +2042,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param nodeId the id of the node to select
      */
-    private getSingleNodeSelection(nodeId: string|number): Selection<SVGGElement, Node, any, unknown> {
+    private getSingleNodeSelection(nodeId: string | number): Selection<SVGGElement, Node, any, unknown> {
         const node = this.objectCache.getNode(nodeId);
         if (node != null) {
             return this.nodesGroup.select<SVGGElement>(`g.node#node-${nodeId}`).datum(node);
@@ -1934,7 +2110,7 @@ export default class GraphEditor extends HTMLElement {
                         const dynTemplate = self.dynamicTemplateRegistry.getDynamicTemplate<DynamicMarkerTemplate>(templateId);
                         if (dynTemplate != null) {
                             try {
-                                dynTemplate.updateTemplate(linkHandleG, self, {parent: node});
+                                dynTemplate.updateTemplate(linkHandleG, self, { parent: node });
                             } catch (error) {
                                 console.error(`An error occured while updating the dynamic link handle template in node ${node.id}!`, error);
                             }
@@ -1944,7 +2120,7 @@ export default class GraphEditor extends HTMLElement {
                 .attr('transform', (d) => {
                     const x = d.x != null ? d.x : 0;
                     const y = d.y != null ? d.y : 0;
-                    const angle = self.calculateRotationTransformationAngle(d, d.normal ?? {dx: 0, dy: 0});
+                    const angle = self.calculateRotationTransformationAngle(d, d.normal ?? { dx: 0, dy: 0 });
                     if (angle !== 0) {
                         return `translate(${x},${y})rotate(${angle})`;
                     }
@@ -1952,32 +2128,31 @@ export default class GraphEditor extends HTMLElement {
                 });
 
             // allow edge drag from link handles
-            if (self.isInteractive) {
-                handleSelection.call(
-                    drag<SVGGElement, LinkHandle, {edge: DraggedEdge; capturingGroup?: string}>()
-                        .subject((event) => {
-                            const groupCapturingEdge = self.groupingManager.getGroupCapturingOutgoingEdge(node);
-                            if (groupCapturingEdge != null && groupCapturingEdge !== node.id.toString()) {
-                                const groupNode = self.getNode(groupCapturingEdge);
-                                if (groupNode != null) {
-                                    return {edge: self.createDraggedEdge(event as any, groupNode), capturingGroup: groupCapturingEdge};
-                                }
+            handleSelection.call(
+                drag<SVGGElement, LinkHandle, { edge: DraggedEdge; capturingGroup?: string }>()
+                    .subject((event) => {
+                        if (self._edgeDragInteraction === 'none') {
+                            return; // edge dragging is disabled
+                        }
+                        const groupCapturingEdge = self.groupingManager.getGroupCapturingOutgoingEdge(node);
+                        if (groupCapturingEdge != null && groupCapturingEdge !== node.id.toString()) {
+                            const groupNode = self.getNode(groupCapturingEdge);
+                            if (groupNode != null) {
+                                return { edge: self.createDraggedEdge(event as any, groupNode), capturingGroup: groupCapturingEdge };
                             }
-                            return {edge: self.createDraggedEdge(event as any, node), capturingGroup: node.id.toString()};
-                        })
-                        .container(() => self.svg.select('g.zoom-group').select<SVGGElement>('g.edges').node())
-                        .on('drag', (event) => {
-                            const subject: {edge: DraggedEdge; capturingGroup?: string} = (event as any).subject;
-                            self.updateDraggedEdge(event as any, subject.edge, subject.capturingGroup);
-                            self.updateDraggedEdgeGroups();
-                        })
-                        .on('end', (event) => {
-                            self.dropDraggedEdge(event as any, (event as any).subject.edge, false);
-                        })
-                );
-            } else {
-                handleSelection.on('.drag', null);
-            }
+                        }
+                        return { edge: self.createDraggedEdge(event as any, node), capturingGroup: node.id.toString() };
+                    })
+                    .container(() => self.svg.select('g.zoom-group').select<SVGGElement>('g.edges').node())
+                    .on('drag', (event) => {
+                        const subject: { edge: DraggedEdge; capturingGroup?: string } = (event as any).subject;
+                        self.updateDraggedEdge(event as any, subject.edge, subject.capturingGroup);
+                        self.updateDraggedEdgeGroups();
+                    })
+                    .on('end', (event) => {
+                        self.dropDraggedEdge(event as any, (event as any).subject.edge, false);
+                    })
+            );
         });
 
         nodeSelection
@@ -1986,7 +2161,7 @@ export default class GraphEditor extends HTMLElement {
             .call(this.updateNodeText.bind(this))
             .call(this.updateDynamicProperties.bind(this))
             .call(this.updateNodeDropAreas.bind(this))
-            .each(function(d) {
+            .each(function (d) {
                 self.objectCache.setNodeBBox(d.id, this.getBBox());
             });
     }
@@ -1998,11 +2173,11 @@ export default class GraphEditor extends HTMLElement {
      */
     private updateNodeDropAreas(nodeSelection: Selection<SVGGElement, Node, any, unknown>) {
         const self = this;
-        nodeSelection.each(function(node) {
+        nodeSelection.each(function (node) {
             const dropZones = new Map<string, NodeDropZone>();
             select(this)
                 .selectAll<SVGGraphicsElement, NodeDropZone>('[data-node-drop-zone]')
-                .datum(function() {
+                .datum(function () {
                     const dropZoneSelection = select(this);
                     const id = dropZoneSelection.attr('data-node-drop-zone');
                     const bbox = this.getBBox();
@@ -2036,7 +2211,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param nodeSelection d3 selection of nodes to update with bound data
      */
-    private updateNodeText(nodeSelection: Selection<SVGGElement, Node, any, unknown>, force: boolean= false) {
+    private updateNodeText(nodeSelection: Selection<SVGGElement, Node, any, unknown>, force: boolean = false) {
         const self = this;
         nodeSelection.each(function (d) {
             const singleNodeSelection = select(this);
@@ -2060,7 +2235,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param groupSelection d3 selection of nodes or edges to update with bound data
      */
-    private updateDynamicProperties(groupSelection: Selection<SVGGElement, Node|Edge, any, unknown>) {
+    private updateDynamicProperties(groupSelection: Selection<SVGGElement, Node | Edge, any, unknown>) {
         const self = this;
         const updatableAttributes = ['fill', 'stroke'];
         groupSelection.each(function (d) {
@@ -2117,7 +2292,7 @@ export default class GraphEditor extends HTMLElement {
                     result = obj[attr];
                 }
             }
-        } catch (error) { // TODO at debug output
+        } catch (error) { // TODO add debug output
             return null;
         }
         return result;
@@ -2306,52 +2481,51 @@ export default class GraphEditor extends HTMLElement {
         this.updateEdgeText(edgeGroupSelection, d);
         this.updateDynamicProperties(edgeGroupSelection);
 
-        if (this.isInteractive) {
-            edgeDragHandles.call(
-                drag<SVGGElement, EdgeDragHandle, {edge: DraggedEdge; capturingGroup?: string; isReversedEdge: boolean}>()
-                    .subject((e, h) => {
-                        const event = e as unknown as Event;
-                        const handle = h as unknown as EdgeDragHandle;
-                        const edge = d;
-                        let sourceNode: Node;
-                        if ((handle).isReverseHandle ?? false) {
-                            // a reverse handle flips the edge direction
-                            sourceNode = this.getNode(edge.target);
-                        } else {
-                            sourceNode = this.getNode(edge.source);
+        edgeDragHandles.call(
+            drag<SVGGElement, EdgeDragHandle, { edge: DraggedEdge; capturingGroup?: string; isReversedEdge: boolean }>()
+                .subject((e, h) => {
+                    if (this._edgeDragInteraction === 'none') {
+                        return; // edge dragging is disabled
+                    }
+                    const event = e as unknown as Event;
+                    const handle = h as unknown as EdgeDragHandle;
+                    const edge = d;
+                    let sourceNode: Node;
+                    if ((handle).isReverseHandle ?? false) {
+                        // a reverse handle flips the edge direction
+                        sourceNode = this.getNode(edge.target);
+                    } else {
+                        sourceNode = this.getNode(edge.source);
+                    }
+                    const groupCapturingEdge = this.groupingManager.getGroupCapturingOutgoingEdge(sourceNode);
+                    if (groupCapturingEdge != null && groupCapturingEdge !== sourceNode.id.toString()) {
+                        const groupNode = this.getNode(groupCapturingEdge);
+                        if (groupNode != null) {
+                            const newEdge = this.createDraggedEdgeFromExistingEdge(event, edge);
+                            newEdge.source = groupCapturingEdge;
+                            return {
+                                edge: newEdge,
+                                capturingGroup: groupCapturingEdge,
+                                isReversedEdge: handle.isReverseHandle ?? false,
+                            };
                         }
-                        const groupCapturingEdge = this.groupingManager.getGroupCapturingOutgoingEdge(sourceNode);
-                        if (groupCapturingEdge != null && groupCapturingEdge !== sourceNode.id.toString()) {
-                            const groupNode = this.getNode(groupCapturingEdge);
-                            if (groupNode != null) {
-                                const newEdge = this.createDraggedEdgeFromExistingEdge(event, edge);
-                                newEdge.source = groupCapturingEdge;
-                                return {
-                                    edge: newEdge,
-                                    capturingGroup: groupCapturingEdge,
-                                    isReversedEdge: handle.isReverseHandle ?? false,
-                                };
-                            }
-                        }
-                        return {
-                            edge: this.createDraggedEdgeFromExistingEdge(event, edge, handle.isReverseHandle ?? false),
-                            capturingGroup: sourceNode.id.toString(),
-                            isReversedEdge: handle.isReverseHandle ?? false,
-                        };
-                    })
-                    .container(() => this.edgesGroup.node() as any)
-                    .on('start', () => this.completeRender(false, EventSource.USER_INTERACTION))
-                    .on('drag', (event) => {
-                        this.updateDraggedEdge(event as any, (event as any).subject.edge, (event as any).subject.capturingGroup);
-                        this.updateDraggedEdgeGroups();
-                    })
-                    .on('end', (event) => {
-                        this.dropDraggedEdge(event as any, (event as any).subject.edge, (event as any).subject.isReversedEdge);
-                    })
-            );
-        } else {
-            edgeGroupSelection.select('g.link-handle').on('.drag', null);
-        }
+                    }
+                    return {
+                        edge: this.createDraggedEdgeFromExistingEdge(event, edge, handle.isReverseHandle ?? false),
+                        capturingGroup: sourceNode.id.toString(),
+                        isReversedEdge: handle.isReverseHandle ?? false,
+                    };
+                })
+                .container(() => this.edgesGroup.node() as any)
+                .on('start', () => this.completeRender(false, EventSource.USER_INTERACTION))
+                .on('drag', (event) => {
+                    this.updateDraggedEdge(event as any, (event as any).subject.edge, (event as any).subject.capturingGroup);
+                    this.updateDraggedEdgeGroups();
+                })
+                .on('end', (event) => {
+                    this.dropDraggedEdge(event as any, (event as any).subject.edge, (event as any).subject.isReversedEdge);
+                })
+        );
     }
 
     /**
@@ -2361,19 +2535,19 @@ export default class GraphEditor extends HTMLElement {
      * @param d edge datum
      * @param force force text to re-wrap
      */
-    private updateEdgeText(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, d: Edge, force: boolean= false) {
+    private updateEdgeText(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, d: Edge, force: boolean = false) {
         const self = this;
         edgeGroupSelection.each(function (edge) {
             const textSelection = select(this).selectAll<SVGGElement, TextComponent>('g.text-component')
                 .data(edge.texts != null ? edge.texts : [])
                 .join(enter => enter.append('g').classed('text-component', true))
-                .each(function(textComponent) {
+                .each(function (textComponent) {
                     const g: Selection<SVGGElement, TextComponent, any, unknown> = select(this).datum<TextComponent>(textComponent);
                     const templateId = textComponent.template ?? 'default-textcomponent';
                     self.updateContentTemplate<TextComponent>(g, templateId, 'textcomponent', true, edge);
                     const dynTemplate = self.dynamicTemplateRegistry.getDynamicTemplate<DynamicTextComponentTemplate>(templateId);
                     try {
-                        dynTemplate?.updateTemplate(g, self, {parent: edge});
+                        dynTemplate?.updateTemplate(g, self, { parent: edge });
                     } catch (error) {
                         console.error(`An error occured updating the text component in edge ${edgeId(edge)} before text wrapping`, textComponent, error);
                     }
@@ -2398,39 +2572,41 @@ export default class GraphEditor extends HTMLElement {
                     newText = newText.toString();
                     wrapText(this as SVGTextElement, newText, force);
                 });
-            textSelection.each(function(textComponent) {
+            textSelection.each(function (textComponent) {
                 const g: Selection<SVGGElement, TextComponent, any, unknown> = select(this).datum<TextComponent>(textComponent);
                 const templateId = textComponent.template ?? 'default-textcomponent';
                 const dynTemplate = self.dynamicTemplateRegistry.getDynamicTemplate<DynamicTextComponentTemplate>(templateId);
                 try {
-                    dynTemplate?.updateAfterTextwrapping(g, self, {parent: edge});
+                    dynTemplate?.updateAfterTextwrapping(g, self, { parent: edge });
                 } catch (error) {
                     console.error(`An error occured updating the text component in edge ${edgeId(edge)} after text wrapping`, textComponent, error);
                 }
             });
-            if (self.isInteractive) {
-                const path = edgeGroupSelection.select<SVGPathElement>('path.edge');
-                textSelection.call(drag()
-                    .on('start', (event, text) => {
-                        self.onEdgeTextDrag('start', text as unknown as TextComponent, edge, EventSource.USER_INTERACTION);
-                    })
-                    .on('drag', ((event, text: TextComponent) => {
-                        const length = path.node().getTotalLength();
-                        const positionOnLine = normalizePositionOnLine(text.positionOnLine);
-                        const absolutePositionOnLine = self.calculateAbsolutePositionOnLine(length, positionOnLine, text.absolutePositionOnLine);
-                        const referencePoint = path.node().getPointAtLength(absolutePositionOnLine);
-                        text.offsetX = event.x - referencePoint.x;
-                        text.offsetY = event.y - referencePoint.y;
-                        self.onEdgeTextPositionChange(text, edge);
-                        self.updateEdgeTextPositions(edgeGroupSelection, edge);
-                    }) as any) // FIXME: remove type hack when types are up to date
-                    .on('end', ((event, text: TextComponent) => {
-                        self.onEdgeTextDrag('end', text, edge, EventSource.USER_INTERACTION);
-                    }) as any) // FIXME: remove type hack when types are up to date
-                );
-            } else {
-                textSelection.on('drag', null);
-            }
+            const path = edgeGroupSelection.select<SVGPathElement>('path.edge');
+            textSelection.call(drag()
+                .subject((event, text) => {
+                    if (!((text as unknown as TextComponent).draggable ?? true)) {
+                        return; // text component is not draggable
+                    }
+                    return text;
+                })
+                .on('start', (event, text) => {
+                    self.onEdgeTextDrag('start', text as unknown as TextComponent, edge, EventSource.USER_INTERACTION);
+                })
+                .on('drag', ((event, text: TextComponent) => {
+                    const length = path.node().getTotalLength();
+                    const positionOnLine = normalizePositionOnLine(text.positionOnLine);
+                    const absolutePositionOnLine = self.calculateAbsolutePositionOnLine(length, positionOnLine, text.absolutePositionOnLine);
+                    const referencePoint = path.node().getPointAtLength(absolutePositionOnLine);
+                    text.offsetX = event.x - referencePoint.x;
+                    text.offsetY = event.y - referencePoint.y;
+                    self.onEdgeTextPositionChange(text, edge);
+                    self.updateEdgeTextPositions(edgeGroupSelection, edge);
+                }) as any) // FIXME: remove type hack when types are up to date
+                .on('end', ((event, text: TextComponent) => {
+                    self.onEdgeTextDrag('end', text, edge, EventSource.USER_INTERACTION);
+                }) as any) // FIXME: remove type hack when types are up to date
+            );
         });
     }
 
@@ -2441,9 +2617,9 @@ export default class GraphEditor extends HTMLElement {
      * @param marker the selection of a single marker
      * @param strokeWidth the current stroke width
      */
-    private calculateLineAttachementVector(startingAngle: number|RotationVector, markerSelection: Selection<SVGGElement, Marker, any, unknown>, strokeWidth: number) {
+    private calculateLineAttachementVector(startingAngle: number | RotationVector, markerSelection: Selection<SVGGElement, Marker, any, unknown>, strokeWidth: number) {
         if (markerSelection.empty()) {
-            return {dx: 0, dy: 0};
+            return { dx: 0, dy: 0 };
         }
         const marker = markerSelection.datum();
         let attachementPointInfo: LineAttachementInfo;
@@ -2472,7 +2648,7 @@ export default class GraphEditor extends HTMLElement {
                 return attachementPointInfo.getRotationVector(normalAngle, scale);
             }
         }
-        return {dx: 0, dy: 0};
+        return { dx: 0, dy: 0 };
     }
 
     /**
@@ -2591,12 +2767,12 @@ export default class GraphEditor extends HTMLElement {
                 }
 
                 // calculate path
-                const points: { x: number; y: number; [prop: string]: any }[] = [];
+                const points: { x: number; y: number;[prop: string]: any }[] = [];
 
                 // Calculate line attachement point for startMarker
                 let startAttachementPointVector: RotationVector = { dx: 0, dy: 0 };
                 if (d.markerStart != null) {
-                    const markerSelection: Selection<SVGGElement, Marker, any, unknown> = select(this.parentNode)
+                    const markerSelection: Selection<SVGGElement, Marker, any, unknown> = select(this.parentNode as any)
                         .select<SVGGElement>('g.marker.marker-start')
                         .datum(d.markerStart);
                     startAttachementPointVector = self.calculateLineAttachementVector(sourceHandleNormal, markerSelection, strokeWidth);
@@ -2614,7 +2790,7 @@ export default class GraphEditor extends HTMLElement {
                 // Calculate line attachement point for endMarker
                 let endAttachementPointVector: RotationVector = { dx: 0, dy: 0 };
                 if (d.markerEnd != null) {
-                    const markerSelection: Selection<SVGGElement, Marker, any, unknown> = select(this.parentNode)
+                    const markerSelection: Selection<SVGGElement, Marker, any, unknown> = select(this.parentNode as any)
                         .select<SVGGElement>('g.marker.marker-end')
                         .datum(d.markerEnd);
                     endAttachementPointVector = self.calculateLineAttachementVector(targetHandleNormal, markerSelection, strokeWidth);
@@ -2663,7 +2839,7 @@ export default class GraphEditor extends HTMLElement {
                     const dynTemplate = self.dynamicTemplateRegistry.getDynamicTemplate<DynamicMarkerTemplate>(templateId);
                     if (dynTemplate != null) {
                         try {
-                            dynTemplate.updateTemplate(g, self, {parent: edge});
+                            dynTemplate.updateTemplate(g, self, { parent: edge });
                         } catch (error) {
                             console.error(`An error occured while updating the dynamic marker template in edge ${edgeId(edge)}!`, error);
                         }
@@ -2801,7 +2977,7 @@ export default class GraphEditor extends HTMLElement {
      * @param normal the normal vector used for relative rotation
      * @param ignorePathDirectionForRotation iff true the normal rotation is limited to half a circle (useful for text components)
      */
-    private calculateRotationTransformationAngle(rotationData: RotationData, normal: RotationVector, ignorePathDirectionForRotation: boolean= false): number {
+    private calculateRotationTransformationAngle(rotationData: RotationData, normal: RotationVector, ignorePathDirectionForRotation: boolean = false): number {
         let angle = rotationData.absoluteRotation ?? 0;
         if (rotationData.relativeRotation != null && rotationData.absoluteRotation == null) {
             const normalAngle = calculateAngle(normal);
@@ -2870,7 +3046,7 @@ export default class GraphEditor extends HTMLElement {
             markerStartingNormal = handle?.normal;
         }
         if (markerClass === 'marker-end' && markerStartingNormal != null) {
-            markerStartingNormal = { dx: -markerStartingNormal.dx, dy: -markerStartingNormal.dy};
+            markerStartingNormal = { dx: -markerStartingNormal.dx, dy: -markerStartingNormal.dy };
         }
         if (markerStartingNormal == null) {
             // no link handle for marker present, calculate starting angle from path
@@ -2882,18 +3058,10 @@ export default class GraphEditor extends HTMLElement {
             x: pathPointA.x + (positionOnLine === 0 ? attachementPointVector.dx : -attachementPointVector.dx),
             y: pathPointA.y + (positionOnLine === 0 ? attachementPointVector.dy : -attachementPointVector.dy),
         };
-        // account for deprecated attributes:
-        if (marker.rotate != null) {
-            console.warn('The marker.rotate attribute is deprecated!');
-            if (marker.rotate.normal != null) {
-                marker.absoluteRotation = calculateAngle(marker.rotate.normal);
-            }
-            marker.relativeRotation = marker.rotate.relativeAngle ?? null;
-        }
         let markerTemplateStartingNormal: RotationVector;
         // flip normal for markerStart
         if (markerClass === 'marker-start' && markerStartingNormal != null) {
-            markerTemplateStartingNormal = { dx: -markerStartingNormal.dx, dy: -markerStartingNormal.dy};
+            markerTemplateStartingNormal = { dx: -markerStartingNormal.dx, dy: -markerStartingNormal.dy };
         } else {
             markerTemplateStartingNormal = markerStartingNormal;
         }
@@ -2921,14 +3089,6 @@ export default class GraphEditor extends HTMLElement {
 
             const point = path.node().getPointAtLength(absolutePositionOnLine);
             const normal = self.calculatePathNormalAtPosition(path.node(), absolutePositionOnLine, point, length);
-            // account for deprecated attributes:
-            if (d.rotate != null) {
-                console.warn('The marker.rotate attribute is deprecated!');
-                if (d.rotate.normal != null) {
-                    d.absoluteRotation = calculateAngle(d.rotate.normal);
-                }
-                d.relativeRotation = d.rotate.relativeAngle ?? null;
-            }
             const transform = self.calculatePathObjectTransformation(point, d, strokeWidth, normal);
 
             marker.attr('transform', transform);
@@ -2965,7 +3125,7 @@ export default class GraphEditor extends HTMLElement {
         const minY = Math.min(a.y, b.y, c.y, d.y);
         const maxY = Math.max(a.y, b.y, c.y, d.y);
 
-        return {x: minX, y: minY, width: maxX - minX, height: maxY - minY};
+        return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
     }
 
     /**
@@ -2983,8 +3143,8 @@ export default class GraphEditor extends HTMLElement {
             .data<TextComponent>(d.texts != null ? d.texts : []);
 
         // calculate the node bounding boxes for collision detection
-        let sourceBB = {x: 0, y: 0, width: 0, height: 0};
-        let targetBB = {x: 0, y: 0, width: 0, height: 0};
+        let sourceBB = { x: 0, y: 0, width: 0, height: 0 };
+        let targetBB = { x: 0, y: 0, width: 0, height: 0 };
         try {
             const sourceNode = this.objectCache.getNode(d.source);
             const targetNode = this.objectCache.getNode(d.target);
@@ -3200,7 +3360,7 @@ export default class GraphEditor extends HTMLElement {
      * @param reverseEdgeDirection reverse the direction of the returned edge
      */
     // eslint-disable-next-line complexity
-    private createDraggedEdgeFromExistingEdge(event: Event, edge: Edge, reverseEdgeDirection: boolean= false): DraggedEdge {
+    private createDraggedEdgeFromExistingEdge(event: Event, edge: Edge, reverseEdgeDirection: boolean = false): DraggedEdge {
         const validTargets = new Set<string>();
         this._nodes.forEach(node => validTargets.add(node.id.toString()));
         const source = reverseEdgeDirection ? edge.target : edge.source;
@@ -3387,7 +3547,7 @@ export default class GraphEditor extends HTMLElement {
             delete finalEdge.id;
             if (this.onDropDraggedEdge != null) {
                 finalEdge = this.onDropDraggedEdge(edge, this.objectCache.getNode(edge.source),
-                                              this.objectCache.getNode(edge.target));
+                    this.objectCache.getNode(edge.target));
             }
             if (edge.createdFrom != null && edge.target === existingTarget) {
                 // edge was dropped on the node that was the original target for the edge
@@ -3399,7 +3559,7 @@ export default class GraphEditor extends HTMLElement {
                 }
             }
         } else {
-            this.onEdgeDrop(edge, {x: (event as any).x, y: (event as any).y});
+            this.onEdgeDrop(edge, { x: (event as any).x, y: (event as any).y });
         }
         if (updateEdgeCache) {
             this.objectCache.updateEdgeCache(this._edges);
@@ -3523,7 +3683,7 @@ export default class GraphEditor extends HTMLElement {
      * @param edge The edge the text component belongs to.
      * @param eventSource the event source
      */
-    private onEdgeTextDrag(eventType: 'start'|'end', textComponent: TextComponent, edge: Edge, eventSource) {
+    private onEdgeTextDrag(eventType: 'start' | 'end', textComponent: TextComponent, edge: Edge, eventSource) {
         const ev = new CustomEvent(`edgetextdrag${eventType}`, {
             bubbles: true,
             composed: true,
@@ -3602,7 +3762,7 @@ export default class GraphEditor extends HTMLElement {
      * @param movementInfo the node movement information
      * @param eventSource the event source
      */
-    private onNodeDrag(eventType: 'start'|'end', movementInfo: NodeMovementInformation, eventSource) {
+    private onNodeDrag(eventType: 'start' | 'end', movementInfo: NodeMovementInformation, eventSource) {
         const ev = new CustomEvent(`nodedrag${eventType}`, {
             bubbles: true,
             composed: true,
@@ -3622,7 +3782,7 @@ export default class GraphEditor extends HTMLElement {
      * @param nodes nodes that changed
      * @param eventSource the source of the selection event (default: EventSource.USER_INTERACTION)
      */
-    private onNodePositionChange(node: Node, eventSource: EventSource= EventSource.USER_INTERACTION) {
+    private onNodePositionChange(node: Node, eventSource: EventSource = EventSource.USER_INTERACTION) {
         const ev = new CustomEvent('nodepositionchange', {
             bubbles: true,
             composed: true,
@@ -3640,10 +3800,10 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param nodeDatum Corresponding datum of node
      */
-    private onNodeEnter(nodeDatum: Node) {
+    private onNodeEnter(event: Event, nodeDatum: Node) {
         this.hovered.add(nodeDatum.id);
-        if (this._mode === 'link' && this.interactionStateData.source != null) {
-            this.interactionStateData.target = nodeDatum.id;
+        if (this._selectedLinkSource != null && this._nodeClickInteraction === 'link') {
+            this._selectedLinkTarget = nodeDatum.id;
         }
         this.updateHighlights();
         const ev = new CustomEvent('nodeenter', {
@@ -3664,10 +3824,10 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param nodeDatum Corresponding datum of node
      */
-    private onNodeLeave(nodeDatum: Node) {
+    private onNodeLeave(event: Event, nodeDatum: Node) {
         this.hovered.delete(nodeDatum.id);
-        if (this._mode === 'link' && this.interactionStateData.target === nodeDatum.id) {
-            this.interactionStateData.target = null;
+        if (this._selectedLinkSource === nodeDatum.id && this._nodeClickInteraction === 'link') {
+            this._selectedLinkTarget = null;
         }
         this.updateHighlights();
         const ev = new CustomEvent('nodeleave', {
@@ -3717,21 +3877,28 @@ export default class GraphEditor extends HTMLElement {
         if (!this.dispatchEvent(ev)) {
             return; // prevent default / event cancelled
         }
-        if (this._mode === 'link') {
+        if (this._nodeClickInteraction === 'none') {
+            return; // nothing to do
+        }
+        if (this._nodeClickInteraction === 'link') {
             return this.onNodeSelectLink(nodeDatum);
         }
-        if (this._mode !== 'select') {
-            this.setMode('select');
-            this.interactionStateData.selected.add(nodeDatum.id.toString());
-            this.onSelectionChangeInternal();
-        } else if (this.interactionStateData.selected.has(nodeDatum.id.toString())) {
-            this.interactionStateData.selected.delete(nodeDatum.id.toString());
-            this.onSelectionChangeInternal();
-            if (this.interactionStateData.selected.size <= 0) {
-                this.setMode(this.interactionStateData.fromMode);
+        if (this._nodeClickInteraction === 'select') {
+            if (this._selectionMode === 'none') {
+                return; // selections are disabled
             }
-        } else {
-            this.interactionStateData.selected.add(nodeDatum.id.toString());
+            const nodeId = nodeDatum.id.toString();
+            const isSelected = this._selectedNodes.has(nodeId);
+            if (this.selectionMode === 'single') {
+                // make sure all other nodes are deselected
+                this._selectedNodes.clear();
+            }
+            if (isSelected) {
+                // remove an already selected node (click toggles selection)
+                this._selectedNodes.delete(nodeId);
+            } else {
+                this._selectedNodes.add(nodeId);
+            }
             this.onSelectionChangeInternal();
         }
         this.updateHighlights();
@@ -3744,17 +3911,13 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param eventSource the source of the selection event (default: EventSource.USER_INTERACTION)
      */
-    private onSelectionChangeInternal(eventSource= EventSource.USER_INTERACTION) {
-        let selected: Set<string> = new Set();
-        if (this.mode === 'select') {
-            selected = this.interactionStateData.selected;
-        }
+    private onSelectionChangeInternal(eventSource = EventSource.USER_INTERACTION) {
         const ev = new CustomEvent('selection', {
             bubbles: true,
             composed: true,
             detail: {
                 eventSource: eventSource,
-                selection: selected,
+                selection: this._selectedNodes,
             },
         });
         this.dispatchEvent(ev);
@@ -3766,41 +3929,50 @@ export default class GraphEditor extends HTMLElement {
      * @param nodeDatum Corresponding datum of node
      */
     private onNodeSelectLink(nodeDatum: Node) {
-        if (this.interactionStateData.source == null) {
-            this.interactionStateData.source = nodeDatum.id;
+        if (this._selectedLinkSource == null) {
+            this._selectedLinkSource = nodeDatum.id;
             return;
         }
-        if (nodeDatum.id === this.interactionStateData.source) {
-            // doesn't handle edges to self
-            this.interactionStateData.source = null;
-            this.interactionStateData.target = null;
+        if (nodeDatum.id === this._selectedLinkSource) {
+            // don't handle edges to self
+            this._selectedLinkSource = null;
+            this._selectedLinkSource = null;
             return;
         }
-        this.interactionStateData.target = nodeDatum.id;
-        // eslint-disable-next-line arrow-body-style
-        const oldEdge = this._edges.findIndex((e) => {
-            return (e.source === this.interactionStateData.source) &&
-                (e.target === this.interactionStateData.target);
+        this._selectedLinkTarget = nodeDatum.id;
+        let oldEdge: Edge = null;
+        this.objectCache.getEdgesBySource(this._selectedLinkSource).forEach((e) => {
+            // only need to check target as source is guaranteed
+            if (e.target.toString() === this._selectedLinkTarget.toString()) {
+                // found an existing edge
+                oldEdge = e;
+            }
         });
-        if (oldEdge !== -1) {
-            if (!this.onEdgeRemove(this._edges[oldEdge], EventSource.USER_INTERACTION)) {
+        if (oldEdge != null) {
+            // remove existing edge
+            if (!this.onEdgeRemove(oldEdge, EventSource.USER_INTERACTION)) {
                 return; // event cancelled
             }
-            this._edges.splice(oldEdge, 1);
+            const index = this._edges.findIndex(e => e === oldEdge);
+            if (index >= 0) {
+                this._edges.splice(index, 1);
+            }
+            this.objectCache.removeEdgeFromCache(oldEdge);
         } else {
+            // create new edge
             const newEdge: Edge = {
-                source: this.interactionStateData.source,
-                target: this.interactionStateData.target,
+                source: this._selectedLinkSource,
+                target: this._selectedLinkTarget,
             };
             if (!this.onEdgeCreate(newEdge, EventSource.USER_INTERACTION)) {
                 return; // event cancelled
             }
             this._edges.push(newEdge);
+            this.objectCache.addEdgeToCache(newEdge);
         }
-        this.objectCache.updateEdgeCache(this._edges);
         this.completeRender(false, EventSource.USER_INTERACTION);
-        this.interactionStateData.source = null;
-        this.interactionStateData.target = null;
+        this._selectedLinkSource = null;
+        this._selectedLinkTarget = null;
     }
 
     /**
@@ -3814,18 +3986,11 @@ export default class GraphEditor extends HTMLElement {
         nodeSelection
             .classed('hovered', (d) => this.hovered.has(d.id))
             .classed('selected', (d) => {
-                if (this._mode === 'select') {
-                    const selected = this.interactionStateData.selected;
-                    if (selected != null) {
-                        return selected.has(d.id.toString());
-                    }
+                if (this._selectedNodes?.has(d.id.toString())) {
+                    return true; // node is selected
                 }
-                if (this._mode === 'link') {
-                    if (this.interactionStateData.source != null) {
-                        if (d.id === this.interactionStateData.source) {
-                            return true;
-                        }
-                    }
+                if (this._selectedLinkSource === d.id || this._selectedLinkTarget === d.id) {
+                    return true; // node is part of a linking interaction
                 }
                 return false;
             });
@@ -3843,9 +4008,10 @@ export default class GraphEditor extends HTMLElement {
 
         let nodes: Set<number | string> = new Set();
 
-        if (this.mode === 'link') {
-            if (this.interactionStateData.source != null) {
-                nodes.add(this.interactionStateData.source);
+        if (this._selectedLinkSource != null) {
+            nodes.add(this._selectedLinkSource);
+            if (this._selectedLinkTarget != null) {
+                nodes.add(this._selectedLinkTarget);
             }
         } else {
             nodes = this.hovered;
@@ -3880,13 +4046,49 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
+     * Create and dispatch a 'brushdrag' event.
+     */
+    private onBrushMove(event: Event, rect: Rect) {
+        const ev = new CustomEvent('brushdrag', {
+            bubbles: true,
+            composed: true,
+            cancelable: false,
+            detail: {
+                eventSource: EventSource.USER_INTERACTION,
+                sourceEvent: event,
+                brushArea: rect,
+                brushMode: this._backgroundDragInteraction,
+            },
+        });
+        this.dispatchEvent(ev);
+    }
+
+    /**
+     * Create and dispatch a 'brush' event.
+     */
+    private onBrushRelease(event: Event, rect: Rect) {
+        const ev = new CustomEvent('brush', {
+            bubbles: true,
+            composed: true,
+            cancelable: false,
+            detail: {
+                eventSource: EventSource.USER_INTERACTION,
+                sourceEvent: event,
+                brushArea: rect,
+                brushMode: this._backgroundDragInteraction,
+            },
+        });
+        this.dispatchEvent(ev);
+    }
+
+    /**
      * Create and dispatch a 'render' event.
      *
      * @param eventSource the event source to use for the event
      * @param type what type of render was performed
      * @param affectedNodes the nodes that got updated by this render (only for partial renders)
      */
-    private onRender(eventSource: EventSource, type: 'complete'|'text'|'classes'|'positions', affectedNodes?: Set<string>) {
+    private onRender(eventSource: EventSource, type: 'complete' | 'text' | 'classes' | 'positions', affectedNodes?: Set<string>) {
         const detail: any = {
             eventSource: eventSource,
             rendered: type,
