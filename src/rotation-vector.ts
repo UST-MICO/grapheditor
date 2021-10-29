@@ -50,6 +50,29 @@ export function calculateLength(vector: RotationVector): number {
 
 
 /**
+ * Calculate the rotation vector from rotation data and a normal vector.
+ *
+ * @param rotationData the rotation data object
+ * @param normal the normal vector used for relative rotation
+ * @param ignorePathDirectionForRotation iff true the normal rotation is limited to half a circle (useful for text components)
+ */
+export function calculateRotationTransformationAngle(rotationData: RotationData, normal: RotationVector, ignorePathDirectionForRotation: boolean = false): number {
+    let angle = rotationData.absoluteRotation ?? 0;
+    if (rotationData.relativeRotation != null && rotationData.absoluteRotation == null) {
+        const normalAngle = calculateAngle(normal);
+        angle += normalAngle;
+        if (ignorePathDirectionForRotation) {
+            if (normalAngle > 90 || normalAngle < -90) {
+                angle += 180;
+            }
+        }
+        angle += rotationData.relativeRotation;
+    }
+    return angle;
+}
+
+
+/**
  * Normalize an existing vector to length 1.
  *
  * @param vector vector to normalize

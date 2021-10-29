@@ -15,25 +15,27 @@
  * limitations under the License.
  */
 
-import { select, Selection } from 'd3-selection';
-import { zoom, zoomIdentity, zoomTransform, ZoomBehavior, ZoomTransform, D3ZoomEvent } from 'd3-zoom';
 import { D3DragEvent, drag } from 'd3-drag';
+import { select, Selection } from 'd3-selection';
 import { curveBasis } from 'd3-shape';
-
-import { Node, NodeMovementInformation } from './node';
-import { Edge, DraggedEdge, edgeId, Point, TextComponent, PathPositionRotationAndScale, normalizePositionOnLine, EdgeDragHandle, setDefaultEdgeDragHandles } from './edge';
-import { LinkHandle } from './link-handle';
-import { GraphObjectCache } from './object-cache';
-import { wrapText } from './textwrap';
-import { calculateAngle, normalizeVector, RotationVector, RotationData } from './rotation-vector';
-import { StaticTemplateRegistry, DynymicTemplateRegistry, EdgePathGeneratorRegistry } from './templating';
-import { Marker, LineAttachementInfo } from './marker';
-import { DynamicNodeTemplate, DynamicMarkerTemplate, DynamicTextComponentTemplate, DefaultTextComponentTemplate } from './dynamic-templates/dynamic-template';
-import { getNodeLinkHandles, applyUserLinkHandleCalculationCallback, calculateNearestHandles } from './link-handle-helper';
-import { SmoothedEdgePathGenerator, EdgePathGenerator } from './dynamic-templates/edge-path-generators';
-import { GroupingManager } from './grouping';
+import { D3ZoomEvent, zoom, ZoomBehavior, zoomIdentity, zoomTransform, ZoomTransform } from 'd3-zoom';
+import { NodeRenderer } from '.';
 import { NodeDropZone } from './drop-zone';
-import { Rect, copyTemplateSelectionIntoNode, removeAllChildNodes, squaredPointDistance } from './util';
+import { DefaultTextComponentTemplate, DynamicMarkerTemplate, DynamicTextComponentTemplate } from './dynamic-templates/dynamic-template';
+import { EdgePathGenerator, SmoothedEdgePathGenerator } from './dynamic-templates/edge-path-generators';
+import { DraggedEdge, Edge, EdgeDragHandle, edgeId, normalizePositionOnLine, PathPositionRotationAndScale, Point, setDefaultEdgeDragHandles, TextComponent } from './edge';
+import { GroupingManager } from './grouping';
+import { LinkHandle } from './link-handle';
+import { applyUserLinkHandleCalculationCallback, calculateNearestHandles, getNodeLinkHandles } from './link-handle-helper';
+import { LineAttachementInfo, Marker } from './marker';
+import { Node, NodeMovementInformation } from './node';
+import { GraphObjectCache } from './object-cache';
+import { ExtrasRenderer } from './render-helpers';
+import { calculateAngle, calculateRotationTransformationAngle, normalizeVector, RotationVector } from './rotation-vector';
+import { DynymicTemplateRegistry, EdgePathGeneratorRegistry, StaticTemplateRegistry } from './templating';
+import { wrapText } from './textwrap';
+import { Rect, recursiveAttributeGet, squaredPointDistance } from './util';
+
 
 const SHADOW_DOM_TEMPLATE = `
 <slot name="graph"></slot>
@@ -49,6 +51,14 @@ export enum EventSource {
     INTERNAL = 'INTERNAL',
     API = 'API',
     USER_INTERACTION = 'USER_INTERACTION',
+}
+
+export interface NodeDragBehaviour<T> {
+    subject: T;
+    container?: SVGElement;
+    onStart?: (event: D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown>>, subject: T, g: GraphEditor) => void;
+    onDrag?: (event: D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown>>, subject: T, g: GraphEditor) => void;
+    onEnd?: (event: D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown>>, subject: T, g: GraphEditor) => void;
 }
 
 
@@ -112,12 +122,16 @@ export default class GraphEditor extends HTMLElement {
     public edgePathGeneratorRegistry: EdgePathGeneratorRegistry;
     private defaultEdgePathGenerator: EdgePathGenerator;
 
+    /** Renderers that implement the actual rendering methods. */
+    public extrasRenderer: ExtrasRenderer;
+    public nodeRenderer: NodeRenderer;
+
     public groupingManager: GroupingManager;
 
     /**
      * The object cache responsible for fast access of nodes and edges.
      */
-    private objectCache: GraphObjectCache;
+    public objectCache: GraphObjectCache; // FIXME make this private again after refactoring works
 
 
     /** Private property to determine if the graph can be drawn. */
@@ -409,6 +423,9 @@ export default class GraphEditor extends HTMLElement {
         this.defaultEdgePathGenerator = new SmoothedEdgePathGenerator(curveBasis, true, 10);
         this.edgePathGeneratorRegistry.addEdgePathGenerator('default', this.defaultEdgePathGenerator);
 
+        // TODO make sure to dispose these circular references correctly
+        this.extrasRenderer = new ExtrasRenderer(this);
+        this.nodeRenderer = new NodeRenderer(this, this.objectCache);
         this.groupingManager = new GroupingManager(this);
 
         this.root = this.attachShadow({ mode: 'open' });
@@ -1351,97 +1368,7 @@ export default class GraphEditor extends HTMLElement {
         this.updateSize();
 
         // update nodes ////////////////////////////////////////////////////////
-        if (forceUpdateTemplates) {
-            this.nodesGroup.selectAll('g.node').remove();
-        }
-
-        const nodeSelection = this.nodesGroup
-            .selectAll<SVGGElement, Node>('g.node')
-            .data<Node>(this._nodes, (d: Node) => d.id.toString())
-            .join(
-                enter => enter.append('g')
-                    .classed('node', true)
-                    .attr('id', (d) => `node-${d.id}`)
-            )
-            .call(this.updateNodes.bind(this))
-            .call(this.updateNodePositions.bind(this))
-            .order()
-            .on('mouseover', (event, d) => { this.onNodeEnter.bind(this)(event, d); })
-            .on('mouseout', (event, d) => { this.onNodeLeave.bind(this)(event, d); })
-            .on('click', (event, d) => { this.onNodeClick.bind(this)(event, d); });
-
-        nodeSelection.call(
-            drag<SVGGElement, Node, NodeMovementInformation>()
-                .subject((event, node) => {
-                    if (this._nodeDragInteraction === 'none') {
-                        return; // no node dragging allowed!
-                    }
-                    if (this._nodeDragInteraction === 'link') {
-                        return; // FIXME add dragging new edges from a node as possible behaviour!
-                    }
-                    const movementInfo = this.getNodeMovementInformation(node as unknown as Node, event.x, event.y);
-                    if (movementInfo == null) {
-                        return; // move was cancelled by callback
-                    }
-                    const startTreeParent = this.groupingManager.getTreeParentOf(movementInfo.node.id);
-                    if (startTreeParent != null) {
-                        const behaviour = this.groupingManager.getGroupBehaviourOf(startTreeParent);
-                        if (behaviour.onNodeMoveStart != null) {
-                            const needRender = Boolean(
-                                behaviour.onNodeMoveStart(startTreeParent, movementInfo.node.id.toString(), this.objectCache.getNode(startTreeParent), movementInfo.node, this)
-                            );
-                            movementInfo.needsFullRender = needRender || movementInfo.needsFullRender;
-                        }
-                    }
-                    return movementInfo;
-                })
-                .on('start', (event) => {
-                    this.onNodeDrag('start', event.subject, EventSource.USER_INTERACTION)
-                })
-                .on('drag', (e) => {
-                    const event = e as unknown as D3DragEvent<SVGGElement, Node, NodeMovementInformation>;
-                    let x = event.x;
-                    let y = event.y;
-                    if (event.subject != null) {
-                        const movementInfo: NodeMovementInformation = event.subject;
-                        if (movementInfo.offset?.dx !== null) {
-                            x -= movementInfo.offset.dx;
-                        }
-                        if (movementInfo.offset?.dy !== null) {
-                            y -= movementInfo.offset.dy;
-                        }
-                        movementInfo.needsFullRender = movementInfo.needsFullRender ?? false;
-                        movementInfo.needsFullRender = this.tryToLeaveCurrentGroup(event.subject, x, y, EventSource.USER_INTERACTION, event as unknown as Event) || movementInfo.needsFullRender;
-                        movementInfo.needsFullRender = this.tryJoinNodeIntoGroup(event.subject, x, y, EventSource.USER_INTERACTION, event as unknown as Event) || movementInfo.needsFullRender;
-                        movementInfo.needsFullRender = this._moveNode(event.subject, event.x, event.y, EventSource.USER_INTERACTION) || movementInfo.needsFullRender;
-                        if (movementInfo.needsFullRender) {
-                            this.completeRender(false, EventSource.USER_INTERACTION);
-                        } else {
-                            this.updateGraphPositions(EventSource.USER_INTERACTION);
-                        }
-                        movementInfo.needsFullRender = false;
-                    }
-                })
-                .on('end', (event) => {
-                    const movementInfo: NodeMovementInformation = event.subject;
-                    const node = movementInfo.node;
-                    const endTreeParent = this.groupingManager.getTreeParentOf(node.id);
-                    if (endTreeParent != null) {
-                        const behaviour = this.groupingManager.getGroupBehaviourOf(endTreeParent);
-                        if (behaviour.onNodeMoveEnd != null) {
-                            behaviour.onNodeMoveEnd(endTreeParent, node.id.toString(), this.objectCache.getNode(endTreeParent), node, this);
-                        }
-                    }
-
-                    // rerender if needed
-                    if (movementInfo.needsFullRender) {
-                        this.completeRender(false, EventSource.USER_INTERACTION);
-                        movementInfo.needsFullRender = false;
-                    }
-
-                    this.onNodeDrag('end', event.subject, EventSource.USER_INTERACTION);
-                })
-        );
+        this.nodeRenderer.completeNodeGroupsRender(this.nodesGroup, this._nodes, forceUpdateTemplates);
 
         // update edges ////////////////////////////////////////////////////////
         if (forceUpdateTemplates) {
@@ -1516,52 +1443,6 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
-     * Get the movement information for moving a Node.
-     *
-     * The calculated movement information contains the actual node to move, the start offset and all affected nodes.
-     * The actual node to move may be a (indirect) parent of the given node.
-     * If the group that captured the movement of the given node has no node a dummy node is used instead to track the movement.
-     *
-     * This method calls onBeforeNodeMove with the node movement information.
-     *
-     * @param node the original node that is to be moved
-     * @param x the x coordinate from where the move should start (can be substituted by node.x)
-     * @param y the y coordinate from where the move should start (can be substituted by node.y)
-     */
-    private getNodeMovementInformation(node: Node, x: number, y: number): NodeMovementInformation {
-        const movementInfo: NodeMovementInformation = { node: node };
-        const groupId = this.groupingManager.getGroupCapturingMovementOfChild(node);
-        if (groupId != null && groupId !== node.id.toString()) {
-            const groupNode = this.objectCache.getNode(groupId);
-            if (groupNode == null) {
-                movementInfo.node = {
-                    id: groupId,
-                    x: x,
-                    y: y,
-                    type: 'dummy',
-                };
-            } else {
-                movementInfo.node = groupNode;
-            }
-        }
-        if (this.groupingManager.getGroupBehaviourOf(movementInfo.node.id)?.moveChildrenAlongGoup ?? false) {
-            movementInfo.children = this.groupingManager.getAllChildrenOf(movementInfo.node.id);
-        }
-        movementInfo.offset = {
-            dx: x - movementInfo.node.x,
-            dy: y - movementInfo.node.y,
-        };
-        if (this.onBeforeNodeMove != null) {
-            try {
-                return this.onBeforeNodeMove(movementInfo);
-            } catch (error) {
-                console.error('An error has occured in the onBeforeNodeMove callback.', node, movementInfo);
-            }
-        }
-        return movementInfo;
-    }
-
-    /**
      * Move a node to the coordinates (x,y).
      *
      * This method handles cases where a group captures the movement of a child node correctly.
@@ -1582,12 +1463,12 @@ export default class GraphEditor extends HTMLElement {
     // eslint-disable-next-line complexity
     public moveNode(nodeId: string | number, x: number, y: number, updatePositions: boolean = false): boolean {
         const node = this.objectCache.getNode(nodeId);
-        const nodeMovementInfo = this.getNodeMovementInformation(node, node.x, node.y);
+        const nodeMovementInfo = this.nodeRenderer.getNodeMovementInformation(node, node.x, node.y);
         if (nodeMovementInfo == null) {
             return; // move was cancelled by callback
         }
         nodeMovementInfo.needsFullRender = nodeMovementInfo.needsFullRender ?? false;
-        this.onNodeDrag('start', nodeMovementInfo, EventSource.API);
+        this.nodeRenderer.onNodeDrag('start', nodeMovementInfo, EventSource.API);
         const startTreeParent = this.groupingManager.getTreeParentOf(nodeMovementInfo.node.id);
         if (startTreeParent != null) {
             const behaviour = this.groupingManager.getGroupBehaviourOf(startTreeParent);
@@ -1598,10 +1479,10 @@ export default class GraphEditor extends HTMLElement {
                 nodeMovementInfo.needsFullRender = needRender || nodeMovementInfo.needsFullRender;
             }
         }
-        nodeMovementInfo.needsFullRender = this.tryToLeaveCurrentGroup(nodeMovementInfo, x, y, EventSource.API) || nodeMovementInfo.needsFullRender;
-        nodeMovementInfo.needsFullRender = this.tryJoinNodeIntoGroup(nodeMovementInfo, x, y, EventSource.API) || nodeMovementInfo.needsFullRender;
+        nodeMovementInfo.needsFullRender = this.nodeRenderer.tryToLeaveCurrentGroup(nodeMovementInfo, x, y, EventSource.API) || nodeMovementInfo.needsFullRender;
+        nodeMovementInfo.needsFullRender = this.nodeRenderer.tryJoinNodeIntoGroup(nodeMovementInfo, x, y, EventSource.API) || nodeMovementInfo.needsFullRender;
 
-        nodeMovementInfo.needsFullRender = this._moveNode(nodeMovementInfo, x, y, EventSource.API) || nodeMovementInfo.needsFullRender;
+        nodeMovementInfo.needsFullRender = this.nodeRenderer.moveNodeInternal(nodeMovementInfo, x, y, EventSource.API) || nodeMovementInfo.needsFullRender;
 
         const endTreeParent = this.groupingManager.getTreeParentOf(nodeMovementInfo.node.id);
         if (endTreeParent != null) {
@@ -1613,7 +1494,7 @@ export default class GraphEditor extends HTMLElement {
                 nodeMovementInfo.needsFullRender = needRender || nodeMovementInfo.needsFullRender;
             }
         }
-        this.onNodeDrag('end', nodeMovementInfo, EventSource.API);
+        this.nodeRenderer.onNodeDrag('end', nodeMovementInfo, EventSource.API);
         if (updatePositions) {
             if (nodeMovementInfo.needsFullRender) {
                 this.completeRender(false, EventSource.API);
@@ -1625,116 +1506,6 @@ export default class GraphEditor extends HTMLElement {
         return nodeMovementInfo.needsFullRender;
     }
 
-    /**
-     * Get the position the group dictates for this node.
-     *
-     * If the node is not in a group or has no fixed position in that group this method returns null.
-     *
-     * @param node the node to get the position for
-     * @returns the absolute node position (or null)
-     */
-    private getGroupDictatedPositionOfNode(node: Node): Point {
-        let groupRelativePosition: string | Point;
-        let relativeToGroup: string;
-        const treeParent = this.groupingManager.getTreeParentOf(node.id);
-        if (treeParent != null) {
-            relativeToGroup = treeParent;
-            groupRelativePosition = this.groupingManager.getGroupBehaviourOf(relativeToGroup)?.childNodePositions?.get(node.id.toString());
-        } else {
-            this.groupingManager.getParentsOf(node.id)?.forEach(parentId => {
-                if (relativeToGroup == null) {
-                    return;
-                }
-                const parentBehaviour = this.groupingManager.getGroupBehaviourOf(parentId);
-                const relPos = parentBehaviour?.childNodePositions?.get(node.id.toString());
-                if (relPos != null) {
-                    relativeToGroup = parentId;
-                    groupRelativePosition = relPos;
-                }
-            });
-        }
-        if (typeof (groupRelativePosition) === 'string') {
-            const dropZone = this.objectCache.getDropZone(relativeToGroup, groupRelativePosition);
-            if (dropZone == null) {
-                return null;
-            }
-            groupRelativePosition = {
-                x: dropZone.bbox.x + (dropZone.bbox.width / 2),
-                y: dropZone.bbox.y + (dropZone.bbox.height / 2),
-            };
-        }
-        if (groupRelativePosition != null && relativeToGroup != null) {
-            const parentNode = this.objectCache.getNode(relativeToGroup);
-            if (parentNode != null) {
-                return {
-                    x: parentNode.x + groupRelativePosition.x,
-                    y: parentNode.y + groupRelativePosition.y,
-                };
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Move a node to the desired point (x,y).
-     *
-     * If the node has a fixed position dictated by its group it will not be moved from that position!
-     * If the nodeMovementInfo contains children every child will be moved the same offset as the node.
-     * Group dictated positions are not checked for these children!
-     *
-     * @param nodeMovementInfo the movement info for this node move operation
-     * @param x the target x coordinate
-     * @param y the target y coordinate
-     * @param eventSource the event source used in movement events
-     */
-    private _moveNode(nodeMovementInfo: NodeMovementInformation, x: number, y: number, eventSource: EventSource): boolean {
-        let needsFullRender = false;
-
-        if (nodeMovementInfo.offset != null) {
-            x -= nodeMovementInfo.offset?.dx ?? 0;
-            y -= nodeMovementInfo.offset?.dy ?? 0;
-        }
-        const node = nodeMovementInfo.node;
-
-        // call parent groups beforeNodeMove
-        const currentTreeParent = this.groupingManager.getTreeParentOf(node.id);
-        if (currentTreeParent != null) {
-            const groupBehaviour = this.groupingManager.getGroupBehaviourOf(currentTreeParent);
-            if (groupBehaviour.beforeNodeMove != null) {
-                const groupNode = this.objectCache.getNode(currentTreeParent);
-                needsFullRender = Boolean(groupBehaviour.beforeNodeMove(currentTreeParent, node.id.toString(), groupNode, node, { x: x, y: y }, this));
-            }
-        }
-
-        // check for fixed group positions
-        const groupDictatedPosition = this.getGroupDictatedPositionOfNode(node);
-        if (groupDictatedPosition != null) {
-            x = groupDictatedPosition.x;
-            y = groupDictatedPosition.y;
-        }
-
-        const dx = x - node.x;
-        const dy = y - node.y;
-        if (dx !== 0 || dy !== 0) {
-            // perform actual movement
-            node.x = x;
-            node.y = y;
-            if (nodeMovementInfo.children != null) {
-                nodeMovementInfo.children.forEach(childId => {
-                    const child = this.objectCache.getNode(childId);
-                    if (child != null) {
-                        child.x += dx;
-                        child.y += dy;
-                        this.onNodePositionChange(child, eventSource);
-                    }
-                });
-            }
-        }
-
-        // always fire position change
-        this.onNodePositionChange(node, eventSource);
-        return needsFullRender;
-    }
 
     /**
      * Convert from graph coordinates to screen coordinates.
@@ -1770,96 +1541,6 @@ export default class GraphEditor extends HTMLElement {
         return p.matrixTransform(this.nodesGroup.node().getScreenCTM().inverse());
     }
 
-    /**
-     * Try for the given node to leave its group if it moves to the point (x, y).
-     *
-     * This method checks if the node can leave its group when it moves to the given coordinates.
-     * If the node can leave the group then the node is removed from the group.
-     *
-     * @param nodeMovementInformation the movement information of the node to move
-     * @param x the target x coordinates for the node
-     * @param y the target y coordinates for the node
-     * @param eventSource the event source to be used in triggered events
-     * @param sourceEvent the source event (may be null)
-     */
-    private tryToLeaveCurrentGroup(nodeMovementInformation: NodeMovementInformation, x: number, y: number, eventSource: EventSource, sourceEvent?: Event): boolean {
-        const node = nodeMovementInformation.node;
-
-        const currentGroup = this.groupingManager.getTreeParentOf(node.id);
-        if (currentGroup == null) {
-            return false; // is not part of a group
-        }
-        if (!(this.groupingManager.getGroupBehaviourOf(currentGroup)?.allowDraggedNodesLeavingGroup ?? false)) {
-            return false; // group does not allow dragged nodes to leave
-        }
-
-        const clientPoint = this.getClientPointFromGraphCoordinates({ x: x, y: y });
-
-        const possibleTargetNodes = this.getNodesFromPoint(clientPoint.x, clientPoint.y);
-        const allChildren = this.groupingManager.getAllChildrenOf(currentGroup);
-
-        const isOutsideGroup = !possibleTargetNodes.some(targetNode => {
-            if (targetNode.id === node.id) {
-                return false; // ignore dragged node
-            }
-            if (targetNode.id.toString() === currentGroup) {
-                return true; // is over the group node
-            }
-            return allChildren.has(targetNode.id.toString()); // is over a child node of the group
-        });
-
-        if (isOutsideGroup) {
-            if (this.groupingManager.getCanDraggedNodeLeaveGroup(currentGroup, node.id, node)) {
-                this.groupingManager.removeNodeFromGroup(currentGroup, node.id, eventSource, sourceEvent);
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Try for the given node to join a group if it moves to the point (x, y).
-     *
-     * This method checks if the node can join a group when it moves to the given coordinates.
-     * If the node can join a group it is added to the group.
-     *
-     * The node will join in the same tree as the group it joined.
-     * If the group it joined was not part of a tree it is marked as a tree root.
-     * If the joining node was a tree root it will no longer be a tree root as it is joined to the parent tree.
-     *
-     * @param nodeMovementInformation the movement information of the node to move
-     * @param x the target x coordinates for the node
-     * @param y the target y coordinates for the node
-     * @param eventSource the event source to be used in triggered events
-     * @param sourceEvent the source event (may be null)
-     */
-    private tryJoinNodeIntoGroup(nodeMovementInformation: NodeMovementInformation, x: number, y: number, eventSource: EventSource, sourceEvent?: Event): boolean {
-        const node = nodeMovementInformation.node;
-
-        if (this.groupingManager.getTreeParentOf(node.id) != null) {
-            return false;
-        }
-
-        const clientPoint = this.getClientPointFromGraphCoordinates({ x: x, y: y });
-
-        const possibleTargetNodes = this.getNodesFromPoint(clientPoint.x, clientPoint.y);
-        const targetNode = possibleTargetNodes.find(target => target.id !== node.id);
-        if (targetNode != null) {
-            const canJoinGroup = this.groupingManager.getGroupCapturingDraggedNode(targetNode.id, node.id, targetNode, node);
-            if (canJoinGroup != null) {
-                if (this.groupingManager.getTreeRootOf(canJoinGroup) == null) {
-                    // canJoinGroup is not part of a tree => mark it as a tree root
-                    this.groupingManager.markAsTreeRoot(canJoinGroup, eventSource, sourceEvent);
-                }
-                this.groupingManager.addNodeToGroup(canJoinGroup, node.id, { x: x, y: y }, eventSource, sourceEvent);
-                if (this.groupingManager.getTreeDepthOf(node.id) === 0) {
-                    this.groupingManager.joinTreeOfParent(node.id, canJoinGroup, eventSource, sourceEvent);
-                }
-                return true;
-            }
-        }
-        return false;
-    }
 
     /**
      * Updates and reflows all text elements in nodes and edges.
@@ -1884,103 +1565,6 @@ export default class GraphEditor extends HTMLElement {
         this.onRender(EventSource.API, 'text');
     }
 
-    /**
-     * Update the content template of a `SVGGElement` to the new template id.
-     *
-     * If the `SVGGElement` already uses the template the content is not touched.
-     *
-     * @param element the lement to update the content
-     * @param templateId the new template ID
-     * @param templateType the template type to use
-     * @param dynamic `true` iff the template is a dynamic template (default: `false`)
-     */
-    // eslint-disable-next-line complexity, max-len
-    private updateContentTemplate<T extends Node | Marker | LinkHandle | TextComponent>(element: Selection<SVGGElement, T, any, unknown>, templateId: string, templateType: string, dynamic: boolean = false, parent?: Node | Edge) {
-        const oldTemplateID = element.attr('data-template');
-        const oldDynamic = element.attr('data-dynamic-template') === 'true';
-        if (oldTemplateID != null && oldTemplateID === templateId && dynamic === oldDynamic) {
-            return; // already using right template
-        }
-        removeAllChildNodes(element);
-        if (dynamic) {
-            // dynamic template
-            if (templateType === 'node') {
-                const dynTemplate = this.dynamicTemplateRegistry.getDynamicTemplate<DynamicNodeTemplate>(templateId);
-                const g = element as Selection<SVGGElement, Node, any, unknown>;
-                if (dynTemplate != null) {
-                    try {
-                        dynTemplate.renderInitialTemplate(g, this, null);
-                    } catch (error) {
-                        console.error(`An error occured while rendering the dynamic template for node ${g.datum().id}!`, error);
-                    }
-                } else {
-                    this.updateStaticContentTemplate<Node>(g, templateId, templateType);
-                }
-            } else if (templateType === 'marker') {
-                const dynTemplate = this.dynamicTemplateRegistry.getDynamicTemplate<DynamicMarkerTemplate>(templateId);
-                const g = element as Selection<SVGGElement, Marker, any, unknown>;
-                if (dynTemplate != null) {
-                    try {
-                        dynTemplate.renderInitialTemplate(g, this, { parent: parent });
-                    } catch (error) {
-                        console.error('An error occured while rendering the dynamic marker template!', { parent: parent }, error);
-                    }
-                } else {
-                    this.updateStaticContentTemplate<Marker>(g, templateId, templateType);
-                }
-            } else if (templateType === 'textcomponent') {
-                let dynTemplate = this.dynamicTemplateRegistry.getDynamicTemplate<DynamicTextComponentTemplate>(templateId);
-                if (dynTemplate == null) {
-                    dynTemplate = this.dynamicTemplateRegistry.getDynamicTemplate<DynamicTextComponentTemplate>('default-textcomponent');
-                }
-                const g = element as Selection<SVGGElement, TextComponent, any, unknown>;
-                if (dynTemplate != null) {
-                    try {
-                        dynTemplate.renderInitialTemplate(g, this, { parent: parent });
-                    } catch (error) {
-                        console.error('An error occured while rendering the dynamic text component template!', { parent: parent }, error);
-                    }
-                } else {
-                    console.error(`No template found for textcomponent! (templateID: ${templateId})`);
-                }
-            } else {
-                console.warn(`Tried to use unsupported template type: ${templateType}`);
-            }
-        } else {
-            // static templates
-            const g = element as Selection<SVGGElement, Node | Marker | LinkHandle, any, unknown>;
-            this.updateStaticContentTemplate(g, templateId, templateType);
-        }
-        // set template id used by the element to new id
-        element.attr('data-template', templateId);
-        if (dynamic) {
-            element.attr('data-dynamic-template', 'true');
-        } else {
-            element.attr('data-dynamic-template', null);
-        }
-    }
-
-    /**
-     * Update the static content template of a `SVGGElement` to the new template id.
-     *
-     * If the `SVGGElement` already uses the template the content is not touched.
-     *
-     * @param element the lement to update the content
-     * @param templateId the new template ID
-     * @param templateType the template type to use
-     */
-    private updateStaticContentTemplate<T extends Node | Marker | LinkHandle>(element: Selection<SVGGElement, T, any, unknown>, templateId: string, templateType: string) {
-        let newTemplate: Selection<SVGGElement, unknown, any, unknown>;
-        if (templateType === 'node') {
-            newTemplate = this.staticTemplateRegistry.getNodeTemplate(templateId);
-        } else if (templateType === 'marker') {
-            newTemplate = this.staticTemplateRegistry.getMarkerTemplate(templateId);
-        } else {
-            console.warn(`Tried to use unsupported template type: ${templateType}`);
-        }
-        // copy template content into element
-        copyTemplateSelectionIntoNode(element, newTemplate);
-    }
 
     /**
      * Get the d3 selection of the current SVG used by this grapheditor.
@@ -2051,252 +1635,14 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
-     * Update existing nodes.
-     *
-     * @param nodeSelection d3 selection of nodes to update with bound data
-     */
-    private updateNodes(nodeSelection?: Selection<SVGGElement, Node, any, unknown>) {
-        if (nodeSelection == null) {
-            nodeSelection = this.getNodeSelection();
-        }
-
-        // alias for this for use in closures
-        const self = this;
-
-        // update templates
-        nodeSelection.each(function (d) {
-            const g: Selection<SVGGElement, Node, any, unknown> = select(this).datum(d);
-            if (d.dynamicTemplate != null && d.dynamicTemplate !== '') {
-                self.updateContentTemplate<Node>(g, d.dynamicTemplate, 'node', true);
-            } else {
-                const templateId = self.staticTemplateRegistry.getNodeTemplateId(d.type);
-                self.updateContentTemplate<Node>(g, templateId, 'node');
-            }
-        });
-
-        // update dynamic templates and link handles for node
-        nodeSelection.each(function (node) {
-            const g: Selection<SVGGElement, Node, any, unknown> = select(this).datum(node);
-            let handles: LinkHandle[] = [];
-            if (node.dynamicTemplate != null && node.dynamicTemplate !== '') {
-                // update dynamic template
-                const dynTemplate = self.dynamicTemplateRegistry.getDynamicTemplate<DynamicNodeTemplate>(node.dynamicTemplate);
-                if (dynTemplate != null) {
-                    try {
-                        dynTemplate.updateTemplate(g, self, null);
-                    } catch (error) {
-                        console.error(`An error occured while updating the dynamic template for node ${node.id}!`, error);
-                    }
-                }
-            }
-            try {
-                handles = getNodeLinkHandles(g, self.staticTemplateRegistry, self.dynamicTemplateRegistry, self);
-            } catch (error) {
-                console.error(`An error occured while calculating the link handles for node ${node.id}!`, error);
-            }
-            if (handles == null) {
-                return;
-            }
-            const handleSelection = g.selectAll<SVGGElement, LinkHandle>('g.link-handle')
-                .data<LinkHandle>(handles as any, (handle: LinkHandle) => handle.id.toString())
-                .join(
-                    enter => enter.append('g').classed('link-handle', true)
-                )
-                .each(function (d: LinkHandle) {
-                    const linkHandleG = select(this).datum(d);
-                    const templateId = self.staticTemplateRegistry.getMarkerTemplateId(d.template);
-                    self.updateContentTemplate<LinkHandle>(linkHandleG, templateId, 'marker', d.isDynamicTemplate, node);
-                    if (d.isDynamicTemplate) {
-                        const dynTemplate = self.dynamicTemplateRegistry.getDynamicTemplate<DynamicMarkerTemplate>(templateId);
-                        if (dynTemplate != null) {
-                            try {
-                                dynTemplate.updateTemplate(linkHandleG, self, { parent: node });
-                            } catch (error) {
-                                console.error(`An error occured while updating the dynamic link handle template in node ${node.id}!`, error);
-                            }
-                        }
-                    }
-                })
-                .attr('transform', (d) => {
-                    const x = d.x != null ? d.x : 0;
-                    const y = d.y != null ? d.y : 0;
-                    const angle = self.calculateRotationTransformationAngle(d, d.normal ?? { dx: 0, dy: 0 });
-                    if (angle !== 0) {
-                        return `translate(${x},${y})rotate(${angle})`;
-                    }
-                    return `translate(${x},${y})`;
-                });
-
-            // allow edge drag from link handles
-            handleSelection.call(
-                drag<SVGGElement, LinkHandle, { edge: DraggedEdge; capturingGroup?: string }>()
-                    .subject((event) => {
-                        if (self._edgeDragInteraction === 'none') {
-                            return; // edge dragging is disabled
-                        }
-                        const groupCapturingEdge = self.groupingManager.getGroupCapturingOutgoingEdge(node);
-                        if (groupCapturingEdge != null && groupCapturingEdge !== node.id.toString()) {
-                            const groupNode = self.getNode(groupCapturingEdge);
-                            if (groupNode != null) {
-                                return { edge: self.createDraggedEdge(event as any, groupNode), capturingGroup: groupCapturingEdge };
-                            }
-                        }
-                        return { edge: self.createDraggedEdge(event as any, node), capturingGroup: node.id.toString() };
-                    })
-                    .container(() => self.svg.select('g.zoom-group').select<SVGGElement>('g.edges').node())
-                    .on('drag', (event) => {
-                        const subject: { edge: DraggedEdge; capturingGroup?: string } = (event as any).subject;
-                        self.updateDraggedEdge(event as any, subject.edge, subject.capturingGroup);
-                        self.updateDraggedEdgeGroups();
-                    })
-                    .on('end', (event) => {
-                        self.dropDraggedEdge(event as any, (event as any).subject.edge, false);
-                    })
-            );
-        });
-
-        nodeSelection
-            .call(this.updateNodeClasses.bind(this))
-            .call(this.updateNodeHighligts.bind(this))
-            .call(this.updateNodeText.bind(this))
-            .call(this.updateDynamicProperties.bind(this))
-            .call(this.updateNodeDropAreas.bind(this))
-            .each(function (d) {
-                self.objectCache.setNodeBBox(d.id, this.getBBox());
-            });
-    }
-
-    /**
-     * Update node drop zones.
-     *
-     * @param nodeSelection d3 selection of nodes to calculate drop zones for with bound data
-     */
-    private updateNodeDropAreas(nodeSelection: Selection<SVGGElement, Node, any, unknown>) {
-        const self = this;
-        nodeSelection.each(function (node) {
-            const dropZones = new Map<string, NodeDropZone>();
-            select(this)
-                .selectAll<SVGGraphicsElement, NodeDropZone>('[data-node-drop-zone]')
-                .datum(function () {
-                    const dropZoneSelection = select(this);
-                    const id = dropZoneSelection.attr('data-node-drop-zone');
-                    const bbox = this.getBBox();
-                    const whitelist = new Set<string>();
-                    const blacklist = new Set<string>();
-                    dropZoneSelection.attr('data-node-type-filter').split(' ').forEach((type: string) => {
-                        if (type !== '') {
-                            if (type.startsWith('!')) {
-                                blacklist.add(type.substring(1));
-                            } else {
-                                whitelist.add(type);
-                            }
-                        }
-                    });
-                    return {
-                        id: id,
-                        bbox: bbox,
-                        whitelist: whitelist,
-                        blacklist: blacklist,
-                    };
-                })
-                .each(function (dropZone) {
-                    dropZones.set(dropZone.id, dropZone);
-                });
-            self.objectCache.setNodeDropZones(node.id, dropZones);
-        });
-    }
-
-    /**
      * Update text of existing nodes.
      *
      * @param nodeSelection d3 selection of nodes to update with bound data
      */
-    private updateNodeText(nodeSelection: Selection<SVGGElement, Node, any, unknown>, force: boolean = false) {
-        const self = this;
-        nodeSelection.each(function (d) {
-            const singleNodeSelection = select(this);
-            const textSelection = singleNodeSelection.selectAll<SVGTextElement, unknown>('text').datum(function () {
-                return this.getAttribute('data-content');
-            });
-            textSelection.each(function (attr) {
-                let newText = self.recursiveAttributeGet(d, attr);
-                if (newText == null) {
-                    newText = '';
-                }
-                // make sure it is a string
-                newText = newText.toString();
-                wrapText(this, newText, force);
-            });
-        });
-    }
+     public updateNodeText(nodeSelection: Selection<SVGGElement, Node, any, unknown>, force: boolean = false) {
+         this.nodeRenderer.updateNodeText(nodeSelection, force);
+     }
 
-    /**
-     * Update non text elements of existing nodes or edges.
-     *
-     * @param groupSelection d3 selection of nodes or edges to update with bound data
-     */
-    private updateDynamicProperties(groupSelection: Selection<SVGGElement, Node | Edge, any, unknown>) {
-        const self = this;
-        const updatableAttributes = ['fill', 'stroke'];
-        groupSelection.each(function (d) {
-            const singleGoupSelection = select(this);
-            // update text
-            singleGoupSelection.selectAll<Element, any>('[data-content]:not(text)').datum(function () {
-                const attribute = this.getAttribute('data-content');
-                return self.recursiveAttributeGet(d, attribute)?.toString();
-            }).text(text => text);
-            // update attributes
-            updatableAttributes.forEach(attr => {
-                singleGoupSelection.selectAll<Element, any>(`[data-${attr}]`).datum(function () {
-                    const attribute = this.getAttribute(`data-${attr}`);
-                    return self.recursiveAttributeGet(d, attribute)?.toString();
-                }).attr(attr, value => value);
-            });
-            // update href
-            singleGoupSelection.selectAll<Element, any>('[data-href]').datum(function () {
-                const attribute = this.getAttribute('data-href');
-                return self.recursiveAttributeGet(d, attribute)?.toString();
-            }).attr('xlink:href', value => value);
-        });
-    }
-
-    /**
-     * Recursively retrieve an attribute.
-     *
-     * The attribute path is a string split at the '.' character.
-     * The attribute path is processed recursively by applying `obj = obj[attr[0]]`.
-     * If a path segment is '()' then `obj = obj()` is applied instead.
-     *
-     * @param obj the object to get the attribute from
-     * @param attr the attribute or attribute path to get
-     */
-    public recursiveAttributeGet(obj: unknown, attr: string): unknown {
-        let result = null;
-        try {
-            if (attr != null) {
-                if (attr.includes('.')) {
-                    // recursive decend along path
-                    const path = attr.split('.');
-                    let temp = obj;
-                    path.forEach(segment => {
-                        if (segment === '()') {
-                            temp = (temp as () => unknown)();
-                        } else if (temp?.hasOwnProperty(segment)) {
-                            temp = temp[segment];
-                        } else {
-                            temp = null;
-                        }
-                    });
-                    result = temp;
-                } else {
-                    result = obj[attr];
-                }
-            }
-        } catch (error) { // TODO add debug output
-            return null;
-        }
-        return result;
-    }
 
     /**
      * Update node classes.
@@ -2308,39 +1654,13 @@ export default class GraphEditor extends HTMLElement {
         if (nodeSelection == null) {
             nodeSelection = this.getNodeSelection();
         }
-        if (this.classesToRemove != null) {
-            this.classesToRemove.forEach((className) => {
-                nodeSelection.classed(className, () => false);
-            });
-        }
-        if (this.classes != null) {
-            this.classes.forEach((className) => {
-                nodeSelection.classed(className, (d) => {
-                    if (this.setNodeClass != null) {
-                        return this.setNodeClass(className, d);
-                    }
-                    return false;
-                });
-            });
-        }
+        this.nodeRenderer.updateNodeClasses(nodeSelection, this.classesToRemove);
         if (calledDirectly) {
             this.onRender(EventSource.API, 'classes');
         }
     }
 
 
-    /**
-     * Update node positions.
-     *
-     * @param nodeSelection d3 selection of nodes to update with bound data
-     */
-    private updateNodePositions(nodeSelection: Selection<SVGGElement, Node, any, unknown>) {
-        nodeSelection.attr('transform', (d) => {
-            const x = d.x != null ? d.x : 0;
-            const y = d.y != null ? d.y : 0;
-            return `translate(${x},${y})`;
-        });
-    }
 
     /**
      * Update edge groups.
@@ -2366,7 +1686,7 @@ export default class GraphEditor extends HTMLElement {
     /**
      * Update draggededge groups.
      */
-    private updateDraggedEdgeGroups() {
+    public updateDraggedEdgeGroups() { // FIXME visibility
         this.edgesGroup
             .selectAll<SVGGElement, DraggedEdge>('g.edge-group.dragged')
             .data<DraggedEdge>(this.draggedEdges, edgeId)
@@ -2479,7 +1799,7 @@ export default class GraphEditor extends HTMLElement {
             .raise(); // raise the drag handles to the top of the edge
 
         this.updateEdgeText(edgeGroupSelection, d);
-        this.updateDynamicProperties(edgeGroupSelection);
+        this.extrasRenderer.updateDynamicProperties(edgeGroupSelection);
 
         edgeDragHandles.call(
             drag<SVGGElement, EdgeDragHandle, { edge: DraggedEdge; capturingGroup?: string; isReversedEdge: boolean }>()
@@ -2544,7 +1864,7 @@ export default class GraphEditor extends HTMLElement {
                 .each(function (textComponent) {
                     const g: Selection<SVGGElement, TextComponent, any, unknown> = select(this).datum<TextComponent>(textComponent);
                     const templateId = textComponent.template ?? 'default-textcomponent';
-                    self.updateContentTemplate<TextComponent>(g, templateId, 'textcomponent', true, edge);
+                    self.extrasRenderer.updateContentTemplate<TextComponent>(g, templateId, 'textcomponent', true, edge);
                     const dynTemplate = self.dynamicTemplateRegistry.getDynamicTemplate<DynamicTextComponentTemplate>(templateId);
                     try {
                         dynTemplate?.updateTemplate(g, self, { parent: edge });
@@ -2563,7 +1883,7 @@ export default class GraphEditor extends HTMLElement {
                     if (text.value != null) {
                         newText = text.value;
                     } else {
-                        newText = self.recursiveAttributeGet(d, text.attributePath)?.toString();
+                        newText = recursiveAttributeGet(d, text.attributePath)?.toString();
                     }
                     if (newText == null) {
                         newText = '';
@@ -2833,7 +2153,7 @@ export default class GraphEditor extends HTMLElement {
             .attr('data-click', (d) => d.clickEventKey)
             .each(function (marker) {
                 const templateId = self.staticTemplateRegistry.getMarkerTemplateId(marker.template);
-                self.updateContentTemplate<Marker>(select(this), templateId, 'marker');
+                self.extrasRenderer.updateContentTemplate<Marker>(select(this), templateId, 'marker');
                 if (marker.isDynamicTemplate) {
                     const g = select(this).datum(marker);
                     const dynTemplate = self.dynamicTemplateRegistry.getDynamicTemplate<DynamicMarkerTemplate>(templateId);
@@ -2963,33 +2283,11 @@ export default class GraphEditor extends HTMLElement {
                 transform += `scale(${scale})`;
             }
         }
-        const angle = this.calculateRotationTransformationAngle(pathObject, normal);
+        const angle = calculateRotationTransformationAngle(pathObject, normal);
         if (angle !== 0) {
             transform += `rotate(${angle})`;
         }
         return transform;
-    }
-
-    /**
-     * Calculate the rotation vector from rotation data and a normal vector.
-     *
-     * @param rotationData the rotation data object
-     * @param normal the normal vector used for relative rotation
-     * @param ignorePathDirectionForRotation iff true the normal rotation is limited to half a circle (useful for text components)
-     */
-    private calculateRotationTransformationAngle(rotationData: RotationData, normal: RotationVector, ignorePathDirectionForRotation: boolean = false): number {
-        let angle = rotationData.absoluteRotation ?? 0;
-        if (rotationData.relativeRotation != null && rotationData.absoluteRotation == null) {
-            const normalAngle = calculateAngle(normal);
-            angle += normalAngle;
-            if (ignorePathDirectionForRotation) {
-                if (normalAngle > 90 || normalAngle < -90) {
-                    angle += 180;
-                }
-            }
-            angle += rotationData.relativeRotation;
-        }
-        return angle;
     }
 
     /**
@@ -3301,7 +2599,7 @@ export default class GraphEditor extends HTMLElement {
         this.nodesGroup
             .selectAll<any, Node>('g.node')
             .data<Node>(this._nodes, (d: Node) => d.id.toString())
-            .call(this.updateNodePositions.bind(this));
+            .call(this.nodeRenderer.updateNodePositions);
 
         this.edgesGroup
             .selectAll('g.edge-group:not(.dragged)')
@@ -3331,7 +2629,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param sourceNode node that edge was dragged from
      */
-    private createDraggedEdge(event: Event, sourceNode: Node): DraggedEdge {
+    public createDraggedEdge(event: Event, sourceNode: Node): DraggedEdge { // FIXME visibility
         const validTargets = new Set<string>();
         this._nodes.forEach(node => validTargets.add(node.id.toString()));
         this.objectCache.getEdgesBySource(sourceNode.id).forEach(edge => validTargets.delete(edge.target.toString()));
@@ -3442,7 +2740,7 @@ export default class GraphEditor extends HTMLElement {
      * Update dragged edge on drag event.
      */
     // eslint-disable-next-line complexity
-    private updateDraggedEdge(event: Event, edge: DraggedEdge, capturingGroup?: string) {
+    public updateDraggedEdge(event: Event, edge: DraggedEdge, capturingGroup?: string) { //FIXME visibility
         const oldTarget = edge.target;
         edge.target = null;
         edge.currentTarget.x = (event as any).x;
@@ -3520,7 +2818,7 @@ export default class GraphEditor extends HTMLElement {
      *      from a reverse handle flipping the edge direction
      */
     // eslint-disable-next-line complexity
-    private dropDraggedEdge(event: Event, edge: DraggedEdge, isReversedEdge: boolean) {
+    public dropDraggedEdge(event: Event, edge: DraggedEdge, isReversedEdge: boolean) { // FIXME visibility
         let updateEdgeCache = false;
         const existingEdge = this.objectCache.getEdge(edge.createdFrom);
         let existingTarget = existingEdge?.target.toString();
@@ -3755,52 +3053,13 @@ export default class GraphEditor extends HTMLElement {
         return this.dispatchEvent(ev);
     }
 
-    /**
-     * Create and dispatch 'nodedragstart' and 'nodedragend' events.
-     *
-     * @param eventType the type of the event
-     * @param movementInfo the node movement information
-     * @param eventSource the event source
-     */
-    private onNodeDrag(eventType: 'start' | 'end', movementInfo: NodeMovementInformation, eventSource) {
-        const ev = new CustomEvent(`nodedrag${eventType}`, {
-            bubbles: true,
-            composed: true,
-            cancelable: false,
-            detail: {
-                eventSource: eventSource,
-                node: movementInfo.node,
-                affectedChildren: movementInfo.children,
-            },
-        });
-        this.dispatchEvent(ev);
-    }
-
-    /**
-     * Callback for creating nodepositionchange events.
-     *
-     * @param nodes nodes that changed
-     * @param eventSource the source of the selection event (default: EventSource.USER_INTERACTION)
-     */
-    private onNodePositionChange(node: Node, eventSource: EventSource = EventSource.USER_INTERACTION) {
-        const ev = new CustomEvent('nodepositionchange', {
-            bubbles: true,
-            composed: true,
-            cancelable: false,
-            detail: {
-                eventSource: eventSource,
-                node: node,
-            },
-        });
-        this.dispatchEvent(ev);
-    }
 
     /**
      * Callback on nodes for mouseEnter event.
      *
      * @param nodeDatum Corresponding datum of node
      */
-    private onNodeEnter(event: Event, nodeDatum: Node) {
+    public onNodeEnter(event: Event, nodeDatum: Node) {
         this.hovered.add(nodeDatum.id);
         if (this._selectedLinkSource != null && this._nodeClickInteraction === 'link') {
             this._selectedLinkTarget = nodeDatum.id;
@@ -3824,7 +3083,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param nodeDatum Corresponding datum of node
      */
-    private onNodeLeave(event: Event, nodeDatum: Node) {
+    public onNodeLeave(event: Event, nodeDatum: Node) {
         this.hovered.delete(nodeDatum.id);
         if (this._selectedLinkSource === nodeDatum.id && this._nodeClickInteraction === 'link') {
             this._selectedLinkTarget = null;
@@ -3849,7 +3108,7 @@ export default class GraphEditor extends HTMLElement {
      * @param nodeDatum Corresponding datum of node
      */
     // eslint-disable-next-line complexity
-    private onNodeClick = (event: Event, nodeDatum: Node) => {
+    public onNodeClick = (event: Event, nodeDatum: Node) => {
         const eventDetail: any = {};
         eventDetail.eventSource = EventSource.USER_INTERACTION;
         eventDetail.sourceEvent = event;
@@ -3978,22 +3237,11 @@ export default class GraphEditor extends HTMLElement {
     /**
      * Calculate highlighted nodes and update their classes.
      */
-    private updateNodeHighligts(nodeSelection?: Selection<SVGGElement, Node, any, unknown>) {
+    public updateNodeHighligts(nodeSelection?: Selection<SVGGElement, Node, any, unknown>) {
         if (nodeSelection == null) {
             nodeSelection = this.getNodeSelection();
         }
-
-        nodeSelection
-            .classed('hovered', (d) => this.hovered.has(d.id))
-            .classed('selected', (d) => {
-                if (this._selectedNodes?.has(d.id.toString())) {
-                    return true; // node is selected
-                }
-                if (this._selectedLinkSource === d.id || this._selectedLinkTarget === d.id) {
-                    return true; // node is part of a linking interaction
-                }
-                return false;
-            });
+        this.nodeRenderer.updateNodeHighligts(nodeSelection, this.hovered, this._selectedLinkSource, this._selectedLinkTarget);
     }
 
     /**
