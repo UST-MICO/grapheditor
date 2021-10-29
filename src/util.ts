@@ -128,3 +128,43 @@ export function copyTemplateSelectionIntoNode(nodeSelection: Selection<SVGElemen
     range.selectNodeContents(templateSelection.node());
     nodeSelection.node().appendChild(range.cloneContents());
 }
+
+
+
+/**
+ * Recursively retrieve an attribute.
+ *
+ * The attribute path is a string split at the '.' character.
+ * The attribute path is processed recursively by applying `obj = obj[attr[0]]`.
+ * If a path segment is '()' then `obj = obj()` is applied instead.
+ *
+ * @param obj the object to get the attribute from
+ * @param attr the attribute or attribute path to get
+ */
+export function recursiveAttributeGet(obj: unknown, attr: string): unknown {
+    let result = null;
+    try {
+        if (attr != null) {
+            if (attr.includes('.')) {
+                // recursive decend along path
+                const path = attr.split('.');
+                let temp = obj;
+                path.forEach(segment => {
+                    if (segment === '()') {
+                        temp = (temp as () => unknown)();
+                    } else if (temp?.hasOwnProperty(segment)) {
+                        temp = temp[segment];
+                    } else {
+                        temp = null;
+                    }
+                });
+                result = temp;
+            } else {
+                result = obj[attr];
+            }
+        }
+    } catch (error) { // TODO add debug output
+        return null;
+    }
+    return result;
+}
