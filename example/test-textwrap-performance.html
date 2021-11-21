@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>Test Textwrapping</title>
+        <style>
+            html {height: 100%}
+            body {
+                height: 100%;
+                margin: 0;
+                display: grid;
+                grid-template-columns: auto;
+                grid-template-rows: 4.5rem auto;
+                grid-template-areas: "header" "main";
+            }
+            .header {grid-area: header; padding: 0.5rem;}
+            h1 {font-size: 1.5rem; margin-top: 0; margin-bottom: 0.5rem;}
+            p {margin: 0;}
+            network-graph {grid-area: main;}
+        </style>
+    </head>
+    <body>
+        <!--script src="./_bundles/grapheditor-webcomponent.js"></script-->
+        <div class="header">
+            <h1>Grapheditor with special textwrapping:</h1>
+            <p>
+                Links:
+                <a href="/">index.html</a>, <a href="/groups.html">groups.html</a>,
+                <a href="/groups-drag-and-drop.html">groups-drag-and-drop.html</a>,
+                <a href="/resize.html">resize.html</a>,
+                <a href="/textwrap.html">textwrap.html</a>,
+                <a href="/textwrap-performance.html">textwrap-performance.html</a>,
+                <a href="/isolation.html">isolation.html</a>
+            </p>
+        </div>
+        <network-graph mode="layout" zoom="both">
+            <style slot="style">
+                svg {width:100%; height: 100%}
+            </style>
+            <svg slot="graph">
+                <style>
+                    .zoom-group > .brush {fill: dodgerblue; opacity: 0.3;}
+                    .ghost {opacity: 0.5;}
+                    .node {fill: aqua;}
+                    .link-handle {display: none; fill: black; opacity: 0.1;}
+                    .link-handle>* {transition:transform 0.25s ease-out;}
+                    .edge-group .link-handle {display: initial}
+                    .link-handle:hover {opacity: 0.7;}
+                    .link-handle:hover>* {transform: scale(1.5);}
+                    .node.hovered {fill: deepskyblue;}
+                    .node.hovered:not(.resizing) .link-handle {display: initial;}
+                    .edge {stroke: black;}
+                    .edge .marker {fill: black;}
+
+                    text {line-height: 1.2;}
+
+                    .title {fill: black; font-size: initial; text-overflow: clip; word-break: break-all;}
+                    .description {fill: black; font-size: 6pt; text-overflow: ellipsis;}
+                    .centered {text-anchor: middle; word-break: break-all;}
+                </style>
+                <defs class="templates">
+                    <g id="simple-node" data-template-type="node">
+                        <rect width="100" height="60" x="-50" y="-30" data-link-handles="edges"></rect>
+                        <text class="title" data-content="title" x="-40" y="-10" width="80"></text>
+                        <text class="description" data-content="description" x="-40" y="5" width="80" height="30"></text>
+                    </g>
+                    <g id="centered-text-node" data-template-type="node">
+                        <rect width="100" height="60" x="-50" y="-30" data-link-handles="edges"></rect>
+                        <rect width="100" height="20" fill="green" x="-50" y="-30"></rect>
+                        <text class="title" data-content="title" data-text-center-y="-20" x="-40" y="-10" width="80"></text>
+                        <text class="description" data-content="description" data-text-center-y="10" x="-40" y="5" width="80" height="30"></text>
+                    </g>
+                    <g id="special-wrap-node" data-template-type="node">
+                        <rect width="100" height="60" x="-50" y="-30" data-link-handles="edges"></rect>
+                        <text class="title" data-content="title" data-text-center-y="-20" x="-40" y="-10" width="80"></text>
+                        <text class="description" data-content="description" data-wrap-lines="80 30 60" data-text-center-y="10" x="-40" y="5"></text>
+                    </g>
+                    <g id="scaled-text-node" data-template-type="node">
+                        <rect width="100" height="60" x="-50" y="-30" data-link-handles="edges"></rect>
+                        <rect width="100" height="20" fill="green" x="-50" y="-30"></rect>
+                        <text class="title" data-content="title" data-text-center-y="-20" x="-40" y="-10" data-wrap-lines="80|0.75x 110|0.5x 160|0.4x 200"></text>
+                        <text class="description" data-content="description" data-text-center-y="10" x="-40" y="5" data-wrap-lines="80|80 80|80 80 80|80 80 80 80" height="30"></text>
+                    </g>
+                    <g id="circle-wrap-node" data-template-type="node">
+                        <circle r="50" cx="0" cy="0" data-link-handles="minimal"></circle>
+                        <text class="description centered" data-content="description" data-text-center-y="0" data-wrap-lines="90|87 87|85 90 85|80 87 87 80|75 85 90 85 75|70 80 87 87 80 70|60 75 85 90 85 75 60|50 70 80 87 87 80 70 50" x="0" y="0"></text>
+                    </g>
+                    <g id="scaled-circle-wrap-node" data-template-type="node">
+                        <circle r="50" cx="0" cy="0" data-link-handles="minimal"></circle>
+                        <text class="description centered" data-content="description" data-text-center-y="0" data-wrap-lines="5x 15|3x 30|2.2x 45|2x 45 45|2x 40 45 40|2x 35 45 45 35|1.8x 45 55 55 45|1.8x 35 50 55 50 35|1.5x 40 55 63 63 55 40" x="0" y="0"></text>
+                    </g>
+                </defs>
+            </svg>
+        </network-graph>
+
+        <script defer>
+            var graph = document.querySelector('network-graph');
+            var nodeList = [];
+            for (var x = 0; x < 10; x++) {
+                for (var y = 0; y < 10; y++) {
+                    nodeList = nodeList.concat([
+                        {
+                            id: `x${x}y${y}_1`,
+                            x: 0 + (x*480),
+                            y: 0 + (y*370),
+                            type: 'simple-node',
+                            title: 'hello world 2 with a very long text',
+                            description: 'This is a really long text that is wrapped in multiple lines.',
+                        },
+                        {
+                            id: `x${x}y${y}_2`,
+                            x: 130 + (x*480),
+                            y: 0 + (y*370),
+                            type: 'simple-node',
+                            title: 'ASingleWordSingleLineTitleThatIsWayTooLong',
+                            description: 'This is a reallyreallyreally long text that is wrapped in multiple lines.',
+                        },
+                        {
+                            id: `x${x}y${y}_3`,
+                            x: 0 + (x*480),
+                            y: 70 + (y*370),
+                            type: 'centered-text-node',
+                            title: 'A Single centerd text',
+                            description: 'This is multi-line centered text.',
+                        },
+                        {
+                            id: `x${x}y${y}_4`,
+                            x: 130 + (x*480),
+                            y: 70 + (y*370),
+                            type: 'centered-text-node',
+                            title: 'A Title',
+                            description: 'This is centered.',
+                        },
+                        {
+                            id: `x${x}y${y}_5`,
+                            x: 0 + (x*480),
+                            y: 140 + (y*370),
+                            type: 'special-wrap-node',
+                            title: 'A Title',
+                            description: 'This is multi-line centered text where all lines have different widths.',
+                        },
+                        {
+                            id: `x${x}y${y}_6`,
+                            x: 130 + (x*480),
+                            y: 140 + (y*370),
+                            type: 'special-wrap-node',
+                            title: 'A Title',
+                            description: 'This is centered.',
+                        },
+                        {
+                            id: `x${x}y${y}_7`,
+                            x: 130 + (x*480),
+                            y: 210 + (y*370),
+                            type: 'scaled-text-node',
+                            title: 'Scaled Title',
+                            description: 'This is centered.',
+                        },
+                        {
+                            id: `x${x}y${y}_8`,
+                            x: 0 + (x*480),
+                            y: 210 + (y*370),
+                            type: 'scaled-text-node',
+                            title: 'A scaled and very long Title',
+                            description: 'This is multi-line centered text wrapped with data-wrap-lines using height as max height.',
+                        },
+                        {
+                            id: `x${x}y${y}_9`,
+                            x: 260 + (x*480),
+                            y: 0 + (y*370),
+                            type: 'circle-wrap-node',
+                            title: 'A Title',
+                            description: 'This is text wrapped in a circle. With a long description. That wraps over multiple lines. And is centered completely in the circle.',
+                        },
+                        {
+                            id: `x${x}y${y}_10`,
+                            x: 260 + (x*480),
+                            y: 140 + (y*370),
+                            type: 'circle-wrap-node',
+                            title: 'A Title',
+                            description: 'This is text wrapped in a circle. With a long description. That wraps over multiple lines.',
+                        },
+                        {
+                            id: `x${x}y${y}_11`,
+                            x: 360 + (x*480),
+                            y: -50 + (y*370),
+                            type: 'scaled-circle-wrap-node',
+                            title: 'A Title',
+                            description: 'text',
+                        },
+                        {
+                            id: `x${x}y${y}_12`,
+                            x: 360 + (x*480),
+                            y: 70 + (y*370),
+                            type: 'scaled-circle-wrap-node',
+                            title: 'A Title',
+                            description: 'text wrapped and scaled in a circle',
+                        },
+                        {
+                            id: `x${x}y${y}_13`,
+                            x: 360 + (x*480),
+                            y: 190 + (y*370),
+                            type: 'scaled-circle-wrap-node',
+                            title: 'A Title',
+                            description: 'This is text wrapped and scaled in a circle. With a long description. That wraps over multiple lines.',
+                        },
+                    ]);
+                }
+            }
+
+            window.setTimeout(() => {
+                graph.nodeList = nodeList;
+
+                var t0= performance.now();
+                graph.completeRender();
+                var t1= performance.now();
+                console.log(`Rendering all ${nodeList.length} nodes for the first time took: ${t1-t0} milliseconds`);
+
+                graph.zoomToBoundingBox();
+
+                // force complete rerender to test text rendering shortcuts
+                window.setTimeout(() => {
+                    t0= performance.now();
+                    graph.completeRender();
+                    t1= performance.now();
+                    console.log(`Rendering all ${nodeList.length} nodes the second time took: ${t1-t0} milliseconds`);
+                }, 1000)
+            }), 500;
+        </script>
+    </body>
+</html>

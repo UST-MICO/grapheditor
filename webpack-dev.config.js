@@ -42,6 +42,13 @@ module.exports = merge(common, {
             scriptLoading: 'blocking',
         }),
         new HtmlWebpackPlugin({
+            filename: 'textwrap-performance.html',
+            template: 'example/test-textwrap-performance.html',
+            hash: true,
+            inject: 'head',
+            scriptLoading: 'blocking',
+        }),
+        new HtmlWebpackPlugin({
             filename: 'isolation.html',
             template: 'example/test-isolation.html',
             hash: true,

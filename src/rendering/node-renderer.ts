@@ -325,8 +325,7 @@ export class NodeRenderer {
                     newText = '';
                 }
                 // make sure it is a string
-                newText = newText.toString();
-                wrapText(this, newText, force);
+                wrapText(this, newText.toString(), force);
             });
         });
     };
