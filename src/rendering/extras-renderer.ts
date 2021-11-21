@@ -16,12 +16,12 @@
  */
 
 import { select, Selection } from "d3-selection";
-import { Edge, Node, TextComponent } from ".";
-import { DynamicMarkerTemplate, DynamicNodeTemplate, DynamicTextComponentTemplate } from "./dynamic-templates/dynamic-template";
-import GraphEditor from "./grapheditor";
-import { LinkHandle } from "./link-handle";
-import { Marker } from "./marker";
-import { copyTemplateSelectionIntoNode, recursiveAttributeGet, removeAllChildNodes } from "./util";
+import { Edge, Node, TextComponent } from "..";
+import { DynamicMarkerTemplate, DynamicNodeTemplate, DynamicTextComponentTemplate } from "../dynamic-templates/dynamic-template";
+import GraphEditor from "../grapheditor";
+import { LinkHandle } from "../link-handle";
+import { Marker } from "../marker";
+import { copyTemplateSelectionIntoNode, recursiveAttributeGet, removeAllChildNodes } from "../util";
 
 /**
  * Class to render features found in nodes and in edges.

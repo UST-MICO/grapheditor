@@ -19,7 +19,7 @@ import { D3DragEvent, drag } from 'd3-drag';
 import { select, Selection } from 'd3-selection';
 import { curveBasis } from 'd3-shape';
 import { D3ZoomEvent, zoom, ZoomBehavior, zoomIdentity, zoomTransform, ZoomTransform } from 'd3-zoom';
-import { NodeRenderer } from '.';
+import { NodeRenderer } from './rendering/node-renderer';
 import { NodeDropZone } from './drop-zone';
 import { DefaultTextComponentTemplate, DynamicMarkerTemplate, DynamicTextComponentTemplate } from './dynamic-templates/dynamic-template';
 import { EdgePathGenerator, SmoothedEdgePathGenerator } from './dynamic-templates/edge-path-generators';
@@ -30,7 +30,7 @@ import { applyUserLinkHandleCalculationCallback, calculateNearestHandles, getNod
 import { LineAttachementInfo, Marker } from './marker';
 import { Node, NodeMovementInformation } from './node';
 import { GraphObjectCache } from './object-cache';
-import { ExtrasRenderer } from './render-helpers';
+import { ExtrasRenderer } from './rendering/extras-renderer';
 import { calculateAngle, calculateRotationTransformationAngle, normalizeVector, RotationVector } from './rotation-vector';
 import { DynymicTemplateRegistry, EdgePathGeneratorRegistry, StaticTemplateRegistry } from './templating';
 import { wrapText } from './textwrap';
@@ -122,10 +122,29 @@ export default class GraphEditor extends HTMLElement {
     public edgePathGeneratorRegistry: EdgePathGeneratorRegistry;
     private defaultEdgePathGenerator: EdgePathGenerator;
 
-    /** Renderers that implement the actual rendering methods. */
+    /* Renderers that implement the actual rendering methods. */
+
+    /**
+     * Renderer for common rendering functionality found in nodes and edges.
+     *
+     * Do not call methods from this object directly!
+     * Do not replace this object!
+     */
     public extrasRenderer: ExtrasRenderer;
+
+    /**
+     * Renderer for node specific rendering functionality.
+     *
+     * Do not call methods from this object directly!
+     * Do not replace this object!
+     */
     public nodeRenderer: NodeRenderer;
 
+    /**
+     * Object responsible for managing node groups and group behaviours.
+     *
+     * Do not replace this object!
+     */
     public groupingManager: GroupingManager;
 
     /**
