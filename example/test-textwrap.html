@@ -24,7 +24,13 @@
         <div class="header">
             <h1>Grapheditor with special textwrapping:</h1>
             <p>
-                Links: <a href="/">index.html</a>, <a href="/groups.html">groups.html</a>, <a href="/groups-drag-and-drop.html">groups-drag-and-drop.html</a>, <a href="/resize.html">resize.html</a>, <a href="/textwrap.html">textwrap.html</a>, <a href="/isolation.html">isolation.html</a>
+                Links:
+                <a href="/">index.html</a>, <a href="/groups.html">groups.html</a>,
+                <a href="/groups-drag-and-drop.html">groups-drag-and-drop.html</a>,
+                <a href="/resize.html">resize.html</a>,
+                <a href="/textwrap.html">textwrap.html</a>,
+                <a href="/textwrap-performance.html">textwrap-performance.html</a>,
+                <a href="/isolation.html">isolation.html</a>
             </p>
         </div>
         <network-graph mode="layout" zoom="both">
@@ -45,6 +51,8 @@
                     .node.hovered:not(.resizing) .link-handle {display: initial;}
                     .edge {stroke: black;}
                     .edge .marker {fill: black;}
+
+                    text {line-height: 1.2;}
 
                     .title {fill: black; font-size: initial; text-overflow: clip; word-break: break-all;}
                     .description {fill: black; font-size: 6pt; text-overflow: ellipsis;}
@@ -195,6 +203,10 @@
             ];
             graph.completeRender();
             graph.zoomToBoundingBox();
+
+            window.setTimeout(() => {
+                graph.completeRender();
+            }, 3000)
         </script>
     </body>
 </html>
