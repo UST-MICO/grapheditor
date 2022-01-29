@@ -30,6 +30,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - Partially removed support for deprecated "mode" attribute on the network-graph html node
 - Removed event, getter and setter associated with the "mode" attribute
 - Removed deprecated `style` slot
+- Wrapping text now generates less data-* attributes in the dom and is faster when the text does not need to be wrapped again
+- Wrapping text now re-wrappes text when (some) style attributes change
 
 
 ## [0.6.2] - 2021-09-05
