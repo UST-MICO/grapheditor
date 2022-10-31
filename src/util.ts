@@ -168,3 +168,33 @@ export function recursiveAttributeGet(obj: unknown, attr: string): unknown {
     }
     return result;
 }
+
+/**
+ * Calculate the safe absolutePositionOnLine value for the given path length.
+ *
+ * If absolutePositidragHandlesonOnLine is negative it is counted from the end of the path.
+ * If absolutePositidragHandlesonOnLine exceeds the path length positionOnLine will be used as fallback.
+ *
+ * @param pathLength the length of the path
+ * @param positionOnLine the relative position on the line (between 0 and 1)
+ * @param absolutePositidragHandlesonOnLine the absolute position on line (between 0 and length)
+ * @returns the positive absolute positionOnLine to be used with `path.getPointAtLength(absolutePositionOnLine)`.
+ */
+export function calculateAbsolutePositionOnLine(pathLength: number, positionOnLine: number, absolutePositionOnLine?: number): number {
+    let result = null;
+    if (absolutePositionOnLine != null) {
+        if (absolutePositionOnLine < 0) {
+            // actually a substraction...
+            result = pathLength + absolutePositionOnLine;
+        } else {
+            result = absolutePositionOnLine;
+        }
+    }
+
+    // else case & sanity checks for if case
+    if (result == null || result < 0 || result > pathLength) {
+        // always fall back to relative position
+        result = pathLength * positionOnLine;
+    }
+    return result;
+}
