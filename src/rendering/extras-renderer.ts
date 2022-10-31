@@ -150,7 +150,7 @@ export class ExtrasRenderer {
      * @param templateId the new template ID
      * @param templateType the template type to use
      */
-    private updateStaticContentTemplate<T extends Node | Marker | LinkHandle>(element: Selection<SVGGElement, T, any, unknown>, templateId: string, templateType: string) {
+    protected updateStaticContentTemplate<T extends Node | Marker | LinkHandle>(element: Selection<SVGGElement, T, any, unknown>, templateId: string, templateType: string) {
         let newTemplate: Selection<SVGGElement, unknown, any, unknown>;
         if (templateType === 'node') {
             newTemplate = this.graph.staticTemplateRegistry.getNodeTemplate(templateId);

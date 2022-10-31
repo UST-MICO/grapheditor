@@ -131,7 +131,7 @@ export class NodeRenderer {
      *
      * @param nodeSelection d3 selection of nodes to update with bound data
      */
-    private updateNodes = (nodeSelection?: Selection<SVGGElement, Node, any, unknown>) => {
+    protected updateNodes = (nodeSelection?: Selection<SVGGElement, Node, any, unknown>) => {
         if (nodeSelection == null) {
             nodeSelection = this.graph.getNodeSelection();
         }
@@ -429,7 +429,7 @@ export class NodeRenderer {
      * @param node the node that is about to be dragged
      * @returns the 'move' drag behaviour
      */
-    public getNodeMoveDragBehaviour = (event: D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown>>, node: Node) => {
+    protected getNodeMoveDragBehaviour = (event: D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown>>, node: Node) => {
         const nodeMoveInfo = this.getNodeMovementInformation(node as unknown as Node, event.x, event.y);
         if (nodeMoveInfo == null) {
             return; // move was cancelled by callback
@@ -501,15 +501,15 @@ export class NodeRenderer {
      * @param node the node that is about to be dragged
      * @returns the 'move' drag behaviour
      */
-    public getNodeLinkDragBehaviour = (event: D3DragEvent<SVGGElement, unknown, NodeDragBehaviour<unknown>>, node: Node) => {
+    protected getNodeLinkDragBehaviour = (event: D3DragEvent<SVGGElement, unknown, NodeDragBehaviour<unknown>>, node: Node) => {
         const behaviour: NodeDragBehaviour<{ edge: DraggedEdge; capturingGroup?: string; }> = {
             subject: null,
             onDrag: (event, subject, g) => {
-                g.updateDraggedEdge(event as any, subject.edge, subject.capturingGroup);
-                g.updateDraggedEdgeGroups();
+                g.edgeRenderer.updateDraggedEdge(event as any, subject.edge, subject.capturingGroup);
+                g.edgeRenderer.updateDraggedEdgeGroups();
             },
             onEnd: (event, subject, g) => {
-                g.dropDraggedEdge(event as any, subject.edge, false);
+                g.edgeRenderer.dropDraggedEdge(event as any, subject.edge, false);
             }
         };
 
@@ -517,10 +517,12 @@ export class NodeRenderer {
         if (groupCapturingEdge != null && groupCapturingEdge !== node.id.toString()) {
             const groupNode = this.graph.getNode(groupCapturingEdge);
             if (groupNode != null) {
-                behaviour.subject = { edge: this.graph.createDraggedEdge(event as any, groupNode), capturingGroup: groupCapturingEdge };
+                behaviour.subject = { edge: this.graph.edgeRenderer.createDraggedEdge(event as any, groupNode), capturingGroup: groupCapturingEdge };
             }
         }
-        behaviour.subject = { edge: this.graph.createDraggedEdge(event as any, node), capturingGroup: node.id.toString() };
+        if (behaviour.subject == null) {
+            behaviour.subject = { edge: this.graph.edgeRenderer.createDraggedEdge(event as any, node), capturingGroup: node.id.toString() };
+        }
 
         return behaviour;
     };
@@ -597,7 +599,7 @@ export class NodeRenderer {
      * @param node the node to get the position for
      * @returns the absolute node position (or null)
      */
-    private getGroupDictatedPositionOfNode(node: Node): Point {
+    protected getGroupDictatedPositionOfNode(node: Node): Point {
         let groupRelativePosition: string | Point;
         let relativeToGroup: string;
         const gm = this.graph.groupingManager;
