@@ -1195,10 +1195,14 @@ export default class GraphEditor extends HTMLElement {
      * The box will be centered in the view with some padding around.
      *
      * @param box a box in graph coordinates
+     * @param padding percentage of applied padding to the viewbox (0.1 == 10%). Set to 0 to remove padding.
      */
-    public zoomToBox(box: Rect): void {
-        // FIXME allow zooming to exact box (without padding applied!)
-        const scale = 0.9 * Math.min(this.contentMaxWidth / box.width, this.contentMaxHeight / box.height);
+    public zoomToBox(box: Rect, padding: number=0.1): void {
+        let scaleFactor = 1;
+        if (padding > 0 && padding < 1) {
+            scaleFactor -= padding;
+        }
+        const scale = scaleFactor * Math.min(this.contentMaxWidth / box.width, this.contentMaxHeight / box.height);
 
         const xCorrection = (-box.x * scale) + ((this.contentMaxWidth - (box.width * scale)) / 2);
         const yCorrection = (-box.y * scale) + ((this.contentMaxHeight - (box.height * scale)) / 2);

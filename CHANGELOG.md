@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - "background-drag" attribute to control the default node drag behaviour (default: `move`; other: `none`, `select`, `zoom`, `custom`)
 - "brushdrag" and "brush" events. Used when "background-drag" is set to `select`, `zoom` or `custom`
 - Added flag in text components to mark them as draggable (defaults to true)
+- Added padding parameter to `zoomToBox` to allow changing or removing the added padding
 
 ### Deprecated
 
