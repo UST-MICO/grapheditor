@@ -82,7 +82,7 @@ export class EdgeRenderer {
             .data<Edge>(edges, edgeId)
             .join(
                 enter => enter.append('g')
-                    .attr('id', (d) => `edge-${edgeId(d)}`)
+                    .attr('data-id', (d) => edgeId(d))
                     .classed('edge-group', true)
                     .each(function (d) {
                         const edgeGroup = select(this);

@@ -83,7 +83,7 @@ export class NodeRenderer {
             .join(
                 enter => enter.append('g')
                     .classed('node', true)
-                    .attr('id', (d) => `node-${d.id}`)
+                    .attr('data-id', (d) => d.id)
             )
             .call(this.updateNodes)
             .call(this.updateNodePositions)

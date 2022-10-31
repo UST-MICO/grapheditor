@@ -32,7 +32,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - Removed event, getter and setter associated with the "mode" attribute
 - Removed deprecated `style` slot
 - Wrapping text now generates less data-* attributes in the dom and is faster when the text does not need to be wrapped again
-- Wrapping text now re-wrappes text when (some) style attributes change
+- Wrapping text now re-wraps text when (some) style attributes change
+- Node and edge IDs now use a `data-id` attribute without any prefixes. CSS selectors relying on matching nodes by ID need to be changed (use `getSingleNodeSelection` or `getSingleEdgeSelection` if possible)
 
 
 ## [0.6.2] - 2021-09-05

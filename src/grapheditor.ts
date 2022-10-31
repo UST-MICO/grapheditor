@@ -1460,7 +1460,7 @@ export default class GraphEditor extends HTMLElement {
 
             while (!target.empty()) {
                 if (target.classed('node')) {
-                    const id = target.attr('id').replace(/^node-/, '');  // FIXME use data attr for node ids!
+                    const id = target.attr('data-id');
                     const node = this.objectCache.getNode(id);
                     if (node != null && !foundNodes.has(id)) {
                         foundNodes.add(id);
@@ -1658,6 +1658,19 @@ export default class GraphEditor extends HTMLElement {
     }
 
     /**
+     * Get a single edge selection with bound datum.
+     *
+     * @param nodeId the id of the edge to select
+     */
+    public getSingleEdgeSelection(edgeId: string): Selection<SVGGElement, Edge, any, unknown> {
+        const edge = this.objectCache.getEdge(edgeId);
+        if (edge != null) {
+            return this.edgesGroup.select<SVGGElement>(`g.edge-group[data-id="${CSS.escape(edgeId)}"]`).datum(edge);
+        }
+        return null;
+    }
+
+    /**
      * Get a single node selection with bound datum.
      *
      * @param nodeId the id of the node to select
@@ -1665,7 +1678,7 @@ export default class GraphEditor extends HTMLElement {
     public getSingleNodeSelection(nodeId: string | number): Selection<SVGGElement, Node, any, unknown> {
         const node = this.objectCache.getNode(nodeId);
         if (node != null) {
-            return this.nodesGroup.select<SVGGElement>(`g.node#node-${nodeId}`).datum(node); // FIXME use data- attr for node id
+            return this.nodesGroup.select<SVGGElement>(`g.node[data-id="${CSS.escape(nodeId.toString())}"]`).datum(node);
         }
         return null;
     }
