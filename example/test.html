@@ -304,6 +304,13 @@
                     console.log(event.type, event.detail);
                 });
             }
+
+            if (false) {
+                this.graph.addEventListener('zoomchange', function test(event) {
+                    console.log(event.type, event.detail);
+                });
+                this.graph.zoomToBox({x: -50, y: -85, width:250, height: 205});
+            }
         </script>
     </body>
 </html>
