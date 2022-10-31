@@ -31,10 +31,23 @@ export class ExtrasRenderer {
     /** List of dynamically updatable attributes. */
     protected readonly updatableAttributes = ['fill', 'stroke'];
 
-    protected graph: GraphEditor;
+    protected graph: WeakRef<GraphEditor>;
 
     constructor(graph: GraphEditor) {
-        this.graph = graph;
+        this.graph = new WeakRef<GraphEditor>(graph);
+    }
+
+    /**
+     * Safely deref the grapheditor weak reference.
+     *
+     * @returns the grapheditor instance or throws an error
+     */
+    protected derefGraph(): GraphEditor {
+        const graph = this.graph.deref();
+        if (graph == null) {
+            throw new Error("Grapheditor instance is already dereferenced!")
+        }
+        return graph;
     }
 
 
@@ -88,10 +101,11 @@ export class ExtrasRenderer {
      * @param element d3 selection of the element in which to instatiate the template
      */
     protected updateDynamicNodeContentTemplate(templateId: string, element: Selection<SVGGElement, Node, any, unknown>) {
-        const dynTemplate = this.graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicNodeTemplate>(templateId);
+        const graph = this.derefGraph();
+        const dynTemplate = graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicNodeTemplate>(templateId);
         if (dynTemplate != null) {
             try {
-                dynTemplate.renderInitialTemplate(element, this.graph, null);
+                dynTemplate.renderInitialTemplate(element, graph, null);
             } catch (error) {
                 console.error(`An error occured while rendering the dynamic template for node ${element.datum().id}!`, error);
             }
@@ -107,10 +121,11 @@ export class ExtrasRenderer {
      * @param element d3 selection of the element in which to instatiate the template
      */
     protected updateDynamicMarkerContentTemplate(templateId: string, element: Selection<SVGGElement, Marker|LinkHandle, any, unknown>, parent: Node | Edge) {
-        const dynTemplate = this.graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicMarkerTemplate>(templateId);
+        const graph = this.derefGraph();
+        const dynTemplate = graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicMarkerTemplate>(templateId);
         if (dynTemplate != null) {
             try {
-                dynTemplate.renderInitialTemplate(element, this.graph, { parent: parent });
+                dynTemplate.renderInitialTemplate(element, graph, { parent: parent });
             } catch (error) {
                 console.error('An error occured while rendering the dynamic marker template!', { parent: parent }, error);
             }
@@ -126,13 +141,14 @@ export class ExtrasRenderer {
      * @param element d3 selection of the element in which to instatiate the template
      */
     protected updateDynamicTextComponentContentTemplate(templateId: string, element: Selection<SVGGElement, TextComponent, any, unknown>, parent: Node | Edge) {
-        let dynTemplate = this.graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicTextComponentTemplate>(templateId);
+        const graph = this.derefGraph();
+        let dynTemplate = graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicTextComponentTemplate>(templateId);
         if (dynTemplate == null) {
-            dynTemplate = this.graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicTextComponentTemplate>('default-textcomponent');
+            dynTemplate = graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicTextComponentTemplate>('default-textcomponent');
         }
         if (dynTemplate != null) {
             try {
-                dynTemplate.renderInitialTemplate(element, this.graph, { parent: parent });
+                dynTemplate.renderInitialTemplate(element, graph, { parent: parent });
             } catch (error) {
                 console.error('An error occured while rendering the dynamic text component template!', { parent: parent }, error);
             }
@@ -151,11 +167,12 @@ export class ExtrasRenderer {
      * @param templateType the template type to use
      */
     protected updateStaticContentTemplate<T extends Node | Marker | LinkHandle>(element: Selection<SVGGElement, T, any, unknown>, templateId: string, templateType: string) {
+        const graph = this.derefGraph();
         let newTemplate: Selection<SVGGElement, unknown, any, unknown>;
         if (templateType === 'node') {
-            newTemplate = this.graph.staticTemplateRegistry.getNodeTemplate(templateId);
+            newTemplate = graph.staticTemplateRegistry.getNodeTemplate(templateId);
         } else if (templateType === 'marker') {
-            newTemplate = this.graph.staticTemplateRegistry.getMarkerTemplate(templateId);
+            newTemplate = graph.staticTemplateRegistry.getMarkerTemplate(templateId);
         } else {
             console.warn(`Tried to use unsupported template type: ${templateType}`);
         }

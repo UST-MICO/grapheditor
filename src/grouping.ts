@@ -435,11 +435,24 @@ export class GroupingManager {
     private groupsById: Map<string, NodeGroup>;
 
     /** Reference to the grapheditor instance to dispatch events or get nodes. */
-    private graphEditor: GraphEditor;
+    private graphEditor: WeakRef<GraphEditor>;
 
     constructor(graphEditor: GraphEditor) {
         this.groupsById = new Map<string, NodeGroup>();
-        this.graphEditor = graphEditor;
+        this.graphEditor = new WeakRef<GraphEditor>(graphEditor);
+    }
+
+    /**
+     * Safely deref the grapheditor weak reference.
+     *
+     * @returns the grapheditor instance or throws an error
+     */
+    protected derefGraph(): GraphEditor {
+        const graph = this.graphEditor.deref();
+        if (graph == null) {
+            throw new Error("Grapheditor instance is already dereferenced!")
+        }
+        return graph;
     }
 
     /**
@@ -510,6 +523,7 @@ export class GroupingManager {
      * @returns true iff the node was successfully added to the group
      */
     addNodeToGroup(groupId: string|number, nodeId: string|number, atPosition?: Point, eventSource: EventSource = EventSource.API, sourceEvent?: Event): boolean {
+        const graph = this.derefGraph();
         const group = this.getGroupForNode(groupId);
         if (group.children.has(nodeId.toString())) {
             console.error(`Adding node ${nodeId} to group ${groupId} would create a cycle!`);
@@ -531,10 +545,10 @@ export class GroupingManager {
         if (group.treeRoot != null) {
             this.propagateTreeRoot(group, childGroup, eventSource, sourceEvent);
         }
-        const groupNode = this.graphEditor.getNode(groupId);
-        const childNode = this.graphEditor.getNode(nodeId);
+        const groupNode = graph.getNode(groupId);
+        const childNode = graph.getNode(nodeId);
         if (group.groupBehaviour?.afterNodeJoinedGroup != null) {
-            group.groupBehaviour.afterNodeJoinedGroup(group.groupId, childGroup.groupId, groupNode, childNode, this.graphEditor, atPosition);
+            group.groupBehaviour.afterNodeJoinedGroup(group.groupId, childGroup.groupId, groupNode, childNode, graph, atPosition);
         }
         this.afterGroupJoin(group.groupId, childGroup.groupId, groupNode, childNode, eventSource, sourceEvent);
         return true;
@@ -712,6 +726,7 @@ export class GroupingManager {
      * @returns true iff the node was successfully removed from the group
      */
     removeNodeFromGroup(groupId: string|number, nodeId: string|number, eventSource: EventSource = EventSource.API, sourceEvent?: Event): boolean {
+        const graph = this.derefGraph();
         const group = this.getGroupForNode(groupId);
         if (!group.children.has(nodeId.toString())) {
             return false;
@@ -723,10 +738,10 @@ export class GroupingManager {
         if (childGroup.treeRoot != null) {
             this._leaveTree(childGroup, childGroup.treeRoot, true, eventSource, sourceEvent);
         }
-        const groupNode = this.graphEditor.getNode(groupId);
-        const childNode = this.graphEditor.getNode(nodeId);
+        const groupNode = graph.getNode(groupId);
+        const childNode = graph.getNode(nodeId);
         if (group.groupBehaviour?.afterNodeLeftGroup != null) {
-            group.groupBehaviour.afterNodeLeftGroup(group.groupId, childGroup.groupId, groupNode, childNode, this.graphEditor);
+            group.groupBehaviour.afterNodeLeftGroup(group.groupId, childGroup.groupId, groupNode, childNode, graph);
         }
         this.afterGroupLeave(group.groupId, childGroup.groupId, groupNode, childNode, eventSource, sourceEvent);
         return true;
@@ -937,6 +952,7 @@ export class GroupingManager {
      */
     // eslint-disable-next-line complexity
     protected getGroupWithProperty(childNode: Node, groupProperty: string, groupDecisionCallback: string, strategy: 'closest-parent' | 'largest-group', nodeForDecisionCallback?: Node): string {
+        const graph = this.derefGraph();
         const childId = childNode.id.toString();
         let currentGroup: NodeGroup = this.groupsById.get(childId); // the child group is never checked
         let validGroup: string;
@@ -950,9 +966,9 @@ export class GroupingManager {
                         behaviour[groupDecisionCallback](
                             parentGroup.groupId,
                             nodeForDecisionCallback?.id.toString() ?? childId,
-                            this.graphEditor.getNode(parentGroup.groupId),
+                            graph.getNode(parentGroup.groupId),
                             nodeForDecisionCallback ?? childNode,
-                            this.graphEditor
+                            graph
                         )
                 ) {
                     // groupBehaviour satisfies conditions
@@ -1047,7 +1063,7 @@ export class GroupingManager {
                 // test if node joining the group would create a cycle
                 if (!(this.getAllChildrenOf(node.id)?.has(group.groupId) ?? false)) {
                     // test if group allows this specific node to join
-                    if (behaviour.captureThisDraggedNode == null || behaviour.captureThisDraggedNode(group.groupId, childGroupId.toString(), groupNode, node, this.graphEditor)) {
+                    if (behaviour.captureThisDraggedNode == null || behaviour.captureThisDraggedNode(group.groupId, childGroupId.toString(), groupNode, node, this.derefGraph())) {
                         return group.groupId;
                     }
                 }
@@ -1083,11 +1099,12 @@ export class GroupingManager {
      * @param childNode the node that wants to leave
      */
     getCanDraggedNodeLeaveGroup(groupId: string|number, childGroupId: string|number, childNode: Node): boolean {
+        const graph = this.derefGraph();
         const groupBehaviour = this.getGroupBehaviourOf(groupId);
         if (groupBehaviour?.allowDraggedNodesLeavingGroup ?? false) {
             if (groupBehaviour.allowThisDraggedNodeLeavingGroup != null) {
-                const groupNode = this.graphEditor.getNode(groupId);
-                return groupBehaviour.allowThisDraggedNodeLeavingGroup(groupId.toString(), childGroupId.toString(), groupNode, childNode, this.graphEditor);
+                const groupNode = graph.getNode(groupId);
+                return groupBehaviour.allowThisDraggedNodeLeavingGroup(groupId.toString(), childGroupId.toString(), groupNode, childNode, graph);
             }
             return true;
         }
@@ -1156,7 +1173,7 @@ export class GroupingManager {
             cancelable: false,
             detail: details,
         });
-        this.graphEditor.dispatchEvent(event);
+        this.derefGraph().dispatchEvent(event);
     }
 
     /**
@@ -1184,7 +1201,7 @@ export class GroupingManager {
             cancelable: false,
             detail: details,
         });
-        this.graphEditor.dispatchEvent(event);
+        this.derefGraph().dispatchEvent(event);
     }
 
     /**
@@ -1216,6 +1233,6 @@ export class GroupingManager {
             cancelable: false,
             detail: details,
         });
-        this.graphEditor.dispatchEvent(event);
+        this.derefGraph().dispatchEvent(event);
     }
 }

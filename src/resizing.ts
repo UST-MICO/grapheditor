@@ -369,7 +369,7 @@ function getNodeBBox(nodeId: string, graphEditor: GraphEditor, resizeStrategy: R
 export class ResizingManager {
 
     /** The grapheditor instance this object is bound to. */
-    readonly graphEditor: GraphEditor;
+    readonly graphEditor: WeakRef<GraphEditor>;
     /** The map containing all resize strategies to be used for resizing nodes. */
     readonly resizeStrategies: Map<string, ResizeStrategy> = new Map();
 
@@ -393,10 +393,10 @@ export class ResizingManager {
 
 
     constructor(graphEditor: GraphEditor) {
-        this.graphEditor = graphEditor;
-        this.svgChange = (changeEvent: CustomEvent) => { this.initializeGraph(this.graphEditor.getGraphGroup()); };
-        this.graphEditor.addEventListener('svginitialized', this.svgChange);
-        this.initializeGraph(this.graphEditor.getGraphGroup());
+        this.graphEditor = new WeakRef<GraphEditor>(graphEditor);
+        this.svgChange = (changeEvent: CustomEvent) => { this.initializeGraph(this.derefGraph().getGraphGroup()); };
+        graphEditor.addEventListener('svginitialized', this.svgChange);
+        this.initializeGraph(this.derefGraph().getGraphGroup());
 
         this.nodePositionChange = (positionChangeEvent: CustomEvent) => {
             const nodeId = positionChangeEvent.detail.node.id;
@@ -406,16 +406,30 @@ export class ResizingManager {
                     .call(this.updateOverlayPositions.bind(this));
             }
         };
-        this.graphEditor.addEventListener('nodepositionchange', this.nodePositionChange);
+        graphEditor.addEventListener('nodepositionchange', this.nodePositionChange);
         this.resizeStrategies.set('default', new DefaultResizeStrategy());
+    }
+
+    /**
+     * Safely deref the grapheditor weak reference.
+     *
+     * @returns the grapheditor instance or throws an error
+     */
+    protected derefGraph(): GraphEditor {
+        const graph = this.graphEditor.deref();
+        if (graph == null) {
+            throw new Error("Grapheditor instance is already dereferenced!")
+        }
+        return graph;
     }
 
     /**
      * Unsubscribe all event subscriptions of this object on the grapheditor instance.
      */
     public unlink(): void {
-        this.graphEditor.removeEventListener('svginitialized', this.svgChange);
-        this.graphEditor.removeEventListener('nodepositionchange', this.nodePositionChange);
+        const graph = this.derefGraph();
+        graph.removeEventListener('svginitialized', this.svgChange);
+        graph.removeEventListener('nodepositionchange', this.nodePositionChange);
     }
 
     /**
@@ -449,6 +463,7 @@ export class ResizingManager {
         if (this.resizeOptions.has(nodeId)) {
             return;
         }
+        const graph = this.derefGraph();
 
         const resizeStrat = this.resizeStrategies.get(options.resizeStrategy ?? 'default');
 
@@ -457,8 +472,8 @@ export class ResizingManager {
             console.warn(`Could not find the resize strategy ${options.resizeStrategy ?? 'default'} to use! Resizing will not have any effect on the node without a resize strategy.`);
         }
 
-        const node = this.graphEditor.getNode(nodeId);
-        const bbox = getNodeBBox(nodeId, this.graphEditor, resizeStrat);
+        const node = graph.getNode(nodeId);
+        const bbox = getNodeBBox(nodeId, graph, resizeStrat);
 
         if (node == null || bbox == null) {
             console.error(`Could not get the dimensions of the node ${nodeId}! Cannot display a resize overlay without dimensions!`, node);
@@ -536,11 +551,12 @@ export class ResizingManager {
      * @param nodeId the node id for that selection
      */
     protected updateOverlay(overlaySelection: Selection<SVGGElement, any, any, any>, nodeId: string) {
+        const graph = this.derefGraph();
         const options: ResizeOverlayOptions = this.resizeOptions.get(nodeId);
         let bbox: Rect = this.currentlyResizing.get(nodeId);
         if (bbox == null) {
             const resizeStrat = this.resizeStrategies.get(options.resizeStrategy ?? 'default');
-            bbox = getNodeBBox(nodeId, this.graphEditor, resizeStrat);
+            bbox = getNodeBBox(nodeId, graph, resizeStrat);
         }
 
         overlaySelection.select('rect.outline')
@@ -551,7 +567,7 @@ export class ResizingManager {
             .attr('fill', 'none')
             .attr('stroke', 'black');
 
-        const templateRegistry = this.graphEditor.staticTemplateRegistry;
+        const templateRegistry = graph.staticTemplateRegistry;
 
         const resizeHandles = resizeHandlesFromOptions(options, bbox);
 
@@ -601,13 +617,13 @@ export class ResizingManager {
                         if (this.currentlyResizing.has(nodeId)) {
                             return;
                         }
-                        const node = this.graphEditor.getNode(nodeId);
+                        const node = graph.getNode(nodeId);
                         const resizeStrategy = this.resizeStrategies.get(options.resizeStrategy ?? 'default');
                         if (resizeStrategy == null) {
                             console.warn(`Could not find the resize strategy "${options.resizeStrategy ?? 'default'}"!`);
                         }
                         // eslint-disable-next-line no-shadow
-                        const bbox = getNodeBBox(nodeId, this.graphEditor, resizeStrategy);
+                        const bbox = getNodeBBox(nodeId, graph, resizeStrategy);
                         this.currentlyResizing.set(nodeId, bbox);
                         const handler = this.resizeHandlerFromHandle(options, handle as any);
                         return {
@@ -661,7 +677,7 @@ export class ResizingManager {
                         this.currentlyResizing.delete(nodeId);
 
                         // eslint-disable-next-line no-shadow
-                        const bbox = getNodeBBox(nodeId, this.graphEditor, resizeInfo.resizeStrategy);
+                        const bbox = getNodeBBox(nodeId, graph, resizeInfo.resizeStrategy);
 
                         this.updateOverlayDimensions(overlaySelection, nodeId, resizeHandlesFromOptions(options, bbox));
                     })
@@ -677,11 +693,12 @@ export class ResizingManager {
      * @param resizeHandles the resize handle list for that selection (must have the right dimensions)
      */
     protected updateOverlayDimensions(overlaySelection: Selection<SVGGElement, string, SVGGElement, any>, nodeId, resizeHandles: ResizeHandle[]) {
+        const graph = this.derefGraph();
         const options: ResizeOverlayOptions = this.resizeOptions.get(nodeId);
         let bbox: Rect = this.currentlyResizing.get(nodeId);
         if (bbox == null) {
             const resizeStrat = this.resizeStrategies.get(options.resizeStrategy ?? 'default');
-            bbox = getNodeBBox(nodeId, this.graphEditor, resizeStrat);
+            bbox = getNodeBBox(nodeId, graph, resizeStrat);
         }
 
         overlaySelection.select('rect.outline')
@@ -719,9 +736,9 @@ export class ResizingManager {
      * @param overlaySelection a selection of resize overlays
      */
     protected updateOverlayPositions(overlaySelection: Selection<SVGGElement, string, SVGGElement, any>) {
-        const self = this;
+        const graph = this.derefGraph();
         overlaySelection.each(function(nodeId) {
-            const node = self.graphEditor.getNode(nodeId);
+            const node = graph.getNode(nodeId);
             select(this).attr('transform', `translate(${node.x},${node.y})`);
         });
     }
@@ -781,7 +798,7 @@ export class ResizingManager {
             console.error('Cannot resize the node to anegative height!');
             return;
         }
-        const node = this.graphEditor.getNode(nodeId);
+        const node = this.derefGraph().getNode(nodeId);
         const strat = this.resizeStrategies.get(resizeStrategy ?? 'default');
         if (node == null) {
             console.warn(`Could not resize the node. No node with id "${nodeId}" found!`);
@@ -809,16 +826,17 @@ export class ResizingManager {
      */
     // eslint-disable-next-line max-len
     protected _resizeNode(resizeStrategy: ResizeStrategy, node: Node, newRect: Rect, updateGrapheditor: boolean= true, eventSource: EventSource= EventSource.USER_INTERACTION): RotationVector {
+        const graph = this.derefGraph();
         const nodeId: string = node.id.toString();
-        const oldBBox = getNodeBBox(nodeId, this.graphEditor, resizeStrategy);
+        const oldBBox = getNodeBBox(nodeId, graph, resizeStrategy);
         const oldPos: Point = {x: node.x, y: node.y};
         try {
-            resizeStrategy.applyNewDimensions(node, newRect.width, newRect.height, this.graphEditor);
+            resizeStrategy.applyNewDimensions(node, newRect.width, newRect.height, graph);
         } catch (error) {
             console.error(`An error occured while applying the new dimensions to the node ${node.id}.`, error);
         }
         try {
-            resizeStrategy.fitIntoBoundingBox(node, newRect, this.graphEditor);
+            resizeStrategy.fitIntoBoundingBox(node, newRect, graph);
         } catch (error) {
             console.error(`An error occured while moving the node ${node.id} into the new bounding box.`, error);
         }
@@ -826,8 +844,8 @@ export class ResizingManager {
         const nodeShift: RotationVector = {dx: node.x - oldPos.x, dy: node.y - oldPos.y};
 
         if (updateGrapheditor) {
-            this.graphEditor.completeRender();
-            const newBBox = getNodeBBox(nodeId, this.graphEditor, resizeStrategy);
+            graph.completeRender();
+            const newBBox = getNodeBBox(nodeId, graph, resizeStrategy);
             this.dispatchNodeResizeEvent(node, newBBox, oldBBox, eventSource);
         } else {
             // the actual node BBox only updates when the graph is rerendered
@@ -867,7 +885,7 @@ export class ResizingManager {
             cancelable: false,
             detail: detail,
         });
-        this.graphEditor.dispatchEvent(ev);
+        this.derefGraph().dispatchEvent(ev);
     }
 
 
