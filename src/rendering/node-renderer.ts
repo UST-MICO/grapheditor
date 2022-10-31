@@ -37,7 +37,7 @@ import { Node, NodeMovementInformation } from '../node';
  */
 export class NodeRenderer {
 
-    protected graph: GraphEditor;
+    protected graph: WeakRef<GraphEditor>;
     protected objectCache: GraphObjectCache;
 
     /**
@@ -47,8 +47,21 @@ export class NodeRenderer {
      * @param cache reference to the private object cache of the grapheditor, used to update node bounding boxes and drop zones
      */
     constructor(graph: GraphEditor, cache: GraphObjectCache) {
-        this.graph = graph;
+        this.graph = new WeakRef<GraphEditor>(graph);
         this.objectCache = cache;
+    }
+
+    /**
+     * Safely deref the grapheditor weak reference.
+     *
+     * @returns the grapheditor instance or throws an error
+     */
+    protected derefGraph(): GraphEditor {
+        const graph = this.graph.deref();
+        if (graph == null) {
+            throw new Error("Grapheditor instance is already dereferenced!")
+        }
+        return graph;
     }
 
     /**
@@ -59,6 +72,7 @@ export class NodeRenderer {
      * @param forceUpdateTemplates if the templates hould be completelty reapplied
      */
     public completeNodeGroupsRender(nodesGroup: Selection<SVGGElement, unknown, any, unknown>, nodes: Node[], forceUpdateTemplates: boolean = false) {
+        const graph = this.derefGraph();
         if (forceUpdateTemplates) {
             nodesGroup.selectAll('g.node').remove();
         }
@@ -74,20 +88,19 @@ export class NodeRenderer {
             .call(this.updateNodes)
             .call(this.updateNodePositions)
             .order()
-            .on('mouseover', (event, d) => { this.graph.onNodeEnter.bind(this.graph)(event, d); })
-            .on('mouseout', (event, d) => { this.graph.onNodeLeave.bind(this.graph)(event, d); })
-            .on('click', (event, d) => { this.graph.onNodeClick.bind(this.graph)(event, d); });
+            .on('mouseover', (event, d) => { graph.onNodeEnter.bind(graph)(event, d); })
+            .on('mouseout', (event, d) => { graph.onNodeLeave.bind(graph)(event, d); })
+            .on('click', (event, d) => { graph.onNodeClick.bind(graph)(event, d); });
 
-        const self = this;
         nodeSelection.call(
             drag<SVGGElement, Node, NodeDragBehaviour<unknown>>()
                 .subject((e, n) => {
-                    if (this.graph.nodeDragInteraction === 'none') {
+                    if (graph.nodeDragInteraction === 'none') {
                         return; // no node dragging allowed!
                     }
                     const event = e as unknown as D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown>>;
                     const node = n as unknown as Node;
-                    if (this.graph.nodeDragInteraction === 'link') {
+                    if (graph.nodeDragInteraction === 'link') {
                         return this.getNodeLinkDragBehaviour(event, node);
                     }
 
@@ -95,8 +108,8 @@ export class NodeRenderer {
                 })
                 .container(function (e) {
                     // use edges group as container in linking mode
-                    if (self.graph.nodeDragInteraction === 'link') {
-                        return self.graph.getSVG().select('g.zoom-group').select<SVGGElement>('g.edges').node();
+                    if (graph.nodeDragInteraction === 'link') {
+                        return graph.getSVG().select('g.zoom-group').select<SVGGElement>('g.edges').node();
                     } else {
                         return this.parentElement;
                     }
@@ -105,21 +118,21 @@ export class NodeRenderer {
                     const event = e as unknown as D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown>>;
                     const onStart = event.subject.onStart;
                     if (onStart != null) {
-                        onStart(event, event.subject.subject, this.graph);
+                        onStart(event, event.subject.subject, graph);
                     }
                 })
                 .on('drag', (e) => {
                     const event = e as unknown as D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown>>;
                     const onDrag = event.subject.onDrag;
                     if (onDrag != null) {
-                        onDrag(event, event.subject.subject, this.graph);
+                        onDrag(event, event.subject.subject, graph);
                     }
                 })
                 .on('end', (e) => {
                     const event = e as unknown as D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown>>;
                     const onEnd = event.subject.onEnd;
                     if (onEnd != null) {
-                        onEnd(event, event.subject.subject, this.graph);
+                        onEnd(event, event.subject.subject, graph);
                     }
                 })
         );
@@ -132,21 +145,22 @@ export class NodeRenderer {
      * @param nodeSelection d3 selection of nodes to update with bound data
      */
     protected updateNodes = (nodeSelection?: Selection<SVGGElement, Node, any, unknown>) => {
+        const graph = this.derefGraph();
         if (nodeSelection == null) {
-            nodeSelection = this.graph.getNodeSelection();
+            nodeSelection = graph.getNodeSelection();
         }
 
         // alias for this for use in closures
         const self = this;
 
         // update templates
-        const extrasRenderer = this.graph.extrasRenderer;
+        const extrasRenderer = graph.extrasRenderer;
         nodeSelection.each(function (d) {
             const g: Selection<SVGGElement, Node, any, unknown> = select(this).datum(d);
             if (d.dynamicTemplate != null && d.dynamicTemplate !== '') {
                 extrasRenderer.updateContentTemplate<Node>(g, d.dynamicTemplate, 'node', true);
             } else {
-                const templateId = self.graph.staticTemplateRegistry.getNodeTemplateId(d.type);
+                const templateId = graph.staticTemplateRegistry.getNodeTemplateId(d.type);
                 extrasRenderer.updateContentTemplate<Node>(g, templateId, 'node');
             }
         });
@@ -157,17 +171,17 @@ export class NodeRenderer {
             let handles: LinkHandle[] = [];
             if (node.dynamicTemplate != null && node.dynamicTemplate !== '') {
                 // update dynamic template
-                const dynTemplate = self.graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicNodeTemplate>(node.dynamicTemplate);
+                const dynTemplate = graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicNodeTemplate>(node.dynamicTemplate);
                 if (dynTemplate != null) {
                     try {
-                        dynTemplate.updateTemplate(g, self.graph, null);
+                        dynTemplate.updateTemplate(g, graph, null);
                     } catch (error) {
                         console.error(`An error occured while updating the dynamic template for node ${node.id}!`, error);
                     }
                 }
             }
             try {
-                handles = getNodeLinkHandles(g, self.graph.staticTemplateRegistry, self.graph.dynamicTemplateRegistry, self.graph);
+                handles = getNodeLinkHandles(g, graph.staticTemplateRegistry, graph.dynamicTemplateRegistry, graph);
             } catch (error) {
                 console.error(`An error occured while calculating the link handles for node ${node.id}!`, error);
             }
@@ -181,13 +195,13 @@ export class NodeRenderer {
                 )
                 .each(function (d: LinkHandle) {
                     const linkHandleG = select(this).datum(d);
-                    const templateId = self.graph.staticTemplateRegistry.getMarkerTemplateId(d.template);
+                    const templateId = graph.staticTemplateRegistry.getMarkerTemplateId(d.template);
                     extrasRenderer.updateContentTemplate<LinkHandle>(linkHandleG, templateId, 'marker', d.isDynamicTemplate, node);
                     if (d.isDynamicTemplate) {
-                        const dynTemplate = self.graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicMarkerTemplate>(templateId);
+                        const dynTemplate = graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicMarkerTemplate>(templateId);
                         if (dynTemplate != null) {
                             try {
-                                dynTemplate.updateTemplate(linkHandleG, self.graph, { parent: node });
+                                dynTemplate.updateTemplate(linkHandleG, graph, { parent: node });
                             } catch (error) {
                                 console.error(`An error occured while updating the dynamic link handle template in node ${node.id}!`, error);
                             }
@@ -208,42 +222,42 @@ export class NodeRenderer {
             handleSelection.call(
                 drag<SVGGElement, LinkHandle, NodeDragBehaviour<{ edge: DraggedEdge; capturingGroup?: string; }>>()
                     .subject((e) => {
-                        if (self.graph.edgeDragInteraction === 'none') {
+                        if (graph.edgeDragInteraction === 'none') {
                             return; // edge dragging is disabled
                         }
                         const event = e as unknown as D3DragEvent<SVGGElement, LinkHandle, NodeDragBehaviour<{ edge: DraggedEdge; capturingGroup?: string; }>>;
                         return self.getNodeLinkDragBehaviour(event, node);
                     })
-                    .container(() => self.graph.getSVG().select('g.zoom-group').select<SVGGElement>('g.edges').node())
+                    .container(() => graph.getSVG().select('g.zoom-group').select<SVGGElement>('g.edges').node())
                     .on('start', (e) => {
                         const event = e as unknown as D3DragEvent<SVGGElement, LinkHandle, NodeDragBehaviour<{ edge: DraggedEdge; capturingGroup?: string; }>>;
                         const onStart = event.subject.onStart;
                         if (onStart != null) {
-                            onStart(event, event.subject.subject, self.graph);
+                            onStart(event, event.subject.subject, graph);
                         }
                     })
                     .on('drag', (e) => {
                         const event = e as unknown as D3DragEvent<SVGGElement, LinkHandle, NodeDragBehaviour<{ edge: DraggedEdge; capturingGroup?: string; }>>;
                         const onDrag = event.subject.onDrag;
                         if (onDrag != null) {
-                            onDrag(event, event.subject.subject, self.graph);
+                            onDrag(event, event.subject.subject, graph);
                         }
                     })
                     .on('end', (e) => {
                         const event = e as unknown as D3DragEvent<SVGGElement, LinkHandle, NodeDragBehaviour<{ edge: DraggedEdge; capturingGroup?: string; }>>;
                         const onEnd = event.subject.onEnd;
                         if (onEnd != null) {
-                            onEnd(event, event.subject.subject, self.graph);
+                            onEnd(event, event.subject.subject, graph);
                         }
                     })
             );
         });
 
         nodeSelection
-            .call(this.graph.updateNodeClasses.bind(this.graph))
-            .call(this.graph.updateNodeHighligts.bind(this.graph))
+            .call(graph.updateNodeClasses.bind(graph))
+            .call(graph.updateNodeHighligts.bind(graph))
             .call(this.updateNodeText)
-            .call(this.graph.extrasRenderer.updateDynamicProperties)
+            .call(graph.extrasRenderer.updateDynamicProperties)
             .call(this.updateNodeDropAreas)
             .each(function (d) {
                 self.objectCache.setNodeBBox(d.id, this.getBBox());
@@ -271,16 +285,17 @@ export class NodeRenderer {
      * @param classesToRemove a list of css classes to be removed from all nodes
      */
     public updateNodeClasses = (nodeSelection: Selection<SVGGElement, Node, any, unknown>, classesToRemove: Set<string> = new Set()): void => {
+        const graph = this.derefGraph();
         if (classesToRemove != null) {
             classesToRemove.forEach((className) => {
                 nodeSelection.classed(className, () => false);
             });
         }
-        if (this.graph.classes != null) {
-            this.graph.classes.forEach((className) => {
+        if (graph.classes != null) {
+            graph.classes.forEach((className) => {
                 nodeSelection.classed(className, (d) => {
-                    if (this.graph.setNodeClass != null) {
-                        return this.graph.setNodeClass(className, d);
+                    if (graph.setNodeClass != null) {
+                        return graph.setNodeClass(className, d);
                     }
                     return false;
                 });
@@ -294,10 +309,11 @@ export class NodeRenderer {
      * Calculate highlighted nodes and update their classes.
      */
     public updateNodeHighligts = (nodeSelection: Selection<SVGGElement, Node, any, unknown>, hovered: Set<string | number>, linkSource?: string | number, linkTarget?: string | number) => {
+        const graph = this.derefGraph();
         nodeSelection
             .classed('hovered', (d) => hovered.has(d.id))
             .classed('selected', (d) => {
-                if (this.graph.selected.has(d.id.toString())) {
+                if (graph.selected.has(d.id.toString())) {
                     return true; // node is selected
                 }
                 if (linkSource === d.id || linkTarget === d.id) {
@@ -387,11 +403,12 @@ export class NodeRenderer {
      * @param y the y coordinate from where the move should start (can be substituted by node.y)
      */
     public getNodeMovementInformation(node: Node, x: number, y: number): NodeMovementInformation {
+        const graph = this.derefGraph();
         const movementInfo: NodeMovementInformation = { node: node };
-        const gm = this.graph.groupingManager;
+        const gm = graph.groupingManager;
         const groupId = gm.getGroupCapturingMovementOfChild(node);
         if (groupId != null && groupId !== node.id.toString()) {
-            const groupNode = this.graph.getNode(groupId);
+            const groupNode = graph.getNode(groupId);
             if (groupNode == null) {
                 movementInfo.node = {
                     id: groupId,
@@ -410,9 +427,9 @@ export class NodeRenderer {
             dx: x - movementInfo.node.x,
             dy: y - movementInfo.node.y,
         };
-        if (this.graph.onBeforeNodeMove != null) {
+        if (graph.onBeforeNodeMove != null) {
             try {
-                return this.graph.onBeforeNodeMove(movementInfo);
+                return graph.onBeforeNodeMove(movementInfo);
             } catch (error) {
                 console.error('An error has occured in the onBeforeNodeMove callback.', node, movementInfo);
             }
@@ -430,16 +447,17 @@ export class NodeRenderer {
      * @returns the 'move' drag behaviour
      */
     protected getNodeMoveDragBehaviour = (event: D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown>>, node: Node) => {
+        const graph = this.derefGraph();
         const nodeMoveInfo = this.getNodeMovementInformation(node as unknown as Node, event.x, event.y);
         if (nodeMoveInfo == null) {
             return; // move was cancelled by callback
         }
-        const startTreeParent = this.graph.groupingManager.getTreeParentOf(nodeMoveInfo.node.id);
+        const startTreeParent = graph.groupingManager.getTreeParentOf(nodeMoveInfo.node.id);
         if (startTreeParent != null) {
-            const behaviour = this.graph.groupingManager.getGroupBehaviourOf(startTreeParent);
+            const behaviour = graph.groupingManager.getGroupBehaviourOf(startTreeParent);
             if (behaviour.onNodeMoveStart != null) {
                 const needRender = Boolean(
-                    behaviour.onNodeMoveStart(startTreeParent, nodeMoveInfo.node.id.toString(), this.graph.getNode(startTreeParent), nodeMoveInfo.node, this.graph)
+                    behaviour.onNodeMoveStart(startTreeParent, nodeMoveInfo.node.id.toString(), graph.getNode(startTreeParent), nodeMoveInfo.node, graph)
                 );
                 nodeMoveInfo.needsFullRender = needRender || nodeMoveInfo.needsFullRender;
             }
@@ -502,6 +520,7 @@ export class NodeRenderer {
      * @returns the 'move' drag behaviour
      */
     protected getNodeLinkDragBehaviour = (event: D3DragEvent<SVGGElement, unknown, NodeDragBehaviour<unknown>>, node: Node) => {
+        const graph = this.derefGraph();
         const behaviour: NodeDragBehaviour<{ edge: DraggedEdge; capturingGroup?: string; }> = {
             subject: null,
             onDrag: (event, subject, g) => {
@@ -513,15 +532,15 @@ export class NodeRenderer {
             }
         };
 
-        const groupCapturingEdge = this.graph.groupingManager.getGroupCapturingOutgoingEdge(node);
+        const groupCapturingEdge = graph.groupingManager.getGroupCapturingOutgoingEdge(node);
         if (groupCapturingEdge != null && groupCapturingEdge !== node.id.toString()) {
-            const groupNode = this.graph.getNode(groupCapturingEdge);
+            const groupNode = graph.getNode(groupCapturingEdge);
             if (groupNode != null) {
-                behaviour.subject = { edge: this.graph.edgeRenderer.createDraggedEdge(event as any, groupNode), capturingGroup: groupCapturingEdge };
+                behaviour.subject = { edge: graph.edgeRenderer.createDraggedEdge(event as any, groupNode), capturingGroup: groupCapturingEdge };
             }
         }
         if (behaviour.subject == null) {
-            behaviour.subject = { edge: this.graph.edgeRenderer.createDraggedEdge(event as any, node), capturingGroup: node.id.toString() };
+            behaviour.subject = { edge: graph.edgeRenderer.createDraggedEdge(event as any, node), capturingGroup: node.id.toString() };
         }
 
         return behaviour;
@@ -542,6 +561,7 @@ export class NodeRenderer {
      * @param eventSource the event source used in movement events
      */
     public moveNodeInternal(nodeMovementInfo: NodeMovementInformation, x: number, y: number, eventSource: EventSource): boolean {
+        const graph = this.derefGraph();
         let needsFullRender = false;
 
         if (nodeMovementInfo.offset != null) {
@@ -551,12 +571,12 @@ export class NodeRenderer {
         const node = nodeMovementInfo.node;
 
         // call parent groups beforeNodeMove
-        const currentTreeParent = this.graph.groupingManager.getTreeParentOf(node.id);
+        const currentTreeParent = graph.groupingManager.getTreeParentOf(node.id);
         if (currentTreeParent != null) {
-            const groupBehaviour = this.graph.groupingManager.getGroupBehaviourOf(currentTreeParent);
+            const groupBehaviour = graph.groupingManager.getGroupBehaviourOf(currentTreeParent);
             if (groupBehaviour.beforeNodeMove != null) {
-                const groupNode = this.graph.getNode(currentTreeParent);
-                needsFullRender = Boolean(groupBehaviour.beforeNodeMove(currentTreeParent, node.id.toString(), groupNode, node, { x: x, y: y }, this.graph));
+                const groupNode = graph.getNode(currentTreeParent);
+                needsFullRender = Boolean(groupBehaviour.beforeNodeMove(currentTreeParent, node.id.toString(), groupNode, node, { x: x, y: y }, graph));
             }
         }
 
@@ -575,7 +595,7 @@ export class NodeRenderer {
             node.y = y;
             if (nodeMovementInfo.children != null) {
                 nodeMovementInfo.children.forEach(childId => {
-                    const child = this.graph.getNode(childId);
+                    const child = graph.getNode(childId);
                     if (child != null) {
                         child.x += dx;
                         child.y += dy;
@@ -600,9 +620,10 @@ export class NodeRenderer {
      * @returns the absolute node position (or null)
      */
     protected getGroupDictatedPositionOfNode(node: Node): Point {
+        const graph = this.derefGraph();
         let groupRelativePosition: string | Point;
         let relativeToGroup: string;
-        const gm = this.graph.groupingManager;
+        const gm = graph.groupingManager;
         const treeParent = gm.getTreeParentOf(node.id);
         if (treeParent != null) {
             relativeToGroup = treeParent;
@@ -631,7 +652,7 @@ export class NodeRenderer {
             };
         }
         if (groupRelativePosition != null && relativeToGroup != null) {
-            const parentNode = this.graph.getNode(relativeToGroup);
+            const parentNode = graph.getNode(relativeToGroup);
             if (parentNode != null) {
                 return {
                     x: parentNode.x + groupRelativePosition.x,
@@ -655,8 +676,9 @@ export class NodeRenderer {
      * @param sourceEvent the source event (may be null)
      */
     public tryToLeaveCurrentGroup(nodeMovementInformation: NodeMovementInformation, x: number, y: number, eventSource: EventSource, sourceEvent?: Event): boolean {
+        const graph = this.derefGraph();
         const node = nodeMovementInformation.node;
-        const gm = this.graph.groupingManager;
+        const gm = graph.groupingManager;
 
         const currentGroup = gm.getTreeParentOf(node.id);
         if (currentGroup == null) {
@@ -666,9 +688,9 @@ export class NodeRenderer {
             return false; // group does not allow dragged nodes to leave
         }
 
-        const clientPoint = this.graph.getClientPointFromGraphCoordinates({ x: x, y: y });
+        const clientPoint = graph.getClientPointFromGraphCoordinates({ x: x, y: y });
 
-        const possibleTargetNodes = this.graph.getNodesFromPoint(clientPoint.x, clientPoint.y);
+        const possibleTargetNodes = graph.getNodesFromPoint(clientPoint.x, clientPoint.y);
         const allChildren = gm.getAllChildrenOf(currentGroup);
 
         const isOutsideGroup = !possibleTargetNodes.some(targetNode => {
@@ -707,16 +729,17 @@ export class NodeRenderer {
      * @param sourceEvent the source event (may be null)
      */
     public tryJoinNodeIntoGroup(nodeMovementInformation: NodeMovementInformation, x: number, y: number, eventSource: EventSource, sourceEvent?: Event): boolean {
+        const graph = this.derefGraph();
         const node = nodeMovementInformation.node;
-        const gm = this.graph.groupingManager;
+        const gm = graph.groupingManager;
 
         if (gm.getTreeParentOf(node.id) != null) {
             return false;
         }
 
-        const clientPoint = this.graph.getClientPointFromGraphCoordinates({ x: x, y: y });
+        const clientPoint = graph.getClientPointFromGraphCoordinates({ x: x, y: y });
 
-        const possibleTargetNodes = this.graph.getNodesFromPoint(clientPoint.x, clientPoint.y);
+        const possibleTargetNodes = graph.getNodesFromPoint(clientPoint.x, clientPoint.y);
         const targetNode = possibleTargetNodes.find(target => target.id !== node.id);
         if (targetNode != null) {
             const canJoinGroup = gm.getGroupCapturingDraggedNode(targetNode.id, node.id, targetNode, node);
@@ -754,7 +777,7 @@ export class NodeRenderer {
                 affectedChildren: movementInfo.children,
             },
         });
-        this.graph.dispatchEvent(ev);
+        this.derefGraph().dispatchEvent(ev);
     }
 
     /**
@@ -773,6 +796,6 @@ export class NodeRenderer {
                 node: node,
             },
         });
-        this.graph.dispatchEvent(ev);
+        this.derefGraph().dispatchEvent(ev);
     }
 }

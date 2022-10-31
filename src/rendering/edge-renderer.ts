@@ -38,7 +38,7 @@ import { LinkHandle } from "../link-handle";
  */
 export class EdgeRenderer {
 
-    protected graph: GraphEditor;
+    protected graph: WeakRef<GraphEditor>;
     protected objectCache: GraphObjectCache;
 
     /**
@@ -48,8 +48,21 @@ export class EdgeRenderer {
      * @param cache reference to the private object cache of the grapheditor, used to update node bounding boxes and drop zones
      */
     constructor(graph: GraphEditor, cache: GraphObjectCache) {
-        this.graph = graph;
+        this.graph = new WeakRef<GraphEditor>(graph);
         this.objectCache = cache;
+    }
+
+    /**
+     * Safely deref the grapheditor weak reference.
+     *
+     * @returns the grapheditor instance or throws an error
+     */
+    protected derefGraph(): GraphEditor {
+        const graph = this.graph.deref();
+        if (graph == null) {
+            throw new Error("Grapheditor instance is already dereferenced!")
+        }
+        return graph;
     }
 
     /**
@@ -91,25 +104,27 @@ export class EdgeRenderer {
      * @param edgeGroupSelection d3 selection of edgeGroups
      */
     public updateEdgeGroups(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>) {
+        const graph = this.derefGraph();
         if (edgeGroupSelection == null) {
-            edgeGroupSelection = this.graph.getEdgeSelection();
+            edgeGroupSelection = graph.getEdgeSelection();
         }
         const self = this;
         edgeGroupSelection
             .each(function (d) {
                 self.updateEdgeGroup(select(this), d);
             })
-            .call(this.graph.updateEdgeGroupClasses.bind(this.graph))
-            .call(this.graph.updateEdgeHighligts.bind(this.graph));
+            .call(graph.updateEdgeGroupClasses.bind(graph))
+            .call(graph.updateEdgeHighligts.bind(graph));
     }
 
     /**
      * Update draggededge groups.
      */
     public updateDraggedEdgeGroups() {
-        this.graph.getEdgesGroup()
+        const graph = this.derefGraph();
+        graph.getEdgesGroup()
             .selectAll<SVGGElement, DraggedEdge>('g.edge-group.dragged')
-            .data<DraggedEdge>(this.graph.draggedEdgeList, edgeId)
+            .data<DraggedEdge>(graph.draggedEdgeList, edgeId)
             .join(
                 enter => enter.append('g')
                     .attr('id', (d) => `edge-${edgeId(d)}`)
@@ -132,17 +147,18 @@ export class EdgeRenderer {
      * @param edgeGroupSelection d3 selection of edges to update with bound data
      */
     public updateEdgeGroupClasses = (edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, classesToRemove: Set<string> = new Set()): void => {
-        edgeGroupSelection.classed('ghost', (d) => this.graph.isEdgeCurrentlyDragged(edgeId(d)));
+        const graph = this.derefGraph();
+        edgeGroupSelection.classed('ghost', (d) => graph.isEdgeCurrentlyDragged(edgeId(d)));
         if (classesToRemove != null) {
             classesToRemove.forEach((className) => {
                 edgeGroupSelection.classed(className, () => false);
             });
         }
-        if (this.graph.classes != null) {
-            this.graph.classes.forEach((className) => {
+        if (graph.classes != null) {
+            graph.classes.forEach((className) => {
                 edgeGroupSelection.classed(className, (d) => {
-                    if (this.graph.setEdgeClass != null) {
-                        return this.graph.setEdgeClass(
+                    if (graph.setEdgeClass != null) {
+                        return graph.setEdgeClass(
                             className,
                             d,
                             this.objectCache.getNode(d.source),
@@ -184,6 +200,7 @@ export class EdgeRenderer {
      * @param d edge datum
      */
     protected updateEdgeGroup(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, d: Edge) {
+        const graph = this.derefGraph();
         const pathSelection = edgeGroupSelection.select<SVGPathElement>('path.edge:not(.dragged)').datum(d);
         pathSelection.attr('stroke', 'black');
 
@@ -209,12 +226,12 @@ export class EdgeRenderer {
             .raise(); // raise the drag handles to the top of the edge
 
         this.updateEdgeText(edgeGroupSelection, d);
-        this.graph.extrasRenderer.updateDynamicProperties(edgeGroupSelection);
+        graph.extrasRenderer.updateDynamicProperties(edgeGroupSelection);
 
         edgeDragHandles.call(
             drag<SVGGElement, EdgeDragHandle, { edge: DraggedEdge; capturingGroup?: string; isReversedEdge: boolean }>()
                 .subject((e, h) => {
-                    if (this.graph.edgeDragInteraction === 'none') {
+                    if (graph.edgeDragInteraction === 'none') {
                         return; // edge dragging is disabled
                     }
                     const event = e as unknown as Event;
@@ -223,13 +240,13 @@ export class EdgeRenderer {
                     let sourceNode: Node;
                     if ((handle).isReverseHandle ?? false) {
                         // a reverse handle flips the edge direction
-                        sourceNode = this.graph.getNode(edge.target);
+                        sourceNode = graph.getNode(edge.target);
                     } else {
-                        sourceNode = this.graph.getNode(edge.source);
+                        sourceNode = graph.getNode(edge.source);
                     }
-                    const groupCapturingEdge = this.graph.groupingManager.getGroupCapturingOutgoingEdge(sourceNode);
+                    const groupCapturingEdge = graph.groupingManager.getGroupCapturingOutgoingEdge(sourceNode);
                     if (groupCapturingEdge != null && groupCapturingEdge !== sourceNode.id.toString()) {
-                        const groupNode = this.graph.getNode(groupCapturingEdge);
+                        const groupNode = graph.getNode(groupCapturingEdge);
                         if (groupNode != null) {
                             const newEdge = this.createDraggedEdgeFromExistingEdge(event, edge);
                             newEdge.source = groupCapturingEdge;
@@ -246,8 +263,8 @@ export class EdgeRenderer {
                         isReversedEdge: handle.isReverseHandle ?? false,
                     };
                 })
-                .container(() => this.graph.getEdgeSelection().node() as any)
-                .on('start', () => this.graph.completeRender(false, EventSource.USER_INTERACTION))
+                .container(() => graph.getEdgeSelection().node() as any)
+                .on('start', () => graph.completeRender(false, EventSource.USER_INTERACTION))
                 .on('drag', (event) => {
                     this.updateDraggedEdge(event as any, (event as any).subject.edge, (event as any).subject.capturingGroup);
                     this.updateDraggedEdgeGroups();
@@ -267,6 +284,7 @@ export class EdgeRenderer {
      * @param force force text to re-wrap
      */
     public updateEdgeText(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, d: Edge, force: boolean = false) {
+        const graph = this.derefGraph();
         const self = this;
         edgeGroupSelection.each(function (edge) {
             const textSelection = select(this).selectAll<SVGGElement, TextComponent>('g.text-component')
@@ -275,10 +293,10 @@ export class EdgeRenderer {
                 .each(function (textComponent) {
                     const g: Selection<SVGGElement, TextComponent, any, unknown> = select(this).datum<TextComponent>(textComponent);
                     const templateId = textComponent.template ?? 'default-textcomponent';
-                    self.graph.extrasRenderer.updateContentTemplate<TextComponent>(g, templateId, 'textcomponent', true, edge);
-                    const dynTemplate = self.graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicTextComponentTemplate>(templateId);
+                    graph.extrasRenderer.updateContentTemplate<TextComponent>(g, templateId, 'textcomponent', true, edge);
+                    const dynTemplate = graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicTextComponentTemplate>(templateId);
                     try {
-                        dynTemplate?.updateTemplate(g, self.graph, { parent: edge });
+                        dynTemplate?.updateTemplate(g, graph, { parent: edge });
                     } catch (error) {
                         console.error(`An error occured updating the text component in edge ${edgeId(edge)} before text wrapping`, textComponent, error);
                     }
@@ -306,9 +324,9 @@ export class EdgeRenderer {
             textSelection.each(function (textComponent) {
                 const g: Selection<SVGGElement, TextComponent, any, unknown> = select(this).datum<TextComponent>(textComponent);
                 const templateId = textComponent.template ?? 'default-textcomponent';
-                const dynTemplate = self.graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicTextComponentTemplate>(templateId);
+                const dynTemplate = graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicTextComponentTemplate>(templateId);
                 try {
-                    dynTemplate?.updateAfterTextwrapping(g, self.graph, { parent: edge });
+                    dynTemplate?.updateAfterTextwrapping(g, graph, { parent: edge });
                 } catch (error) {
                     console.error(`An error occured updating the text component in edge ${edgeId(edge)} after text wrapping`, textComponent, error);
                 }
@@ -456,18 +474,19 @@ export class EdgeRenderer {
      * @param edgeSelection d3 selection of edges to update with bound data
      */
     protected updateEdgeLinkHandles(edgeSelection: Selection<SVGPathElement, Edge | DraggedEdge, any, unknown>) {
+        const graph = this.derefGraph();
         edgeSelection.each(edge => {
 
-            const sourceNodeSelection = this.graph.getSingleNodeSelection(edge.source);
-            const targetNodeSelection = (edge.target != null) ? this.graph.getSingleNodeSelection(edge.target) : null;
+            const sourceNodeSelection = graph.getSingleNodeSelection(edge.source);
+            const targetNodeSelection = (edge.target != null) ? graph.getSingleNodeSelection(edge.target) : null;
             let initialSourceHandles, initialTargetHandles;
             try {
-                initialSourceHandles = getNodeLinkHandles(sourceNodeSelection, this.graph.staticTemplateRegistry, this.graph.dynamicTemplateRegistry, this.graph);
+                initialSourceHandles = getNodeLinkHandles(sourceNodeSelection, graph.staticTemplateRegistry, graph.dynamicTemplateRegistry, graph);
             } catch (error) {
                 console.error(`An error occured while calculating the link handles for node ${edge.source}!`, error);
             }
             try {
-                initialTargetHandles = getNodeLinkHandles(targetNodeSelection, this.graph.staticTemplateRegistry, this.graph.dynamicTemplateRegistry, this.graph);
+                initialTargetHandles = getNodeLinkHandles(targetNodeSelection, graph.staticTemplateRegistry, graph.dynamicTemplateRegistry, graph);
             } catch (error) {
                 console.error(`An error occured while calculating the link handles for node ${edge.target}!`, error);
             }
@@ -492,7 +511,7 @@ export class EdgeRenderer {
                 sourceNode,
                 initialTargetHandles,
                 targetNode,
-                this.graph.calculateLinkHandlesForEdge
+                graph.calculateLinkHandlesForEdge
             );
 
             const nearestHandles = calculateNearestHandles(newHandles.sourceHandles, sourceNode, newHandles.targetHandles, targetNode);
@@ -509,20 +528,21 @@ export class EdgeRenderer {
      * @param strokeWidth the current stroke width
      */
     protected calculateLineAttachementVector(startingAngle: number | RotationVector, markerSelection: Selection<SVGGElement, Marker, any, unknown>, strokeWidth: number) {
+        const graph = this.derefGraph();
         if (markerSelection.empty()) {
             return { dx: 0, dy: 0 };
         }
         const marker = markerSelection.datum();
         let attachementPointInfo: LineAttachementInfo;
         if (marker.isDynamicTemplate) {
-            const dynTemplate = this.graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicMarkerTemplate>(marker.template);
+            const dynTemplate = graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicMarkerTemplate>(marker.template);
             try {
                 attachementPointInfo = dynTemplate?.getLineAttachementInfo(markerSelection);
             } catch (error) {
                 console.error('An error occured while calculating the line attachement info for an edge marker!', marker, error);
             }
         } else {
-            attachementPointInfo = this.graph.staticTemplateRegistry.getMarkerAttachementPointInfo(marker.template);
+            attachementPointInfo = graph.staticTemplateRegistry.getMarkerAttachementPointInfo(marker.template);
         }
         if (attachementPointInfo != null) {
             let scale = 1;
@@ -548,6 +568,7 @@ export class EdgeRenderer {
      * @param edgeSelection d3 selection of edges to update with bound data
      */
     protected updateEdgePath(edgeSelection: Selection<SVGPathElement, Edge, any, unknown>) {
+        const graph = this.derefGraph();
         const self = this;
         edgeSelection.each(function (edge) {
             const singleEdgeSelection = select(this).datum(edge);
@@ -648,13 +669,13 @@ export class EdgeRenderer {
                 } else {
                     points.push(targetCoordinates);
                 }
-                const pathGenerator = self.graph.edgePathGeneratorRegistry.getEdgePathGenerator(d.pathType) ?? self.graph.defaultEdgePathGenerator;
+                const pathGenerator = graph.edgePathGeneratorRegistry.getEdgePathGenerator(d.pathType) ?? graph.defaultEdgePathGenerator;
                 let path: string;
                 try {
                     path = pathGenerator.generateEdgePath(points[0], points[points.length - 1], sourceHandleNormal, (d.target != null) ? targetHandleNormal : null);
                 } catch (error) {
                     console.error(`An error occurred while generating the edge path for the edge ${edgeId(edge)}`, error);
-                    path = self.graph.defaultEdgePathGenerator.generateEdgePath(points[0], points[points.length - 1], sourceHandleNormal, (d.target != null) ? targetHandleNormal : null);
+                    path = graph.defaultEdgePathGenerator.generateEdgePath(points[0], points[points.length - 1], sourceHandleNormal, (d.target != null) ? targetHandleNormal : null);
                 }
                 return path;
             });
@@ -671,6 +692,7 @@ export class EdgeRenderer {
      * @param d edge datum
      */
     protected updateEdgeTextPositions(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, d: Edge) {
+        const graph = this.derefGraph();
         const self = this;
         const path = edgeGroupSelection.select<SVGPathElement>('path.edge');
         const length = path.node().getTotalLength();
@@ -754,7 +776,7 @@ export class EdgeRenderer {
             if (initialTransform.includes('scale') || initialTransform.includes('rotate')) {
                 const svgNode = text.node();
                 const ctm = (svgNode.parentElement as unknown as SVGGElement).getScreenCTM().inverse().multiply(svgNode.getScreenCTM());
-                bbox = self.graph.transformBBox(bbox, ctm);
+                bbox = graph.transformBBox(bbox, ctm);
             } else {
                 bbox = {
                     x: referencePoint.x + bbox.x,
@@ -939,18 +961,18 @@ export class EdgeRenderer {
      * @param edge the edge datum this marker belongs to
      */
     protected updateMarker(markerSelection: Selection<SVGGElement, Marker, any, unknown>, edge: Edge) {
-        const self = this;
+        const graph = this.derefGraph();
         markerSelection
             .attr('data-click', (d) => d.clickEventKey)
             .each(function (marker) {
-                const templateId = self.graph.staticTemplateRegistry.getMarkerTemplateId(marker.template);
-                self.graph.extrasRenderer.updateContentTemplate<Marker>(select(this), templateId, 'marker');
+                const templateId = graph.staticTemplateRegistry.getMarkerTemplateId(marker.template);
+                graph.extrasRenderer.updateContentTemplate<Marker>(select(this), templateId, 'marker');
                 if (marker.isDynamicTemplate) {
                     const g = select(this).datum(marker);
-                    const dynTemplate = self.graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicMarkerTemplate>(templateId);
+                    const dynTemplate = graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicMarkerTemplate>(templateId);
                     if (dynTemplate != null) {
                         try {
-                            dynTemplate.updateTemplate(g, self.graph, { parent: edge });
+                            dynTemplate.updateTemplate(g, graph, { parent: edge });
                         } catch (error) {
                             console.error(`An error occured while updating the dynamic marker template in edge ${edgeId(edge)}!`, error);
                         }
@@ -1008,8 +1030,9 @@ export class EdgeRenderer {
      * @param sourceNode node that edge was dragged from
      */
      public createDraggedEdge(event: Event, sourceNode: Node): DraggedEdge {
+        const graph = this.derefGraph();
         const validTargets = new Set<string>();
-        this.graph.nodeList.forEach(node => validTargets.add(node.id.toString()));
+        graph.nodeList.forEach(node => validTargets.add(node.id.toString()));
         this.objectCache.getEdgesBySource(sourceNode.id).forEach(edge => validTargets.delete(edge.target.toString()));
         validTargets.delete(sourceNode.id.toString());
         let draggedEdge: DraggedEdge = {
@@ -1019,13 +1042,13 @@ export class EdgeRenderer {
             validTargets: validTargets,
             currentTarget: { x: (event as any).x, y: (event as any).y },
         };
-        if (this.graph.onCreateDraggedEdge != null) {
-            draggedEdge = this.graph.onCreateDraggedEdge(draggedEdge);
+        if (graph.onCreateDraggedEdge != null) {
+            draggedEdge = graph.onCreateDraggedEdge(draggedEdge);
             if (draggedEdge == null) {
                 return null;
             }
         }
-        this.graph.draggedEdgeList.push(draggedEdge);
+        graph.draggedEdgeList.push(draggedEdge);
         return draggedEdge;
     }
 
@@ -1037,8 +1060,9 @@ export class EdgeRenderer {
      */
     // eslint-disable-next-line complexity
     protected createDraggedEdgeFromExistingEdge(event: Event, edge: Edge, reverseEdgeDirection: boolean = false): DraggedEdge {
+        const graph = this.derefGraph();
         const validTargets = new Set<string>();
-        this.graph.nodeList.forEach(node => validTargets.add(node.id.toString()));
+        graph.nodeList.forEach(node => validTargets.add(node.id.toString()));
         const source = reverseEdgeDirection ? edge.target : edge.source;
         this.objectCache.getEdgesBySource(source).forEach(edgeOutgoing => {
             if (edgeId(edge) !== edgeId(edgeOutgoing)) {
@@ -1104,13 +1128,13 @@ export class EdgeRenderer {
                 draggedEdge.markerStart = temp;
             }
         }
-        if (this.graph.onCreateDraggedEdge != null) {
-            draggedEdge = this.graph.onCreateDraggedEdge(draggedEdge);
+        if (graph.onCreateDraggedEdge != null) {
+            draggedEdge = graph.onCreateDraggedEdge(draggedEdge);
             if (draggedEdge == null) {
                 return null;
             }
         }
-        this.graph.draggedEdgeList.push(draggedEdge);
+        graph.draggedEdgeList.push(draggedEdge);
         return draggedEdge;
     }
 
@@ -1119,13 +1143,14 @@ export class EdgeRenderer {
      */
     // eslint-disable-next-line complexity
     public updateDraggedEdge(event: Event, edge: DraggedEdge, capturingGroup?: string) {
+        const graph = this.derefGraph();
         const oldTarget = edge.target;
         edge.target = null;
         edge.currentTarget.x = (event as any).x;
         edge.currentTarget.y = (event as any).y;
 
         const sourceEvent = (event as any).sourceEvent;
-        const possibleTargetNodes = this.graph.getNodesFromPoint(sourceEvent.clientX, sourceEvent.clientY);
+        const possibleTargetNodes = graph.getNodesFromPoint(sourceEvent.clientX, sourceEvent.clientY);
         if (possibleTargetNodes.length > 0) {
             const targetNode = possibleTargetNodes[0];
             const targetNodeId = targetNode.id.toString();
@@ -1137,7 +1162,7 @@ export class EdgeRenderer {
             // isValidTarget = isValidTarget && (edge.source.toString() === targetNodeId);
 
             // check group capture
-            const targetGroupCapturingEdge = this.graph.groupingManager.getGroupCapturingIncomingEdge(targetNode);
+            const targetGroupCapturingEdge = graph.groupingManager.getGroupCapturingIncomingEdge(targetNode);
 
             if (targetGroupCapturingEdge == null) {
                 // no group capture, node must be a valid target
@@ -1157,10 +1182,10 @@ export class EdgeRenderer {
 
             // handle group captures
             if (isValidTarget && targetGroupCapturingEdge != null) {
-                const targetGroupBehaviour = this.graph.groupingManager.getGroupBehaviourOf(targetGroupCapturingEdge);
+                const targetGroupBehaviour = graph.groupingManager.getGroupBehaviourOf(targetGroupCapturingEdge);
                 const targetGroupNode = this.objectCache.getNode(targetGroupCapturingEdge);
                 if (targetGroupBehaviour?.delegateIncomingEdgeTargetToNode != null && targetGroupNode != null) {
-                    const newTarget = targetGroupBehaviour.delegateIncomingEdgeTargetToNode(targetGroupCapturingEdge, targetGroupNode, edge, this.graph);
+                    const newTarget = targetGroupBehaviour.delegateIncomingEdgeTargetToNode(targetGroupCapturingEdge, targetGroupNode, edge, graph);
                     if (newTarget != null && newTarget !== '' && this.objectCache.getNode(newTarget) !== null) {
                         edge.target = newTarget;
                     }
@@ -1171,19 +1196,19 @@ export class EdgeRenderer {
         // dispatch event if target changed and handle source group link capture
         if (edge.target !== oldTarget) {
             if (capturingGroup != null) {
-                const groupBehaviour = this.graph.groupingManager.getGroupBehaviourOf(capturingGroup);
+                const groupBehaviour = graph.groupingManager.getGroupBehaviourOf(capturingGroup);
                 const groupNode = this.objectCache.getNode(capturingGroup);
                 if (groupBehaviour != null && groupNode != null && groupBehaviour.delegateOutgoingEdgeSourceToNode != null) {
-                    const newSource = groupBehaviour.delegateOutgoingEdgeSourceToNode(capturingGroup, groupNode, edge, this.graph);
+                    const newSource = groupBehaviour.delegateOutgoingEdgeSourceToNode(capturingGroup, groupNode, edge, graph);
                     if (newSource != null && newSource !== '' && this.objectCache.getNode(newSource) !== null) {
                         edge.source = newSource;
                     }
                 }
             }
-            if (this.graph.onDraggedEdgeTargetChange != null) {
+            if (graph.onDraggedEdgeTargetChange != null) {
                 const source = this.objectCache.getNode(edge.source);
                 const target = edge.target != null ? this.objectCache.getNode(edge.target) : null;
-                this.graph.onDraggedEdgeTargetChange(edge, source, target);
+                graph.onDraggedEdgeTargetChange(edge, source, target);
             }
         }
     }
@@ -1197,6 +1222,7 @@ export class EdgeRenderer {
      */
     // eslint-disable-next-line complexity
     public dropDraggedEdge(event: Event, edge: DraggedEdge, isReversedEdge: boolean) {
+        const graph = this.derefGraph();
         let updateGraph = false;
         const existingEdge = this.objectCache.getEdge(edge.createdFrom);
         let existingTarget = existingEdge?.target.toString();
@@ -1206,35 +1232,35 @@ export class EdgeRenderer {
         if (edge.createdFrom != null) {
             if (edge.target?.toString() !== existingTarget) {
                 // only remove original edge if target of dropped edge is different then original target
-                updateGraph = this.graph.removeEdge(edge.createdFrom, false, EventSource.USER_INTERACTION)
+                updateGraph = graph.removeEdge(edge.createdFrom, false, EventSource.USER_INTERACTION)
             }
         }
 
-        const index = this.graph.draggedEdgeList.findIndex(e => e.id === edge.id);
-        this.graph.draggedEdgeList.splice(index, 1);
+        const index = graph.draggedEdgeList.findIndex(e => e.id === edge.id);
+        graph.draggedEdgeList.splice(index, 1);
         this.updateDraggedEdgeGroups();
         if (edge.target != null) {
             // dragged edge has a target
             let finalEdge: Edge = edge;
             delete finalEdge.id;
-            if (this.graph.onDropDraggedEdge != null) {
-                finalEdge = this.graph.onDropDraggedEdge(edge, this.objectCache.getNode(edge.source),
+            if (graph.onDropDraggedEdge != null) {
+                finalEdge = graph.onDropDraggedEdge(edge, this.objectCache.getNode(edge.source),
                     this.objectCache.getNode(edge.target));
             }
             if (edge.createdFrom != null && edge.target === existingTarget) {
                 // edge was dropped on the node that was the original target for the edge
-                this.graph.completeRender(false, EventSource.USER_INTERACTION);
+                graph.completeRender(false, EventSource.USER_INTERACTION);
             } else {
                 // put the or at the and to always execute the addEdge!
-                updateGraph = this.graph.addEdge(edge) || updateGraph;
+                updateGraph = graph.addEdge(edge) || updateGraph;
             }
         } else {
             this.onEdgeDrop(edge, { x: (event as any).x, y: (event as any).y });
         }
         if (updateGraph) {
-            this.graph.completeRender(false, EventSource.USER_INTERACTION);
+            graph.completeRender(false, EventSource.USER_INTERACTION);
         } else {
-            this.graph.updateEdgeGroupClasses();
+            graph.updateEdgeGroupClasses();
         }
     }
 
@@ -1270,7 +1296,7 @@ export class EdgeRenderer {
         eventDetail.sourceEvent = event;
         eventDetail.edge = edgeDatum;
         const ev = new CustomEvent('edgeclick', { bubbles: true, composed: true, cancelable: true, detail: eventDetail });
-        if (!this.graph.dispatchEvent(ev)) {
+        if (!this.derefGraph().dispatchEvent(ev)) {
             return; // prevent default / event cancelled
         }
     }
@@ -1301,7 +1327,7 @@ export class EdgeRenderer {
             cancelable: false,
             detail: detail,
         });
-        return this.graph.dispatchEvent(ev);
+        return this.derefGraph().dispatchEvent(ev);
     }
 
     /**
@@ -1323,7 +1349,7 @@ export class EdgeRenderer {
                 edge: edge,
             },
         });
-        this.graph.dispatchEvent(ev);
+        this.derefGraph().dispatchEvent(ev);
     }
 
     /**
@@ -1343,6 +1369,6 @@ export class EdgeRenderer {
                 edge: edge,
             },
         });
-        this.graph.dispatchEvent(ev);
+        this.derefGraph().dispatchEvent(ev);
     }
 }

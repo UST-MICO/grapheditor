@@ -451,7 +451,6 @@ export default class GraphEditor extends HTMLElement {
         this.defaultEdgePathGenerator = new SmoothedEdgePathGenerator(curveBasis, true, 10);
         this.edgePathGeneratorRegistry.addEdgePathGenerator('default', this.defaultEdgePathGenerator);
 
-        // FIXME (use weak references) make sure to dispose these circular references correctly
         this.extrasRenderer = new ExtrasRenderer(this);
         this.nodeRenderer = new NodeRenderer(this, this.objectCache);
         this.edgeRenderer = new EdgeRenderer(this, this.objectCache);
