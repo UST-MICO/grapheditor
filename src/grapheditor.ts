@@ -269,14 +269,14 @@ export default class GraphEditor extends HTMLElement {
     /**
      * The current zoom transform of the zoom group in the svg.
      */
-    get currentZoomTransform(): ZoomTransform {
+    public get currentZoomTransform(): ZoomTransform {
         return this.currentZoom;
     }
 
     /**
      * The currently visible area in graph coordinates.
      */
-    get currentViewWindow(): Rect {
+    public get currentViewWindow(): Rect {
         const minX = this.currentZoom.invertX(0);
         const minY = this.currentZoom.invertY(0);
         const maxX = this.currentZoom.invertX(this.contentMaxWidth);
@@ -289,24 +289,40 @@ export default class GraphEditor extends HTMLElement {
         };
     }
 
-    get classes(): string[] {
+    public get classes(): string[] {
         return this._classes;
     }
 
     /**
      * The list of css classes used for dynamic css classes together with `setNodeClass` or `setEdgeClass`.
      */
-    set classes(classes: string[]) {
+    public set classes(classes: string[]) {
+        const deduped = new Set<string>();
+        classes.forEach(className => deduped.add(className));
+
+        if (this._classes != null && this._classes.length === deduped.size && this._classes.every(cls => deduped.has(cls))) {
+            // nothing has changed, skip updates
+            return;
+        }
+
         if (this._classes != null) {
             this._classes.forEach(className => this.classesToRemove.add(className));
         }
-        const deduped = new Set<string>();
-        classes.forEach(className => deduped.add(className));
-        this._classes = new Array(...deduped);
-        this._classes.forEach(className => this.classesToRemove.delete(className));
+        const newClasses = new Array(...deduped);
+        newClasses.sort();
+        this._classes = newClasses;
+        newClasses.forEach(className => this.classesToRemove.delete(className));
+
+        // update attribute
+        const isJson = this.getAttribute('classes').trim().startsWith('[');
+        if (isJson) {
+            this.setAttribute('classes', JSON.stringify(newClasses));
+        } else {
+            this.setAttribute('classes', newClasses.join(' '));
+        }
     }
 
-    get nodeList(): Node[] {
+    public get nodeList(): Node[] {
         return this._nodes;
     }
 
@@ -319,7 +335,7 @@ export default class GraphEditor extends HTMLElement {
      * Changing this list directly may lead to **inconsistencies** as there may
      * still be **edges pointing to already** removed nodes!
      */
-    set nodeList(nodes: Node[]) {
+    public set nodeList(nodes: Node[]) {
         const oldNodes = this._nodes;
 
         // save added nodes for later
@@ -351,11 +367,11 @@ export default class GraphEditor extends HTMLElement {
         });
     }
 
-    get edgeList(): Edge[] {
+    public get edgeList(): Edge[] {
         return this._edges;
     }
 
-    get draggedEdgeList(): DraggedEdge[] {
+    public get draggedEdgeList(): DraggedEdge[] {
         return this.draggedEdges;
     }
 
@@ -365,7 +381,7 @@ export default class GraphEditor extends HTMLElement {
      * This list should **not** be altered without updating the cache!
      * Use `addEdge` and `removeEdge` to keep the cache consistent.
      */
-    set edgeList(edges: Edge[]) {
+    public set edgeList(edges: Edge[]) {
         const oldEdges = this._edges;
 
         // save added edges for later
@@ -400,41 +416,116 @@ export default class GraphEditor extends HTMLElement {
     /**
      * The currently selected nodes.
      */
-    get selected(): Set<string> {
+    public get selected(): Set<string> {
         const selected: Set<string> = this._selectedNodes ?? new Set();
         return selected;
     }
 
-    get zoomMode(): string {
+    public get zoomMode(): 'none' | 'manual' | 'automatic' | 'both' {
         return this._zoomMode;
     }
 
     /**
      * The zoom mode of the grapheditor.
+     *
+     * Controls how the grapheditor handles automatic and manual zoom to fit graph to view.
+     * Does not affect zoom using `this.zoomToBoundingBox(true)` or `this.zoomToBox`.
+     *
+     * - `none` - Disables automatic and manual zoom (disables all zoom gestures)
+     * - `manual`- Disables automatic zoom but allows for manual zoom gestures
+     * - `automatic` - Disables all user zoom gestures but allows automatic zoom to bounding box
+     * - `both` - Allows both user zoom gestures and automatic zoom
      */
-    set zoomMode(mode: string) {
-        this.setZoomMode(mode.toLowerCase());
-        select(this).attr('zoom', mode);
+    public set zoomMode(mode: 'none' | 'manual' | 'automatic' | 'both') {
+        this.setAttribute('zoom', mode);
     }
 
-    get nodeClickInteraction(): 'none' | 'select' | 'link' {
+    public get nodeClickInteraction(): 'none' | 'select' | 'link' {
         return this._nodeClickInteraction;
     }
 
-    get nodeDragInteraction(): 'none' | 'move' | 'link' {
+    /**
+     * The current node-click interaction of the grapheditor.
+     *
+     * Controls the default behaviour on node click events.
+     *
+     * - `none` - No default behaviour (use this to implement custom behaviours)
+     * - `select` - Clicking selects/deselects a node
+     * - `link` - Clicking on the first node selects it as source and clicking
+     *   on the second node creates an edge from the source to the second node
+     */
+    public set nodeClickInteraction(mode: 'none' | 'select' | 'link') {
+        this.setAttribute('node-click', mode);
+    }
+
+    public get nodeDragInteraction(): 'none' | 'move' | 'link' {
         return this._nodeDragInteraction;
     }
 
-    get edgeDragInteraction(): 'none' | 'link' {
+    /**
+     * The current node-drag interaction of the grapheditor.
+     *
+     * Controls what happens when a node is dragged.
+     *
+     * - `none` - Disables node dragging entirely
+     * - `move` - Moves the node around
+     * - `link` - Dragging creates a new edge (same as dragging a link handle of a node)
+     */
+    public set nodeDragInteraction(mode: 'none' | 'move' | 'link') {
+        this.setAttribute('node-drag', mode);
+    }
+
+    public get edgeDragInteraction(): 'none' | 'link' {
         return this._edgeDragInteraction;
     }
 
-    get backgroundDragInteraction(): 'none' | 'move' | 'zoom' | 'select' | 'custom' {
+    /**
+     * The current edge-drag interaction of the grapheditor.
+     *
+     * Controls what happens when an edge is dragged.
+     *
+     * - `none` - Disables dragging entirely
+     * - `link` - Dragging edges allows linking/unlinking nodes
+     */
+    public set edgeDragInteraction(mode: 'none' | 'link') {
+        this.setAttribute('edge-drag', mode);
+    }
+
+    public get backgroundDragInteraction(): 'none' | 'move' | 'zoom' | 'select' | 'custom' {
         return this._backgroundDragInteraction;
     }
 
-    get selectionMode(): 'none' | 'single' | 'multiple' {
+    /**
+     * The current background-drag interaction of the grapheditor.
+     *
+     * Controls how drag gestures on the graph background are handled.
+     *
+     * - `none` - Drag gesture is ignored
+     * - `move` - Dragging moves the entire graph around
+     * - `zoom` - Dragging draws a bounding box, which will be zoomed to on drag end
+     * - `select` - Dragging draws a bounding box, which will select all nodes inside on drag end
+     * - `custom` - Dragging draws a bounding box without any default behaviour (use this to implement custom behaviour)
+     */
+    public set backgroundDragInteraction(mode: 'none' | 'move' | 'zoom' | 'select' | 'custom') {
+        this.setAttribute('background-drag', mode);
+    }
+
+    public get selectionMode(): 'none' | 'single' | 'multiple' {
         return this._selectionMode;
+    }
+
+    /**
+     * The current selection mode of the grapheditor.
+     *
+     * Controls how node selections are handled.
+     * This only applies to future selections and does not impact the current selected nodes!
+     *
+     * - `none` - Node selections are disabled
+     * - `single` - Only a single node can be selected at the same time
+     * - `multiple` - Multiple nodes can be selected at the same time
+     */
+    public set selectionMode(mode: 'none' | 'single' | 'multiple') {
+        this.setAttribute('select', mode);
     }
 
     constructor() {
@@ -511,10 +602,15 @@ export default class GraphEditor extends HTMLElement {
      * @param oldValue old value
      * @param newValue new value
      */
+    // eslint-disable-next-line complexity
     attributeChangedCallback(name: string, oldValue: string, newValue: string): void {
+        if (oldValue === newValue) {
+            // nothing to change
+            return;
+        }
         let needsRender = false;
         let needsZoom = false;
-        if (name == 'svg-template') {
+        if (name === 'svg-template' && this.svgTemplate !== newValue) {
             this.svgTemplate = newValue;
             this.loadSvgFromTemplate();
             needsRender = true;
@@ -530,17 +626,21 @@ export default class GraphEditor extends HTMLElement {
             needsRender = true;
         }
         if (name === 'classes') {
+            let newClasses: string[];
             if (newValue.startsWith('[')) {
                 newValue = newValue.replace(/'/g, '"');
-                this.classes = JSON.parse(newValue);
+                newClasses = JSON.parse(newValue);
             } else {
-                this.classes = newValue.split(' ');
+                newClasses = newValue.split(' ');
             }
-            needsRender = true;
+            const oldClassesValue = this.classes;
+            this.classes = newClasses;
+            // only render on actual changes (test for object reference changes)
+            needsRender = oldClassesValue !== this.classes;
         }
         if (name === 'zoom') {
+            needsZoom = this._zoomMode !== newValue.toLowerCase();
             this.setZoomMode(newValue.toLowerCase());
-            needsZoom = true;
         }
         if (name === 'mode') {
             // fallback setter, deprecated!
@@ -572,9 +672,15 @@ export default class GraphEditor extends HTMLElement {
                 this._nodeDragInteraction = 'move';
                 this._edgeDragInteraction = 'link';
             }
+            // set new attributes
+            this.setAttribute('selection', this._selectionMode);
+            this.setAttribute('background-drag', this._backgroundDragInteraction);
+            this.setAttribute('node-click', this._nodeClickInteraction);
+            this.setAttribute('node-drag', this._nodeDragInteraction);
+            this.setAttribute('edge-drag', this._edgeDragInteraction);
         }
         if (name === 'selection') {
-            const val = newValue.toLowerCase();
+            const val = newValue === '' ? 'multiple' : newValue.toLowerCase();
             if (val === 'none' || val === 'single' || val === 'multiple') {
                 this._selectionMode = val;
             } else {
@@ -582,7 +688,7 @@ export default class GraphEditor extends HTMLElement {
             }
         }
         if (name === 'node-click') {
-            const val = newValue.toLowerCase();
+            const val = newValue === '' ? 'select' : newValue.toLowerCase();
             if (val === 'none' || val === 'select' || val === 'link') {
                 this._nodeClickInteraction = val;
             } else {
@@ -590,7 +696,7 @@ export default class GraphEditor extends HTMLElement {
             }
         }
         if (name === 'node-drag') {
-            const val = newValue.toLowerCase();
+            const val = newValue === '' ? 'move' : newValue.toLowerCase();
             if (val === 'none' || val === 'move' || val === 'link') {
                 this._nodeDragInteraction = val;
             } else {
@@ -598,7 +704,7 @@ export default class GraphEditor extends HTMLElement {
             }
         }
         if (name === 'edge-drag') {
-            const val = newValue.toLowerCase();
+            const val = newValue === '' ? 'link' : newValue.toLowerCase();
             if (val === 'none' || val === 'link') {
                 this._edgeDragInteraction = val;
             } else {
@@ -606,7 +712,7 @@ export default class GraphEditor extends HTMLElement {
             }
         }
         if (name === 'background-drag') {
-            const val = newValue.toLowerCase();
+            const val = newValue === '' ? 'move' : newValue.toLowerCase();
             if (val === 'none' || val === 'move' || val === 'zoom' || val === 'select' || val === 'custom') {
                 this._backgroundDragInteraction = val;
             } else {
@@ -1079,12 +1185,15 @@ export default class GraphEditor extends HTMLElement {
         graph.classed('zoom-group', true);
 
         const newZoom = zoom()
+            // eslint-disable-next-line complexity
             .filter((event: MouseEvent|TouchEvent) => {
+                // mouse wheel events and doubleclick events only zoom
+                const isZoomEvent = event.type === 'wheel' || event.type === 'dblclick';
                 if (this._zoomMode === 'none' || this._zoomMode === 'automatic') {
-                    return false; // no user zoom
+                    return !isZoomEvent; // no user zoom (mouse wheel events)
                 }
                 if (this._backgroundDragInteraction === 'none') {
-                    return event.type !== 'wheel'; // only mouse wheel zoom
+                    return isZoomEvent; // only allow zoom events
                 }
                 const mouseButton: number = (event as MouseEvent).button ?? 0;
                 if (mouseButton !== 0) {
@@ -1092,14 +1201,14 @@ export default class GraphEditor extends HTMLElement {
                     return false;
                 }
                 if (this._backgroundDragInteraction === 'move') {
-                    return !event.ctrlKey || event.type === 'wheel';
+                    return !event.ctrlKey || isZoomEvent;
                 }
                 if (
                     this._backgroundDragInteraction === 'select'
                     || this._backgroundDragInteraction === 'zoom'
                     || this._backgroundDragInteraction === 'custom'
                 ) {
-                    return event.type === 'wheel'; // only zoom on mouse wheel interaction
+                    return isZoomEvent; // only allow zoom
                 }
                 return false;
             })
@@ -1325,6 +1434,7 @@ export default class GraphEditor extends HTMLElement {
                     height: height,
                 });
             })
+            // eslint-disable-next-line complexity
             .on('end', (e) => {
                 const event = e as unknown as D3DragEvent<SVGGElement, unknown, {rect: Selection<SVGRectElement, unknown, SVGGElement, unknown>, start: Point}>;
                 event.subject.rect.remove(); // remove visible brush
@@ -2042,6 +2152,7 @@ export default class GraphEditor extends HTMLElement {
                 source: this._selectedLinkSource,
                 target: this._selectedLinkTarget,
             };
+            // TODO allow customization of edge (maybe reuse drag behaviour callbacks...)
             if (!this.onEdgeCreate(newEdge, EventSource.USER_INTERACTION)) {
                 return; // event cancelled
             }
