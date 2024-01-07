@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>Automated Tests</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="stylesheet" href="/mocha/mocha.css" />
+        <style>
+            html {height: 100%;}
+            body {
+                height: 100%;
+                margin: 0;
+                display: grid;
+                grid-template-columns: 2fr 1fr;
+                grid-template-rows: 4.5rem auto;
+                grid-template-areas: "header header" "main mocha";
+            }
+            .header {grid-area: header; padding: 0.5rem;}
+            h1 {font-size: 1.5rem; margin-top: 0; margin-bottom: 0.5rem;}
+            p {margin: 0;}
+            network-graph {grid-area: main;}
+            div#mocha {grid-area: mocha;}
+        </style>
+    </head>
+    <body>
+        <!--script src="./_bundles/grapheditor-webcomponent.js"></script-->
+        <div class="header">
+            <h1>Automated tests for the Grapheditor:</h1>
+            <p>
+                Links:
+                <a href="/">index.html</a>,
+                <a href="/groups.html">groups.html</a>,
+                <a href="/groups-drag-and-drop.html">groups-drag-and-drop.html</a>,
+                <a href="/resize.html">resize.html</a>,
+                <a href="/textwrap.html">textwrap.html</a>,
+                <a href="/textwrap-performance.html">textwrap-performance.html</a>,
+                <a href="/isolation.html">isolation.html</a>,
+                <a href="/automated.html">automated.html</a>
+            </p>
+        </div>
+        <div id="mocha"></div>
+        <template id="basicTemplate">
+            <svg slot="graph">
+                <style>
+                    svg {width:100%; height: 100%}
+                    .zoom-group > .brush {fill: dodgerblue; opacity: 0.3;}
+                    .ghost {opacity: 0.5;}
+                    .node {fill: aqua;}
+                    .link-handle {display: none; fill: black; opacity: 0.1;}
+                    .link-handle>* {transition:transform 0.25s ease-out;}
+                    .edge-group .link-handle {display: initial}
+                    .link-handle:hover {opacity: 0.7;}
+                    .link-handle:hover>* {transform: scale(1.5);}
+                    .node.hovered {fill: deepskyblue;}
+                    .node.hovered:not(.resizing) .link-handle {display: initial;}
+                    .edge {stroke: black;}
+                    .edge .marker {fill: black;}
+                </style>
+            </svg>
+        </template>
+
+        <!-- load mocha test runner -->
+        <script src="/mocha/mocha.js"></script>
+
+        <script class="mocha-init">
+            mocha.setup({
+                ui: 'bdd',
+                checkLeaks: true,
+                asyncOnly: true,
+                failZero: true,
+            });
+        </script>
+
+        <script type="module">
+            // import test modules here
+            import "/test/basics.js";
+            import "/test/events.js";
+
+
+            mocha.run();
+        </script>
+
+
+    </body>
+</html>

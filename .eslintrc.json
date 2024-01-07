@@ -3,7 +3,7 @@
         "browser": true,
         "es6": true
     },
-    "ignorePatterns": ["docs/", "_bundles/", "example/", "lib/", "lib-esm/", "node_modules/", "webpack.config.js", "webpack-dev.config.js"],
+    "ignorePatterns": ["docs/", "_bundles/", "example/", "lib/", "lib-esm/", "node_modules/", "tests/", "webpack.config.js", "webpack-dev.config.js"],
     "parser": "@typescript-eslint/parser",
     "parserOptions": {
         "project": "tsconfig.json",
