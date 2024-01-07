@@ -55,9 +55,37 @@ module.exports = merge(common, {
             inject: 'head',
             scriptLoading: 'blocking',
         }),
+        new HtmlWebpackPlugin({
+            filename: 'automated.html',
+            template: 'example/test-automated.html',
+            hash: true,
+            inject: 'head',
+            scriptLoading: 'blocking',
+        }),
     ],
     devServer: {
-        static: path.resolve(__dirname, '_bundles'),
+        static: [
+            {
+                "directory": path.resolve(__dirname, '_bundles'),
+                "publicPath": "/"
+            },
+            {
+                "directory": path.resolve(__dirname, 'node_modules', 'mocha'),
+                "publicPath": "/mocha"
+            },
+            {
+                "directory": path.resolve(__dirname, 'node_modules', 'chai'),
+                "publicPath": "/chai"
+            },
+            {
+                "directory": path.resolve(__dirname, 'node_modules', 'simulant', 'dist'),
+                "publicPath": "/simulant"
+            },
+            {
+                "directory": path.resolve(__dirname, 'test'),
+                "publicPath": "/test"
+            }
+        ],
         port: 9009
     },
 });
