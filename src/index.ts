@@ -16,9 +16,24 @@
  */
 
 import GraphEditor from './grapheditor';
-export * from './grapheditor';
-export * from './node';
-export * from './edge';
-export * from './resizing';
+export { default as GraphEditor, EventSource, NodeDragBehaviour } from './grapheditor';
+export { Node, NodeMovementInformation } from './node';
+export {
+    Edge,
+    DraggedEdge,
+    EdgeDragHandle,
+    Point,
+    PathPositionRotationAndScale,
+    TextComponent,
+    edgeId,
+    normalizePositionOnLine,
+    setDefaultEdgeDragHandles,
+} from './edge';
+export { Marker } from './marker';
+export { LinkHandle, calculateLinkHandleNormal, handlesForRectangle, handlesForCircle, handlesForPolygon, handlesForPath } from './link-handle';
+export { ResizingManager, DefaultResizeStrategy, ResizeStrategy, ResizeOverlayOptions } from './resizing';
 
-window.customElements.define('network-graph', GraphEditor);
+
+if (window.customElements.get('network-graph') == null) {
+    window.customElements.define('network-graph', GraphEditor);
+}

@@ -15,19 +15,19 @@
  * limitations under the License.
  */
 
-import { drag } from "d3-drag";
-import { select, Selection } from "d3-selection";
-import { DraggedEdge, Edge, EdgeDragHandle, edgeId, EventSource, Node, normalizePositionOnLine, setDefaultEdgeDragHandles, TextComponent } from "..";
-import { DynamicMarkerTemplate, DynamicTextComponentTemplate } from "../dynamic-templates/dynamic-template";
-import GraphEditor from "../grapheditor";
-import { applyUserLinkHandleCalculationCallback, calculateNearestHandles, getNodeLinkHandles } from "../link-handle-helper";
-import { LineAttachementInfo, Marker } from "../marker";
-import { GraphObjectCache } from "../object-cache";
-import { wrapText } from "../textwrap";
-import { calculateAbsolutePositionOnLine, Rect, recursiveAttributeGet } from "../util";
-import { Point, PathPositionRotationAndScale } from "..";
-import { calculateAngle, calculateRotationTransformationAngle, normalizeVector, RotationVector } from "../rotation-vector";
-import { LinkHandle } from "../link-handle";
+import { drag } from 'd3-drag';
+import { select, Selection } from 'd3-selection';
+import { DraggedEdge, Edge, EdgeDragHandle, edgeId, EventSource, Node, normalizePositionOnLine, setDefaultEdgeDragHandles, TextComponent } from '..';
+import { DynamicMarkerTemplate, DynamicTextComponentTemplate } from '../dynamic-templates/dynamic-template';
+import GraphEditor from '../grapheditor';
+import { applyUserLinkHandleCalculationCallback, calculateNearestHandles, getNodeLinkHandles } from '../link-handle-helper';
+import { LineAttachementInfo, Marker } from '../marker';
+import { GraphObjectCache } from '../object-cache';
+import { wrapText } from '../textwrap';
+import { calculateAbsolutePositionOnLine, Rect, recursiveAttributeGet } from '../util';
+import { Point, PathPositionRotationAndScale } from '..';
+import { calculateAngle, calculateRotationTransformationAngle, normalizeVector, RotationVector } from '../rotation-vector';
+import { LinkHandle } from '../link-handle';
 
 
 /**
@@ -60,7 +60,7 @@ export class EdgeRenderer {
     protected derefGraph(): GraphEditor {
         const graph = this.graph.deref();
         if (graph == null) {
-            throw new Error("Grapheditor instance is already dereferenced!")
+            throw new Error('Grapheditor instance is already dereferenced!');
         }
         return graph;
     }
@@ -169,12 +169,13 @@ export class EdgeRenderer {
                 });
             });
         }
-    }
+    };
 
 
     /**
      * Calculate highlighted edges and update their classes.
      */
+    // eslint-disable-next-line max-len
     public updateEdgeHighligts = (edgeSelection: Selection<SVGGElement, Edge, any, unknown>, hovered: Set<string | number>, linkSource?: string | number, linkTarget?: string | number) => {
         let nodes: Set<number | string> = new Set();
 
@@ -190,7 +191,7 @@ export class EdgeRenderer {
         edgeSelection
             .classed('highlight-outgoing', (d) => nodes.has(d.source))
             .classed('highlight-incoming', (d) => nodes.has(d.target));
-    }
+    };
 
 
     /**
@@ -628,7 +629,7 @@ export class EdgeRenderer {
                 }
 
                 // calculate path
-                const points: { x: number; y: number;[prop: string]: any }[] = [];
+                const points: { x: number; y: number; [prop: string]: any }[] = [];
 
                 // Calculate line attachement point for startMarker
                 let startAttachementPointVector: RotationVector = { dx: 0, dy: 0 };
@@ -675,7 +676,9 @@ export class EdgeRenderer {
                     path = pathGenerator.generateEdgePath(points[0], points[points.length - 1], sourceHandleNormal, (d.target != null) ? targetHandleNormal : null);
                 } catch (error) {
                     console.error(`An error occurred while generating the edge path for the edge ${edgeId(edge)}`, error);
-                    path = graph.defaultEdgePathGenerator.generateEdgePath(points[0], points[points.length - 1], sourceHandleNormal, (d.target != null) ? targetHandleNormal : null);
+                    path = graph.defaultEdgePathGenerator.generateEdgePath(
+                        points[0], points[points.length - 1], sourceHandleNormal, (d.target != null) ? targetHandleNormal : null
+                    );
                 }
                 return path;
             });
@@ -1029,7 +1032,7 @@ export class EdgeRenderer {
      *
      * @param sourceNode node that edge was dragged from
      */
-     public createDraggedEdge(event: Event, sourceNode: Node): DraggedEdge {
+    public createDraggedEdge(event: Event, sourceNode: Node): DraggedEdge {
         const graph = this.derefGraph();
         const validTargets = new Set<string>();
         graph.nodeList.forEach(node => validTargets.add(node.id.toString()));
@@ -1232,7 +1235,7 @@ export class EdgeRenderer {
         if (edge.createdFrom != null) {
             if (edge.target?.toString() !== existingTarget) {
                 // only remove original edge if target of dropped edge is different then original target
-                updateGraph = graph.removeEdge(edge.createdFrom, false, EventSource.USER_INTERACTION)
+                updateGraph = graph.removeEdge(edge.createdFrom, false, EventSource.USER_INTERACTION);
             }
         }
 
