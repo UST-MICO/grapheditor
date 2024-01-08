@@ -4,6 +4,8 @@ node_modules
 .vscode
 .mypy_cache
 docs
+test
+example/test-automated.html
 default.nix
 CODE_OF_CONDUCT.md
 CONTRIBUTING.md
