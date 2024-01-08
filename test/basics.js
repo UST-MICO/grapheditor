@@ -1,7 +1,6 @@
 import {assert} from '/chai/chai.js';
 
-// TODO check why test suites need to start with "Array" to work...
-describe('Array GraphEditor Basics', function () {
+describe('GraphEditor Basics', function () {
     afterEach(function () {
         document.querySelectorAll("network-graph").forEach(graph => graph.remove());
     });
