@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 - "brushdrag" and "brush" events. Used when "background-drag" is set to `select`, `zoom` or `custom`
 - Added flag in text components to mark them as draggable (defaults to true)
 - Added padding parameter to `zoomToBox` to allow changing or removing the added padding
+- All relevant interfaces and functions are now (re)exported at top level
 
 ### Deprecated
 
