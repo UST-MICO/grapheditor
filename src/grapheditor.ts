@@ -1189,28 +1189,37 @@ export default class GraphEditor extends HTMLElement {
             .filter((event: MouseEvent|TouchEvent) => {
                 // mouse wheel events and doubleclick events only zoom
                 const isZoomEvent = event.type === 'wheel' || event.type === 'dblclick';
+                let allowZoomEvent = true;
+                let allowDragMove = true;
                 if (this._zoomMode === 'none' || this._zoomMode === 'automatic') {
-                    return !isZoomEvent; // no user zoom (mouse wheel events)
+                    // no user zoom (mouse wheel and doubleclick events)
+                    allowZoomEvent = false;
                 }
                 if (this._backgroundDragInteraction === 'none') {
-                    return isZoomEvent; // only allow zoom events
+                    // filter out all drag events
+                    allowDragMove = false;
                 }
                 const mouseButton: number = (event as MouseEvent).button ?? 0;
                 if (mouseButton !== 0) {
-                    // did not press primary button
+                    // did not press primary button => reject event
                     return false;
                 }
                 if (this._backgroundDragInteraction === 'move') {
-                    return !event.ctrlKey || isZoomEvent;
+                    allowDragMove = true;
                 }
                 if (
                     this._backgroundDragInteraction === 'select'
                     || this._backgroundDragInteraction === 'zoom'
                     || this._backgroundDragInteraction === 'custom'
                 ) {
-                    return isZoomEvent; // only allow zoom
+                    allowDragMove = false;
                 }
-                return false;
+                if (isZoomEvent) {
+                    // is zoom event => only reject if zoom is not allowed
+                    return allowZoomEvent;
+                }
+                // is drag event => only allow if drag should move the entire graph
+                return allowDragMove;
             })
             .on('zoom', (event: D3ZoomEvent<SVGGElement, unknown>, d) => {
                 graph.attr('transform', event.transform.toString());
