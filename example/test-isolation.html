@@ -20,7 +20,6 @@
         </style>
     </head>
     <body>
-        <!--script src="./_bundles/grapheditor-webcomponent.js"></script-->
         <div class="header">
             <h1>Grapheditor with isolated svg templates:</h1>
             <p>
@@ -64,10 +63,10 @@
         </template>
 
         <div style="height: 45vh; border: solid;">
-            <network-graph id="graph1" mode="layout" zoom="both" svg-template="#graph1template"></network-graph>
+            <network-graph id="graph1" zoom="both" svg-template="#graph1template"></network-graph>
         </div>
         <div style="height: 45vh; border: solid;">
-            <network-graph id="graph2" mode="layout" zoom="both" svg-template="#graph2template"></network-graph>
+            <network-graph id="graph2" zoom="both" svg-template="#graph2template"></network-graph>
         </div>
         <template id="graph2template">
             <svg slot="graph">
