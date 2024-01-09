@@ -450,7 +450,7 @@ export class GroupingManager {
     protected derefGraph(): GraphEditor {
         const graph = this.graphEditor.deref();
         if (graph == null) {
-            throw new Error("Grapheditor instance is already dereferenced!")
+            throw new Error('Grapheditor instance is already dereferenced!');
         }
         return graph;
     }
@@ -950,7 +950,7 @@ export class GroupingManager {
      * @param nodeForDecisionCallback the node to use for the decision callback (provide only if different from child node!)
      * @returns the id of the matching group or the childNode id
      */
-    // eslint-disable-next-line complexity
+    // eslint-disable-next-line complexity, max-len
     protected getGroupWithProperty(childNode: Node, groupProperty: string, groupDecisionCallback: string, strategy: 'closest-parent' | 'largest-group', nodeForDecisionCallback?: Node): string {
         const graph = this.derefGraph();
         const childId = childNode.id.toString();
