@@ -104,7 +104,7 @@ export function wrapText(element: SVGTextElement, newText: string, force: boolea
     const props: TextProperties = {
         x: x,
         y: y,
-    }
+    };
 
     // explicit line wrapping definition
     const wrapLines = text.attr('data-wrap-lines');
@@ -173,7 +173,7 @@ export function wrapText(element: SVGTextElement, newText: string, force: boolea
             if (oldProps.lastWrappedOverflow) {
                 return; // text that may have changed is not shown visually
             }
-            if (newText.length == oldProps.lastWrappedText.length) {
+            if (newText.length === oldProps.lastWrappedText.length) {
                 return; // text is completely the same
             }
         }
@@ -197,7 +197,7 @@ export function wrapText(element: SVGTextElement, newText: string, force: boolea
     if (isNaN(height)) {
         // no height => wrap a single line
         const unwrappedText = wrapSingleLine(element, width, newText, overflowMode, wordBreak, force);
-        props.lastWrappedText = newText.substr(0, newText.length - unwrappedText.length);
+        props.lastWrappedText = newText.substring(0, newText.length - unwrappedText.length);
         props.lastWrappedOverflow = lTrim(unwrappedText) !== '';
         resetTextTransform(text, isCenteredVertically);
         const newY = centerTextVertically(text, centerY, false);
@@ -217,7 +217,7 @@ export function wrapText(element: SVGTextElement, newText: string, force: boolea
         const notLast = index < (lines.length - 1);
         const unwrappedText = wrapSingleLine(line, width, currentNewText, notLast ? 'clip' : overflowMode, notLast ? wordBreak : 'break-all', force);
         currentNewText = lTrim(unwrappedText);
-        props.lastWrappedText = newText.substr(0, newText.length - unwrappedText.length);
+        props.lastWrappedText = newText.substring(0, newText.length - unwrappedText.length);
         props.lastWrappedOverflow = currentNewText !== '';
     }
     resetTextTransform(text, isCenteredVertically);
@@ -278,7 +278,7 @@ function parseLineDefs(lineDefs: string): LineWrappingDefinition[] {
         };
         const widths = lineDef.split(' ');
 
-        if (widths.length == 0) {
+        if (widths.length === 0) {
             console.error(`Could not parse lines def ${lineDef}! No lines specified.`);
             return;
         }
@@ -291,7 +291,7 @@ function parseLineDefs(lineDefs: string): LineWrappingDefinition[] {
                 return;
             }
             widths.splice(0, 1);
-            if (widths.length == 0) {
+            if (widths.length === 0) {
                 console.error(`Could not parse lines def ${lineDef}! No lines specified.`);
                 return;
             }
@@ -332,6 +332,7 @@ function parseLineDefs(lineDefs: string): LineWrappingDefinition[] {
  *
  * @returns the used lines wrapping definition
  */
+// eslint-disable-next-line complexity
 export function wrapTextLines(text: Selection<SVGTextElement, unknown, null, undefined>, newText: string, props: TextProperties, force: boolean): LineWrappingDefinition {
     let maxHeight = props.height;
     if (isNaN(maxHeight)) {
@@ -349,12 +350,12 @@ export function wrapTextLines(text: Selection<SVGTextElement, unknown, null, und
     props.lineheight = lineheight;
 
     // filter out line defs that lead to too long text
-    const allowedLineDefs = lineDefs.filter((def, index) => index == 0 || maxHeight == null || (def.lineWidths.length * lineheight * def.scale) <= maxHeight);
-    if (allowedLineDefs.length == 0) {
+    const allowedLineDefs = lineDefs.filter((def, index) => index === 0 || maxHeight == null || (def.lineWidths.length * lineheight * def.scale) <= maxHeight);
+    if (allowedLineDefs.length === 0) {
         console.error(`No line wrapping definition found that is smaller than the max height ${maxHeight}.`, props.wrapLines);
     }
 
-    const x = text.attr("x");
+    const x = text.attr('x');
     const yBaseline = parseFloat(text.attr('y'));
     if (isNaN(yBaseline)) {
         console.error('Could not read attribute "y" of the text element!', text.node());
@@ -388,6 +389,7 @@ export function wrapTextLines(text: Selection<SVGTextElement, unknown, null, und
         props.wrapLineDefIndex = lineDefIndex;
         let currentNewText = newText;
         const lineWidths = lineDef.lineWidths;
+        // eslint-disable-next-line arrow-body-style
         const cumulativeWidth = lineWidths.reduce((numA, numB) => { return numA + numB; }, 0);
         if (cumulativeWidth < minimalCumulativeLineLength && lineDefIndex < (allowedLineDefs.length - 1)) {
             // if not last linedef and wrap is expected to exceed all lines
@@ -401,12 +403,14 @@ export function wrapTextLines(text: Selection<SVGTextElement, unknown, null, und
         const spanSelection = text.selectAll<SVGTSpanElement, unknown>('tspan')
             .data(lines)
             .join(
+                // eslint-disable-next-line arrow-body-style
                 (enter) => {
                     return enter.append('tspan')
                         .attr('x', x)
                         .attr('y', d => d.y)
                         .attr('data-deltay', d => d.y - yBaseline);
                 },
+                // eslint-disable-next-line arrow-body-style
                 (update) => {
                     return update
                         .attr('y', d => d.y)
@@ -414,7 +418,7 @@ export function wrapTextLines(text: Selection<SVGTextElement, unknown, null, und
                 }
             );
 
-        props.lastWrappedText = "";
+        props.lastWrappedText = '';
         const spans = spanSelection.nodes();
         let hasOverflow = true;
         for (let index = 0; index < spans.length; index++) { // wrap lines
@@ -422,9 +426,9 @@ export function wrapTextLines(text: Selection<SVGTextElement, unknown, null, und
             const width = lines[index].width;
             const notLast = index < (spans.length - 1);
             const lastWrappedText = wrapSingleLine(line, width, currentNewText, notLast ? 'clip' : props.overflowMode, notLast ? props.wordBreak : 'break-all', force);
-            props.lastWrappedText = newText.substr(0, newText.length - lastWrappedText.length);
+            props.lastWrappedText = newText.substring(0, newText.length - lastWrappedText.length);
             currentNewText = lTrim(lastWrappedText);
-            if (currentNewText.length == 0) {
+            if (currentNewText.length === 0) {
                 // no text left to wrap
                 hasOverflow = false;
                 break;
@@ -456,20 +460,20 @@ export function wrapTextLines(text: Selection<SVGTextElement, unknown, null, und
  * @param text the text selection to reset the transformation for (must have an x attribute!)
  * @param isVerticallyCentered if the text is vertically centered it should scale from/towards that center vertically
  */
-export function resetTextTransform(text: Selection<SVGTextElement, unknown, null, undefined>, isVerticallyCentered: boolean=false) {
+export function resetTextTransform(text: Selection<SVGTextElement, unknown, null, undefined>, isVerticallyCentered: boolean= false) {
     const textNode = text.node();
     const bbox = textNode.getBBox();
     const originX = text.attr('x') ?? 0;
     let originY: number;
     if (isVerticallyCentered) {
         // ensure text scales towards the vertical center
-        originY = bbox.y + (bbox.height/2);
+        originY = bbox.y + (bbox.height / 2);
     } else {
         // ensure text scales to the top
         originY = bbox.y;
     }
-    text.style("transform-origin", `${originX}px ${originY}px`);
-    text.attr("transform", null);
+    text.style('transform-origin', `${originX}px ${originY}px`);
+    text.attr('transform', null);
 }
 
 /**
@@ -482,7 +486,7 @@ export function resetTextTransform(text: Selection<SVGTextElement, unknown, null
  * @param scale the scale factor
  */
 export function scaleText(text: Selection<SVGTextElement, unknown, null, undefined>, scale: number) {
-    const oldTransform = text.attr('transform') ?? "";
+    const oldTransform = text.attr('transform') ?? '';
     text.attr('transform', `scale(${scale})${oldTransform}`);
 }
 
@@ -522,17 +526,17 @@ export function centerTextVertically(text: Selection<SVGTextElement, unknown, nu
     if (Math.abs(delta) > 0.00001) {
         if (!multiline) {
             // center single line strings by directly adjusting y
-            const yBaseline = parseFloat(text.attr("y"));
+            const yBaseline = parseFloat(text.attr('y'));
             if (isNaN(yBaseline)) {
                 console.error('Could not read attribute "y" of the text element that should be centered vertically!', textNode);
                 return;
             }
-            text.attr("y", yBaseline + delta);
+            text.attr('y', yBaseline + delta);
             return yBaseline + delta;
         } else {
             // use a transform for multiline strings to transform all tSpans at once
-            const oldTransform = text.attr('transform') ?? "";
-            text.attr("transform", `translate(0,${delta})${oldTransform}`);
+            const oldTransform = text.attr('transform') ?? '';
+            text.attr('transform', `translate(0,${delta})${oldTransform}`);
         }
     }
 }
@@ -547,6 +551,7 @@ export function centerTextVertically(text: Selection<SVGTextElement, unknown, nu
  * @param force force rewrap
  * @param linespacing 'auto' or number (default: 'auto')
  */
+// eslint-disable-next-line max-len
 export function calculateMultiline(text: Selection<SVGTextElement, unknown, null, undefined>, height: number, x: number, y: number, force: boolean = false, linespacing: string = 'auto') {
     let lineheight = parseFloat(text.attr('data-lineheight'));
     if (force || isNaN(lineheight)) {
@@ -604,7 +609,7 @@ function calculateLineHeight(text: Selection<SVGTextElement, unknown, null, unde
         lineheight = 1.2 * fontSize;
     }
     if (styleLineheight.match('^\d+\.?\d*$')) {
-        lineheight === parseFloat(styleLineheight) * fontSize;
+        lineheight = parseFloat(styleLineheight) * fontSize;
     }
     if (styleLineheight.endsWith('px')) {
         lineheight = parseFloat(styleLineheight);
@@ -642,7 +647,7 @@ export function wrapSingleLine(element: SVGTextElement | SVGTSpanElement, width:
 
     if (newText.includes('\n')) {
         const index = newText.indexOf('\n');
-        suffix = newText.substr(index);
+        suffix = newText.substring(index);
         newText = newText.substring(0, index);
     }
 
@@ -662,7 +667,7 @@ export function wrapSingleLine(element: SVGTextElement | SVGTSpanElement, width:
     }
     const boundary = /(?<!^)(?<!\d[,.])\b(?![,.]\d)\s*|\s+|$/gmu;
     const nextWordBoundary = boundary.exec(newText)?.index ?? 0;
-    const isOneWord = nextWordBoundary === 0 || nextWordBoundary === newText.length
+    const isOneWord = nextWordBoundary === 0 || nextWordBoundary === newText.length;
 
     if (wordBreak === 'break-all' || isOneWord) {
         return wrapCharacters(newText, text, width, mode === 'clip' ? '' : '…') + suffix;
@@ -694,7 +699,7 @@ function wrapCharacters(newText: string, text: Selection<SVGTextElement | SVGTSp
     // always a char here as this method only gets called when the line is too long
     let firstOutside = textNode.getCharNumAtPosition(start);
     if (firstOutside < 0) { // because firefox sometimes does this...
-        firstOutside = bruteForceLastOutside(textNode, newText.length, start.x)
+        firstOutside = bruteForceLastOutside(textNode, newText.length, start.x);
     }
     let lastNonClippingChar = firstOutside;
 
@@ -706,13 +711,13 @@ function wrapCharacters(newText: string, text: Selection<SVGTextElement | SVGTSp
         }
     }
 
-    const newSubstring = rTrim(newText.substr(0, lastNonClippingChar));
+    const newSubstring = rTrim(newText.substring(0, lastNonClippingChar));
     if (overflowChar) {
         text.text(newSubstring + overflowChar);
     } else {
         text.text(newSubstring);
     }
-    return lTrim(newText.substr(lastNonClippingChar));
+    return lTrim(newText.substring(lastNonClippingChar));
 }
 
 
@@ -724,6 +729,7 @@ function wrapCharacters(newText: string, text: Selection<SVGTextElement | SVGTSp
  * @param width width of the  line
  * @param overflowChar wrapping mode
  */
+// eslint-disable-next-line complexity
 function wrapWords(newText: string, text: Selection<SVGTextElement | SVGTSpanElement, unknown, null, undefined>, width: number, overflowChar: string) {
     // find out width of overflow char
     const textNode = text.node();
@@ -741,7 +747,7 @@ function wrapWords(newText: string, text: Selection<SVGTextElement | SVGTSpanEle
     if (firstOutside < 0 || textNode.getStartPositionOfChar(firstOutside).x > start.x) { // because firefox sometimes does this...
         // sometimes firefox does not find the char (firstOutside == -1)
         // sometimes the char firefox found is not correct (second check tests if that char actually starts inside the bounds)
-        firstOutside = bruteForceLastOutside(textNode, newText.length, start.x)
+        firstOutside = bruteForceLastOutside(textNode, newText.length, start.x);
     }
 
     const WORD_BOUNDARY = /(?<!^)(?<!\d[,.])\b(?![,.]\d)\s*|\s+|$/gmu;
@@ -780,8 +786,8 @@ function wrapWords(newText: string, text: Selection<SVGTextElement | SVGTSpanEle
         // one long word
         return wrapCharacters(newText, text, width, '-');
     }
-    text.text(rTrim(newText.substr(0, lastInsideBoundary)) + overflowChar);
-    return lTrim(newText.substr(lastInsideBoundary));
+    text.text(rTrim(newText.substring(0, lastInsideBoundary)) + overflowChar);
+    return lTrim(newText.substring(lastInsideBoundary));
 }
 
 /**
