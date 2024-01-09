@@ -44,6 +44,7 @@ const SHADOW_DOM_TEMPLATE = `
  * All events that happen because of API interactions will have the API value.
  * All events that were directly triggered by the user will have the USER_INTERACTION value.
  */
+// eslint-disable-next-line no-shadow
 export enum EventSource {
     INTERNAL = 'INTERNAL',
     API = 'API',
@@ -616,20 +617,49 @@ export default class GraphEditor extends HTMLElement {
             needsRender = true;
         }
         if (name === 'nodes') {
-            newValue = newValue.replace(/'/g, '"');
-            this.nodeList = JSON.parse(newValue);
-            needsRender = true;
+            try {
+                this.nodeList = JSON.parse(newValue);
+                needsRender = true;
+            } catch (err) {
+                console.warn(
+                    'Passing JSON with \' instead of " is deprecated.'
+                    + ' Support will be completely removed in the next major version!\n'
+                    + 'Please use standard double quotes " for JSON and single quotes to wrap the JSON value for the HTML attribute.'
+                );
+                newValue = newValue.replace(/'/g, '"');
+                this.nodeList = JSON.parse(newValue);
+                needsRender = true;
+            }
         }
         if (name === 'edges') {
-            newValue = newValue.replace(/'/g, '"');
-            this.edgeList = JSON.parse(newValue);
-            needsRender = true;
+            try {
+                this.edgeList = JSON.parse(newValue);
+                needsRender = true;
+            } catch (err) {
+                console.warn(
+                    'Passing JSON with \' instead of " is deprecated.'
+                    + ' Support will be completely removed in the next major version!\n'
+                    + 'Please use standard double quotes " for JSON and single quotes to wrap the JSON value for the HTML attribute.'
+                );
+                newValue = newValue.replace(/'/g, '"');
+                this.edgeList = JSON.parse(newValue);
+                needsRender = true;
+            }
         }
         if (name === 'classes') {
             let newClasses: string[];
             if (newValue.startsWith('[')) {
-                newValue = newValue.replace(/'/g, '"');
-                newClasses = JSON.parse(newValue);
+                try {
+                    newClasses = JSON.parse(newValue);
+                } catch (err) {
+                    console.warn(
+                        'Passing JSON with \' instead of " is deprecated.'
+                        + ' Support will be completely removed in the next major version!\n'
+                        + 'Please use standard double quotes " for JSON and single quotes to wrap the JSON value for the HTML attribute.'
+                    );
+                    newValue = newValue.replace(/'/g, '"');
+                    newClasses = JSON.parse(newValue);
+                }
             } else {
                 newClasses = newValue.split(' ');
             }
@@ -649,7 +679,7 @@ export default class GraphEditor extends HTMLElement {
                 'Using the "mode" attribute is deprecated and only partially supported in this version.'
                 + ' Support will be completely removed in the next major version!\n'
                 + 'Please use the new attributes ("selection", "node-click", "node-drag", "edge-drag", and "background-drag") instead.'
-            )
+            );
             const val = newValue.toLowerCase();
             if (val === 'display') {
                 this._selectionMode = 'multiple';
@@ -957,7 +987,7 @@ export default class GraphEditor extends HTMLElement {
      * @param eventSource specify the event source type for the fired events
      * @returns true if the graph needs to be re-rendered to display changes
      */
-    public addEdge(edge: Edge, redraw: boolean = false, eventSource: EventSource=EventSource.API): boolean {
+    public addEdge(edge: Edge, redraw: boolean = false, eventSource: EventSource= EventSource.API): boolean {
         if (this.onEdgeCreate(edge, eventSource, eventSource !== EventSource.API)) {
             // event was not cancelled
             this._edges.push(edge);
@@ -990,7 +1020,7 @@ export default class GraphEditor extends HTMLElement {
      * @param eventSource specify the event source type for the fired events
      * @returns true if the graph needs to be re-rendered to display changes
      */
-    public removeEdge(edge: Edge | number | string, redraw: boolean = false, eventSource: EventSource=EventSource.API): boolean {
+    public removeEdge(edge: Edge | number | string, redraw: boolean = false, eventSource: EventSource= EventSource.API): boolean {
         let edgeIdToDelete: string;
         if (typeof (edge) === 'number') {
             edgeIdToDelete = edge.toString();
@@ -1040,6 +1070,7 @@ export default class GraphEditor extends HTMLElement {
      * @param edgeId the id of the edge to check
      * @returns true if a dragged edge exists that was created from this edge
      */
+    // eslint-disable-next-line no-shadow
     public isEdgeCurrentlyDragged(edgeId: string|number): boolean {
         return this.draggedEdges.some((edge) => edge.createdFrom === edgeId);
     }
@@ -1276,7 +1307,8 @@ export default class GraphEditor extends HTMLElement {
      */
     private updateSize() {
         if (this.svg == null) {
-            console.trace("NO SVG")
+            console.error('No SVG to calculate size of!');
+            return;
         }
         const svg = this.svg;
         this.contentMaxHeight = parseInt(svg.style('height').replace('px', ''), 10);
@@ -1315,7 +1347,7 @@ export default class GraphEditor extends HTMLElement {
      * @param box a box in graph coordinates
      * @param padding percentage of applied padding to the viewbox (0.1 == 10%). Set to 0 to remove padding.
      */
-    public zoomToBox(box: Rect, padding: number=0.1): void {
+    public zoomToBox(box: Rect, padding: number= 0.1): void {
         let scaleFactor = 1;
         if (padding > 0 && padding < 1) {
             scaleFactor -= padding;
@@ -1399,7 +1431,7 @@ export default class GraphEditor extends HTMLElement {
 
         // attach brush behaviour for background drag interaction
         const container = svg.select<SVGGElement>('g.zoom-group').node();
-        svg.call(drag<SVGGElement, {rect: Selection<SVGRectElement, unknown, SVGGElement, unknown>, start: Point}>()
+        svg.call(drag<SVGGElement, {rect: Selection<SVGRectElement, unknown, SVGGElement, unknown>; start: Point}>()
             .container(() => container)
             .subject(() => {
                 if (this._backgroundDragInteraction === 'none') {
@@ -1423,7 +1455,7 @@ export default class GraphEditor extends HTMLElement {
                 start.y = (event as any).y;
             })
             .on('drag', (e) => {
-                const event = e as unknown as D3DragEvent<SVGGElement, unknown, {rect: Selection<SVGRectElement, unknown, SVGGElement, unknown>, start: Point}>;
+                const event = e as unknown as D3DragEvent<SVGGElement, unknown, {rect: Selection<SVGRectElement, unknown, SVGGElement, unknown>; start: Point}>;
                 const start = event.subject.start;
                 const minX = event.x < start.x ? event.x : start.x;
                 const minY = event.y < start.y ? event.y : start.y;
@@ -1445,7 +1477,7 @@ export default class GraphEditor extends HTMLElement {
             })
             // eslint-disable-next-line complexity
             .on('end', (e) => {
-                const event = e as unknown as D3DragEvent<SVGGElement, unknown, {rect: Selection<SVGRectElement, unknown, SVGGElement, unknown>, start: Point}>;
+                const event = e as unknown as D3DragEvent<SVGGElement, unknown, {rect: Selection<SVGRectElement, unknown, SVGGElement, unknown>; start: Point}>;
                 event.subject.rect.remove(); // remove visible brush
                 const start = event.subject.start;
                 const minX = event.x < start.x ? event.x : start.x;
@@ -1459,7 +1491,7 @@ export default class GraphEditor extends HTMLElement {
                     y: minY,
                     width: width,
                     height: height,
-                }
+                };
                 // dispatch brush end event
                 this.onBrushRelease(event as unknown as Event, brushRect);
 
@@ -1490,7 +1522,7 @@ export default class GraphEditor extends HTMLElement {
                         const center: Point = {
                             x: brushRect.x + (brushRect.width / 2),
                             y: brushRect.y + (brushRect.height / 2),
-                        }
+                        };
                         let distance = Infinity;
                         let selectedNode: string = null;
                         selected.forEach(nodeId => {
@@ -1781,6 +1813,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param nodeId the id of the edge to select
      */
+    // eslint-disable-next-line no-shadow
     public getSingleEdgeSelection(edgeId: string): Selection<SVGGElement, Edge, any, unknown> {
         const edge = this.objectCache.getEdge(edgeId);
         if (edge != null) {
@@ -1807,9 +1840,9 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param nodeSelection d3 selection of nodes to update with bound data
      */
-     public updateNodeText(nodeSelection: Selection<SVGGElement, Node, any, unknown>, force: boolean = false) {
-         this.nodeRenderer.updateNodeText(nodeSelection, force);
-     }
+    public updateNodeText(nodeSelection: Selection<SVGGElement, Node, any, unknown>, force: boolean = false) {
+        this.nodeRenderer.updateNodeText(nodeSelection, force);
+    }
 
 
     /**
