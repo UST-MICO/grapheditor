@@ -23,6 +23,9 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 ### Deprecated
 
 - Deprecated "mode" attribute on the network-graph html node. See the list of added attributes that allow more fine grained control
+- Passing JSON via HTML attributes with nonstandard `'` as quote is deprecated.\
+  Deprecated: `nodes="[{'id': 1, 'x': 0, 'y': 0}]"` (also `edges` and `classes`)\
+  Replace with: `nodes='[{"id": 1, "x": 0, "y": 0}]'`
 
 ### Incompatible changes
 
