@@ -418,7 +418,7 @@ export class ResizingManager {
     protected derefGraph(): GraphEditor {
         const graph = this.graphEditor.deref();
         if (graph == null) {
-            throw new Error("Grapheditor instance is already dereferenced!")
+            throw new Error('Grapheditor instance is already dereferenced!');
         }
         return graph;
     }
@@ -574,6 +574,7 @@ export class ResizingManager {
         overlaySelection.selectAll<SVGGElement, ResizeHandle>('g.resize-handle')
             .data<ResizeHandle>(resizeHandles)
             .join(
+                // eslint-disable-next-line arrow-body-style
                 enter => {
                     return enter.append('g')
                         .classed('resize-handle', true);
