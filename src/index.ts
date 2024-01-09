@@ -32,6 +32,7 @@ export {
 export { Marker } from './marker';
 export { LinkHandle, calculateLinkHandleNormal, handlesForRectangle, handlesForCircle, handlesForPolygon, handlesForPath } from './link-handle';
 export { ResizingManager, DefaultResizeStrategy, ResizeStrategy, ResizeOverlayOptions } from './resizing';
+export { wrapText, wrapTextLines, wrapSingleLine } from './textwrap';
 
 
 if (window.customElements.get('network-graph') == null) {
