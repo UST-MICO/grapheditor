@@ -1253,15 +1253,23 @@ export default class GraphEditor extends HTMLElement {
                 return allowDragMove;
             })
             .on('zoom', (event: D3ZoomEvent<SVGGElement, unknown>, d) => {
-                graph.attr('transform', event.transform.toString());
+                const transform = event.transform;
+                // only direct user interaction has a source event
+                const sourceIsUserGesture = event.sourceEvent != null;
+                if (this._zoomMode === 'none' || this._zoomMode === 'automatic') {
+                    if (sourceIsUserGesture && this.currentZoom && transform.k !== this.currentZoom.k) {
+                        // event was a zoom event that should not have happened (e.g. touch zoom)
+                        return; // discard zoom
+                    }
+                }
+                graph.attr('transform', transform.toString());
                 const oldZoom = this.currentZoom;
-                this.currentZoom = event.transform;
+                this.currentZoom = transform;
                 let eventSource = EventSource.USER_INTERACTION;
-                if (event.sourceEvent == null) {
-                    // only direct user interaction has a source event
+                if (sourceIsUserGesture) {
                     eventSource = EventSource.API;
                 }
-                this.onZoomChange(oldZoom, event.transform, eventSource);
+                this.onZoomChange(oldZoom, transform, eventSource);
             });
 
         let edgesGroup = graph.select<SVGGElement>('g.edges');
