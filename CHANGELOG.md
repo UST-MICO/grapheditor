@@ -29,6 +29,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ### Incompatible changes
 
+- Updated to TypeScript 4.6 compiler
 - Updated D3 dependecies to version 7. Please carfeully read about the changes in version 6 and 7 ([changelog](https://github.com/d3/d3/blob/main/CHANGES.md#changes-in-d3-70)) if your code uses D3 functions.
 - Removed the `style` slot in the default template as it did not work to isolate style anyway
 - Removed deprecated `rotation` property of edge markers
@@ -100,7 +101,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 ## [0.5.3] - 2020-04-30
 
 **Known Issue:** this version was compiled using typescript 3.8!
-The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`. See [typescript 3.7 release notes](www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#class-field-mitigations) for more information.
+The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`. See [typescript 3.7 release notes](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#class-field-mitigations) for more information.
 
 This will be the last release to include this warning in the changelog!
 
@@ -119,7 +120,7 @@ This will be the last release to include this warning in the changelog!
 ## [0.5.2] - 2020-03-08
 
 **Known Issue:** this version was compiled using typescript 3.7!
-The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`. See [typescript 3.7 release notes](www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#class-field-mitigations) for more information.
+The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`. See [typescript 3.7 release notes](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#class-field-mitigations) for more information.
 
 ### Added
 
@@ -136,7 +137,7 @@ The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`.
 ## [0.5.1] - 2020-02-26
 
 **Known Issue:** this version was compiled using typescript 3.7!
-The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`. See [typescript 3.7 release notes](www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#class-field-mitigations) for more information.
+The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`. See [typescript 3.7 release notes](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#class-field-mitigations) for more information.
 
 ### Fixed
 
@@ -147,7 +148,7 @@ The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`.
 ## [0.5.0] - 2020-02-25
 
 **Known Issue:** this version was compiled using typescript 3.7!
-The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`. See [typescript 3.7 release notes](www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#class-field-mitigations) for more information.
+The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`. See [typescript 3.7 release notes](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#class-field-mitigations) for more information.
 
 ### Added
 
@@ -174,7 +175,7 @@ The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`.
 ## [0.4.1] - 2020-02-11
 
 **Known Issue:** this version was compiled using typescript 3.7!
-The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`. See [typescript 3.7 release notes](www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#class-field-mitigations) for more information.
+The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`. See [typescript 3.7 release notes](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#class-field-mitigations) for more information.
 
 ### Added
 
@@ -193,7 +194,7 @@ The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`.
 ## [0.4.0] - 2020-01-28
 
 **Known Issue:** this version was compiled using typescript 3.7!
-The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`. See [typescript 3.7 release notes](www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#class-field-mitigations) for more information.
+The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`. See [typescript 3.7 release notes](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#class-field-mitigations) for more information.
 
 ### Added
 
@@ -218,7 +219,7 @@ The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`.
 ## [0.3.1] - 2019-12-02
 
 **Known Issue:** this version was compiled using typescript 3.7!
-The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`. See [typescript 3.7 release notes](www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#class-field-mitigations) for more information.
+The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`. See [typescript 3.7 release notes](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#class-field-mitigations) for more information.
 
 ### Added
 
@@ -235,7 +236,7 @@ The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`.
 ## [0.3.0] - 2019-11-22
 
 **Known Issue:** this version was compiled using typescript 3.7!
-The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`. See [typescript 3.7 release notes](www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#class-field-mitigations) for more information.
+The resulting `.d.ts` are **only** compatible with typescript versions `>= 3.6`. See [typescript 3.7 release notes](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#class-field-mitigations) for more information.
 
 ### Added
 

@@ -49,7 +49,7 @@ The resize overlay can be styled with css like nodes and edges.
 Below is the structure of an example resize overlay inside the graph svg.
 The ``resize-overlay```group contains one ``rect`` with the class ``outline`` and one group for each resize handle.
 The resize handles use the static templates for markers.
-Use the :js:attr:`~ResizeOverlayOptions.handleTemplate` (or :js:attr:`~ResizeOverlayOptions.cornerHandleTemplate`) setting to set the template to use.
+Use the :js:attr:`~ResizeOverlayOptions.handleTemplate?` (or :js:attr:`~ResizeOverlayOptions.cornerHandleTemplate?`) setting to set the template to use.
 All resize handles have the class ``resize-handle`` and classes corresponding to their position (``top``, ``bottom``, ``left``, ``right``) and type (``horizontal``, ``vertical``, ``corner``) of handle.
 
 .. code-block:: html
@@ -110,25 +110,25 @@ Some Scenarios
 
 Preserving aspect ratio
 
-    To preserve the aspect ratio while resizing use the options :js:attr:`~ResizeOverlayOptions.preserveRatio`.
+    To preserve the aspect ratio while resizing use the options :js:attr:`~ResizeOverlayOptions.preserveRatio?`.
 
 Preserve aspect ratio only when dragging a corner
 
-    Use :js:attr:`~ResizeOverlayOptions.preserveRatioOnDiagonals`. This will allow dragging in the horizontal or vertical direction to still change the aspect ratio.
+    Use :js:attr:`~ResizeOverlayOptions.preserveRatioOnDiagonals?`. This will allow dragging in the horizontal or vertical direction to still change the aspect ratio.
 
 Mirror all resizes at the center
 
-    Use :js:attr:`~ResizeOverlayOptions.symmetric` to affect both horizontal and vertical resizes.
-    To only affect either horizontal or vertical resizes use :js:attr:`~ResizeOverlayOptions.symmetricHorizontal` or :js:attr:`~ResizeOverlayOptions.symmetricVertical`.
+    Use :js:attr:`~ResizeOverlayOptions.symmetric?` to affect both horizontal and vertical resizes.
+    To only affect either horizontal or vertical resizes use :js:attr:`~ResizeOverlayOptions.symmetricHorizontal?` or :js:attr:`~ResizeOverlayOptions.symmetricVertical?`.
     These options will also have an effect when dragging a corner handle!
 
 Resize the node live with the overlay
 
-    To resize the node live to match the overlay while dragging use the option :js:attr:`~ResizeOverlayOptions.liveResize`.
+    To resize the node live to match the overlay while dragging use the option :js:attr:`~ResizeOverlayOptions.liveResize?`.
 
 Limit the node size
 
-    To limit the node size set :js:attr:`~ResizeOverlayOptions.minWidth`, :js:attr:`~ResizeOverlayOptions.minHeight`, :js:attr:`~ResizeOverlayOptions.maxWidth` or :js:attr:`~ResizeOverlayOptions.maxHeight`.
+    To limit the node size set :js:attr:`~ResizeOverlayOptions.minWidth?`, :js:attr:`~ResizeOverlayOptions.minHeight?`, :js:attr:`~ResizeOverlayOptions.maxWidth?` or :js:attr:`~ResizeOverlayOptions.maxHeight?`.
     Te prevent resizing in one direction entirely set the maximum the same as the minimum.
 
 
