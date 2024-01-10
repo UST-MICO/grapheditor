@@ -28,6 +28,10 @@ export interface Node {
     x: number;
     /** Y coordinate of Node(center). */
     y: number;
+    /** An optional node width. Attribute is used by resize manager. */
+    width?: number;
+    /** An optional node height. Attribute is used by resize manager. */
+    height?: number;
     /** Node type. Can be used for styling. */
     type?: string;
     /** The id of the dynamic node template to use for this node. */

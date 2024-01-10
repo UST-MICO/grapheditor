@@ -22,7 +22,7 @@ They are matched to the nodes by their id.
 
     // mark node 1 as the root for a tree
     groupManager.markAsTreeRoot(1);
-    // add node 2 to the grou of node 1
+    // add node 2 to the group of node 1
     // node 2 is also joined to the tree of node 1
     groupManager.addToGroup(1, 2);
 
@@ -53,16 +53,16 @@ How a Group and its Children are Moved
     If nodes need to be moved from code use the :js:func:`GraphEditor.moveNode` function instead of changing the node coordinates directly!
     This method also considers all relavant group logic just like dragging the node to that position would.
 
-The attributes :js:attr:`GroupBehaviour.moveChildrenAlongGoup` and :js:attr:`GroupBehaviour.captureChildMovement` change how node movement is performed by this group.
+The attributes :js:attr:`GroupBehaviour.moveChildrenAlongGoup?` and :js:attr:`GroupBehaviour.captureChildMovement?` change how node movement is performed by this group.
 
-If :js:attr:`GroupBehaviour.moveChildrenAlongGoup` is ``true`` the group moves all children returned by :js:func:`GroupingManager.getAllChildrenOf` method if the group node itself is moved.
+If :js:attr:`GroupBehaviour.moveChildrenAlongGoup?` is ``true`` the group moves all children returned by :js:func:`GroupingManager.getAllChildrenOf` method if the group node itself is moved.
 
-If :js:attr:`GroupBehaviour.captureChildMovement` is ``true`` and a child in the same tree as the group is moved the movement is instead captured by the group node.
+If :js:attr:`GroupBehaviour.captureChildMovement?` is ``true`` and a child in the same tree as the group is moved the movement is instead captured by the group node.
 The move is then performed as if the move happened for the group node instead.
-With the decision function :js:func:`GroupBehaviour.captureChildMovementForNode` the decision can be made depending on the specific node.
+With the decision function :js:func:`GroupBehaviour.captureChildMovementForNode?` the decision can be made depending on the specific node.
 
 .. seealso::
-    For even more fine grained control ove child node movement use :js:func:`GroupBehaviour.beforeNodeMove`, :js:func:`GroupBehaviour.onNodeMoveStart` and :js:func:`GroupBehaviour.onNodeMoveEnd`.
+    For even more fine grained control ove child node movement use :js:func:`GroupBehaviour.beforeNodeMove?`, :js:attr:`GroupBehaviour.onNodeMoveStart?` and :js:func:`GroupBehaviour.onNodeMoveEnd?`.
 
 1.  Move all nodes in the group if the group node is moved:
 
@@ -103,16 +103,16 @@ A edge dragged from the group node (or a captured edge) may then be delegated to
     Edge delegation is not sanity checked!
     The edge can be delegated to *any* existing node of the graph.
 
-    The bahaviour can be easily implemented using :js:func:`GroupingManager.getGroupCapturingIncomingEdge` or :js:func:`GroupingManager.getGroupCapturingOutgoingEdge` to replace the target/source and then using :js:func:`GroupBehaviour.delegateIncomingEdgeTargetToNode` or :js:func:`GroupBehaviour.delegateOutgoingEdgeSourceToNode` to get the final target/source of the edge.
+    The bahaviour can be easily implemented using :js:func:`GroupingManager.getGroupCapturingIncomingEdge` or :js:func:`GroupingManager.getGroupCapturingOutgoingEdge` to replace the target/source and then using :js:func:`GroupBehaviour.delegateIncomingEdgeTargetToNode?` or :js:func:`GroupBehaviour.delegateOutgoingEdgeSourceToNode?` to get the final target/source of the edge.
 
 Relevant attributes:
 
-* :js:attr:`GroupBehaviour.captureOutgoingEdges`
-* :js:func:`GroupBehaviour.captureOutgoingEdgesForNode`
-* :js:func:`GroupBehaviour.delegateOutgoingEdgeSourceToNode`
-* :js:attr:`GroupBehaviour.captureIncomingEdges`
-* :js:func:`GroupBehaviour.captureIncomingEdgesForNode`
-* :js:func:`GroupBehaviour.delegateIncomingEdgeTargetToNode`
+* :js:attr:`GroupBehaviour.captureOutgoingEdges?`
+* :js:func:`GroupBehaviour.captureOutgoingEdgesForNode?`
+* :js:func:`GroupBehaviour.delegateOutgoingEdgeSourceToNode?`
+* :js:attr:`GroupBehaviour.captureIncomingEdges?`
+* :js:func:`GroupBehaviour.captureIncomingEdgesForNode?`
+* :js:func:`GroupBehaviour.delegateIncomingEdgeTargetToNode?`
 
 
 How Nodes Can Join or Leave a Group
@@ -121,7 +121,7 @@ How Nodes Can Join or Leave a Group
 Adding nodes to a group or removing nodes from a group with drag and drop is supported.
 The group needs to specifically opt in for this to work!
 
-To allow nodes joining the group use :js:attr:`GroupBehaviour.captureDraggedNodes` and :js:func:`GroupBehaviour.captureThisDraggedNode`.
+To allow nodes joining the group use :js:attr:`GroupBehaviour.captureDraggedNodes?` and :js:func:`GroupBehaviour.captureThisDraggedNode?`.
 Nodes will try to join the group if the coordinates of the node (:js:attr:`Node.x` and :js:attr:`Node.y`) are inside the svg elements of the group.
 
 Excerpt of the code that tries to join a dragged node to a group:
@@ -137,21 +137,21 @@ Excerpt of the code that tries to join a dragged node to a group:
 
 .. warning:: The function :js:func:`GraphEditor.getNodesFromPoint` that is used to find the possible group to relies on the **fully rendered** svg!
 
-To allow nodes leaving the group use :js:attr:`GroupBehaviour.allowDraggedNodesLeavingGroup` and :js:func:`GroupBehaviour.allowThisDraggedNodeLeavingGroup`.
+To allow nodes leaving the group use :js:attr:`GroupBehaviour.allowDraggedNodesLeavingGroup?` and :js:func:`GroupBehaviour.allowThisDraggedNodeLeavingGroup?`.
 
-To fix a node to a position relative to the group node use :js:attr:`GroupBehaviour.childNodePositions`.
+To fix a node to a position relative to the group node use :js:attr:`GroupBehaviour.childNodePositions?`.
 
 Relevant attributes:
 
-* :js:attr:`GroupBehaviour.allowFreePositioning`
-* :js:attr:`GroupBehaviour.captureDraggedNodes`
-* :js:func:`GroupBehaviour.captureThisDraggedNode`
-* :js:attr:`GroupBehaviour.allowDraggedNodesLeavingGroup`
-* :js:func:`GroupBehaviour.allowThisDraggedNodeLeavingGroup`
-* :js:func:`GroupBehaviour.afterNodeJoinedGroup`
-* :js:func:`GroupBehaviour.afterNodeLeftGroup`
-* :js:attr:`GroupBehaviour.childNodePositions`
-* :js:attr:`GroupBehaviour.occupiedDropZones`
+* :js:attr:`GroupBehaviour.allowFreePositioning?`
+* :js:attr:`GroupBehaviour.captureDraggedNodes?`
+* :js:func:`GroupBehaviour.captureThisDraggedNode?`
+* :js:attr:`GroupBehaviour.allowDraggedNodesLeavingGroup?`
+* :js:func:`GroupBehaviour.allowThisDraggedNodeLeavingGroup?`
+* :js:func:`GroupBehaviour.afterNodeJoinedGroup?`
+* :js:func:`GroupBehaviour.afterNodeLeftGroup?`
+* :js:attr:`GroupBehaviour.childNodePositions?`
+* :js:attr:`GroupBehaviour.occupiedDropZones?`
 
 .. seealso::
     The default implementation relevant for node joining/leaving with drag and drop:
@@ -173,24 +173,24 @@ The drop zones are updated every :js:func:`~GraphEditor.completeRender` and trac
 
 A drop zone can also have a filter that restricts the node types that can be dropped in that zone.
 The filter is specified with the ``data-node-type-filter`` attribute on the drop zone element.
-The filter string is a space seperated string of node types that are to be added to the :js:attr:`NodeDropZone.whitelist` or :js:attr:`NodeDropZone.blacklistlist`.
+The filter string is a space seperated string of node types that are to be added to the :js:attr:`NodeDropZone.whitelist` or :js:attr:`NodeDropZone.blacklist`.
 Types starting with an exclamation mark will be added to the blacklist without the exclamation mark.
 
 Examples of node type filters:
 
 *   ``data-node-type-filter="!group-node"``
 
-    | :js:attr:`NodeDropZone.blacklistlist`: ``set(['group-node',])``
+    | :js:attr:`NodeDropZone.blacklist`: ``set(['group-node',])``
     | :js:attr:`NodeDropZone.whitelist`: ``set()``
 
 *   ``data-node-type-filter="child-node"``
 
-    | :js:attr:`NodeDropZone.blacklistlist`: ``set()``
+    | :js:attr:`NodeDropZone.blacklist`: ``set()``
     | :js:attr:`NodeDropZone.whitelist`: ``set(['child-node',])``
 
 *   ``data-node-type-filter="child-node !group-node"``
 
-    | :js:attr:`NodeDropZone.blacklistlist`: ``set(['group-node',])``
+    | :js:attr:`NodeDropZone.blacklist`: ``set(['group-node',])``
     | :js:attr:`NodeDropZone.whitelist`: ``set(['child-node',])``
 
 Example drop zone:
@@ -211,7 +211,7 @@ Example drop zone:
 
     For furthor information on how the drop zones are used to position nodes see the documentation for:
 
-    * :js:attr:`GroupBehaviour.allowFreePositioning`
+    * :js:attr:`GroupBehaviour.allowFreePositioning?`
     * :js:func:`defaultCaptureThisDraggedNode`
     * :js:func:`defaultBeforeNodeMove`
     * :js:func:`defaultAfterNodeJoinedGroup`

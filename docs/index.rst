@@ -9,10 +9,35 @@ The grapheditor is a `custom web component <https://www.webcomponents.org>`_ tha
     * `d3 <https://github.com/d3/>`_
     * `d3 – select <https://github.com/d3/d3-selection>`_
 
+
+Quick Start
+-----------
+
+Want to jump right in?
+Go to the :doc:`quickstart` to get a first feel for how this webcomponent is used.
+
+
+When to Use
+-----------
+
+Use this webcomponent if you want to
+
+* Display an interactive graph layout with complex node designs
+* Allow users to rewire the graph interactively
+* Render a graph to SVG
+
+When NOT to Use
+---------------
+
+Do NOT use this webcomponent if you want to
+
+* Display a large number of complex nodes (everything above 100 nodes should be testet for performance issues)
+* Require the best and fastest text wrapping for large amounts of text in nodes
+  (Text wrapping is implemented using custom javascript as browsers do not natively support text wrapping in SVGs)
+
+
 Features
 --------
-
-:doc:`quickstart`
 
 * Custom :doc:`static templates <static-templates>` with dynamic :ref:`text <static-templates:text injection for node templates>` and :ref:`content <static-templates:dynamic content>`
 * Fully :doc:`dynamic templates <dynamic-templates>`
@@ -35,6 +60,7 @@ Features
 
 .. image:: screenshots/test-html.png
 
+
 Documentation
 -------------
 
@@ -42,12 +68,12 @@ Documentation
     :maxdepth: 2
 
     quickstart
+    coordinates
     grapheditor
     static-templates
     dynamic-templates
     edge-path-templates
     groups
-    coordinates
     resizing
     api/api-index
     changelog

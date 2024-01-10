@@ -126,6 +126,7 @@ export default class GraphEditor extends HTMLElement {
      * Renderer for common rendering functionality found in nodes and edges.
      *
      * Do not call methods from this object directly!
+     *
      * Do not replace this object!
      */
     public extrasRenderer: ExtrasRenderer;
@@ -134,6 +135,7 @@ export default class GraphEditor extends HTMLElement {
      * Renderer for node specific rendering functionality.
      *
      * Do not call methods from this object directly!
+     *
      * Do not replace this object!
      */
     public nodeRenderer: NodeRenderer;
@@ -142,6 +144,7 @@ export default class GraphEditor extends HTMLElement {
      * Renderer for edge specific rendering functionality.
      *
      * Do not call methods from this object directly!
+     *
      * Do not replace this object!
      */
     public edgeRenderer: EdgeRenderer;

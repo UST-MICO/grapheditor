@@ -19,3 +19,4 @@ API
    grouping
    drop-zone
    resizing
+   rendering-internals

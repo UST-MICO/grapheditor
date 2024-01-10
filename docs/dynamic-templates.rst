@@ -11,7 +11,7 @@ Dynamic Node Templates
 ----------------------
 
 A dynamic node template must implement the :js:class:`DynamicNodeTemplate` interface.
-To use a dynamic node template set the :js:attr:`Node.dynamicTemplate` attribute to the template id.
+To use a dynamic node template set the :js:attr:`Node.dynamicTemplate?` attribute to the template id.
 
 .. note:: Even for dynamic templates all :ref:`dynamic properties <static-templates:dynamic content>` of static templates are still applied.
     This is also the preferred way to benefit from :ref:`text wrapping <static-templates:text injection for node templates>` in dynamic templates.
@@ -23,7 +23,7 @@ Dynamic Marker Templates
 A dynamic marker template must implement the :js:class:`DynamicMarkerTemplate` interface.
 Dynamic marker templates are used for both :js:class:`Markers <Marker>` and :js:class:`LinkHandles <LinkHandle>`.
 They will get a context with their parent element (an :js:class:`Edge` or a :js:class:`Node`).
-To use a dynamic marker template set the :js:attr:`Marker.template` attribute to the template id and :js:attr:`Marker.isDynamicTemplate` to ``true``.
+To use a dynamic marker template set the :js:attr:`Marker.template` attribute to the template id and :js:attr:`Marker.isDynamicTemplate?` to ``true``.
 The same goes for :js:class:`LinkHandles <LinkHandle>`.
 
 
