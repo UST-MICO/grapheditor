@@ -156,9 +156,7 @@ class CustomAnalyzer(Analyzer):
         if root and "kindString" not in root:
             root["kindString"] = "Module"
 
-        done = super()._convert_all_nodes(root)
-        # print([n for n in done])
-        return done
+        return super()._convert_all_nodes(root)
 
     def _get_js_role_for_type(self, type_name: str, default_replacer=None):
         for kind, replacer in TYPE_LINK_REPLACERS.items():
@@ -260,9 +258,6 @@ class CustomAnalyzer(Analyzer):
                     file_name = source.get('fileName')
                     if file_name in DEFAULT_EXPORT_NAME_FIXES:
                         node['name'] = DEFAULT_EXPORT_NAME_FIXES[file_name]
-        if kind_string == 'Variable':
-            print(node["id"])
-            print(node.get("name"), "kind:", kind_string, "type:", node.get("type", {}).get("type"))
         elif kind_string == 'Accessor':
             get_signature = node.get('getSignature')
             if get_signature and not isinstance(get_signature, list):
