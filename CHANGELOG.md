@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## [Unreleased]
 
+
+## [0.7.0] - 2024-01-10
+
 ### Added
 
 - Added more fine grained options for controlling how the user can interact with the grapheditor
@@ -372,7 +375,8 @@ First beta version.
 - Initial webcomponent
 - Documentation
 
-[Unreleased]: https://github.com/UST-MICO/grapheditor/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/UST-MICO/grapheditor/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/UST-MICO/grapheditor/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/UST-MICO/grapheditor/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/UST-MICO/grapheditor/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/UST-MICO/grapheditor/compare/v0.5.4...v0.6.0
