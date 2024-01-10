@@ -19,25 +19,18 @@ import os
 from pathlib import Path
 from shutil import copyfile
 from typing import Any, List, Tuple
-from recommonmark.transform import AutoStructify
 
 TS_DOC_COMMAND = ["npm", "run", "doc", "--"]
 
 ON_RTD = os.environ.get('READTHEDOCS') == 'True'
 SKIP_TYPEDOC = ON_RTD or os.environ.get('SKIP_TYPEDOC') == 'True'
 
-
-# -- Recommonmark Monkey patch -----------------------------------------------
-
-# https://github.com/rtfd/recommonmark/issues/93#issuecomment-433371240
-from functools import wraps
-
 # -- sphinx-js Monkey patch --------------------------------------------------
 
 import os
 from pathlib import Path
 import sphinx_js
-from sphinx_js.typedoc import Analyzer, index_by_id, SuffixTree, make_path_segments
+from sphinx_js.typedoc import Analyzer, make_path_segments, relpath
 from sphinx_js.analyzer_utils import Command
 from sphinx_js import ir
 import subprocess
@@ -60,15 +53,36 @@ TYPE_LINK_REPLACERS = {
     'Accessor': ':js:meth:`~{}`',
 }
 
+
+GROUP_TO_KIND_STRING = {
+    'Constructors': 'Constructor',
+    'Accessors': 'Accessor',
+    'References': 'Reference',  # TODO check
+    'Variables': 'Variable',  # TODO check
+    'Modules': 'Module',
+    'External Modules': 'External module',  # TODO check
+    'Properties': 'Property',
+    'Enumerations': 'Enumeration',  # TODO check
+    'Classes': 'Class',
+    'Enumeration Members': 'Enumeration member',  # TODO check
+    'Methods': 'Method',
+    'Functions': 'Function',
+    'Interfaces': 'Interface',
+    'Call Signatures': 'Call signature',  # TODO check
+    'Constructor Signatures': 'Constructor signature'  # TODO check
+}
+
+
 class CustomAnalyzer(Analyzer):
 
-    def __init__(self, base_dir, json, **kwargs) -> None:
+    def __init__(self, base_dir: str, json, **kwargs) -> None:
         """
         :arg json: The loaded JSON output from typedoc
         :arg base_dir: The absolute path of the dir relative to which to
             construct file-path segments of object paths
         """
         self._index_by_name_and_kind = {}
+        base_dir = base_dir.removesuffix("/docs") + "/src"
         super().__init__(base_dir=base_dir, json=json, **kwargs)
         del self._index_by_name_and_kind
 
@@ -130,12 +144,21 @@ class CustomAnalyzer(Analyzer):
             # typedoc emits a valid JSON file even if it finds no TS files in the dir:
             return load(typedoc)
 
+    def get_object(self, path_suffix, as_type=None):
+        return super().get_object(path_suffix, as_type)
+
     def _convert_all_nodes(self, root):
         # the only place wher building _index_by_name_and_kind makes sense
         for type_ in self._index.values():
-            if "name" in type_ and "kindString" in type_:
-                self._index_by_name_and_kind[(type_["name"], type_["kindString"])] = type_
-        return super()._convert_all_nodes(root)
+            if "name" in type_ and "kind" in type_:
+                self._index_by_name_and_kind[(type_["name"], type_["kind"])] = type_
+
+        if root and "kindString" not in root:
+            root["kindString"] = "Module"
+
+        done = super()._convert_all_nodes(root)
+        # print([n for n in done])
+        return done
 
     def _get_js_role_for_type(self, type_name: str, default_replacer=None):
         for kind, replacer in TYPE_LINK_REPLACERS.items():
@@ -151,6 +174,8 @@ class CustomAnalyzer(Analyzer):
         :arg type: A TypeDoc-emitted type node
 
         """
+        if type is None:
+            return "NONE"
         type_of_type = type.get('type')
 
         if type_of_type == 'reflection':
@@ -208,6 +233,11 @@ class CustomAnalyzer(Analyzer):
 
     def _convert_node(self, node) -> Tuple[ir.TopLevel, List[dict]]:
         # override convert to fix errors with build
+        for group in node.get("groups", []):
+            group_kind_string = GROUP_TO_KIND_STRING.get(group.get("title", ""))
+            if group_kind_string:
+                for node_id in group.get("children", []):
+                    self._index.get(node_id, {})["kindString"] = group_kind_string
         kind_string = node.get('kindString')
         if kind_string in ('Function', 'Constructor', 'Method'):
             # grab source from parent node if possible (should always be possible?)
@@ -230,6 +260,20 @@ class CustomAnalyzer(Analyzer):
                     file_name = source.get('fileName')
                     if file_name in DEFAULT_EXPORT_NAME_FIXES:
                         node['name'] = DEFAULT_EXPORT_NAME_FIXES[file_name]
+        if kind_string == 'Variable':
+            print(node["id"])
+            print(node.get("name"), "kind:", kind_string, "type:", node.get("type", {}).get("type"))
+        elif kind_string == 'Accessor':
+            get_signature = node.get('getSignature')
+            if get_signature and not isinstance(get_signature, list):
+                node["getSignature"] = [get_signature]
+            set_signature = node.get('setSignature')
+            if set_signature and not isinstance(set_signature, list):
+                node["setSignature"] = [set_signature]
+        elif kind_string in ['Function', 'Constructor', 'Method']:
+            for sig in node.get('signatures', []):
+                sig['kindString'] = 'Call signature'
+
         return super()._convert_node(node)
 
     def _related_types(self, node, kind):
@@ -246,13 +290,44 @@ class CustomAnalyzer(Analyzer):
             # else it's some other thing we should go implement
         return types
 
+    def _containing_deppath(self, node):
+        try:
+            return super()._containing_deppath(node)
+        except ValueError:
+            sources = node.get("sources", [])
+            if sources:
+                source = sources[0]
+                return f"./{source.get('fileName')}"
+            raise
+
+    def _get_comment_parts(self, node):
+        for part in node.get("comment", {}).get("summary", []):
+            kind = part.get("kind")
+            if kind == "text":
+                yield part["text"]
+            elif kind == "code":
+                yield f"`{part['text']}`"
+            elif kind == "inline-tag":
+                target = self._index.get(part["target"])
+                template = TYPE_LINK_REPLACERS.get(target.get("kindString")) if target else None
+                if template:
+                    yield template.format(target.get("name", part['text']) if target else part['text'])
+                else:
+                    yield f"``{part['text']}``"
+            else:
+                print("UNKNONW TEXT COMPONENT", kind)
+
     def _top_level_properties(self, node):
         result = super()._top_level_properties(node)
         if isinstance(result, dict):
             # replace single ` with double `` to get correct rendering of inline code
-            description = result.get("description", "").replace('`', '``')
+            description = result.get("description", "")
             if description:
+                description = description.replace('`', '``')
                 result["description"] = LINK_REGEX.sub(lambda m: self._get_js_role_for_type(m[1], r"{\@link ``\1``}"), description)
+
+        if isinstance(result, dict) and node.get("comment", {}).get("summary"):
+            result["description"] = " ".join(self._get_comment_parts(node))
         return result
 
 sphinx_js.TsAnalyzer = CustomAnalyzer
@@ -272,7 +347,7 @@ JsRenderer._fields = new_fields
 
 # -- Load information from config --------------------------------------------
 
-from tomlkit import loads as toml_load
+from tomli import loads as toml_load
 
 current_path = Path(".").absolute()
 
@@ -334,7 +409,7 @@ extensions = [
     'sphinx.ext.todo',
     'sphinx.ext.imgmath',
     'sphinx.ext.graphviz',
-    'recommonmark',
+    "myst_parser",
     'sphinx_js',
 ]
 
@@ -347,6 +422,19 @@ source_suffix = {
     '.md': 'markdown',
 }
 
+# myst markdown parsing
+myst_heading_anchors = 2
+myst_enable_extensions = [
+    "colon_fence",
+    "deflist",
+    "dollarmath",
+    "html_admonition",
+    "html_image",
+    "replacements",
+    "smartquotes",
+    "tasklist",
+]
+
 # The master toctree document.
 master_doc = 'index'
 
@@ -357,7 +445,7 @@ changelog = Path('../CHANGELOG.md')
 #
 # This is also used if you do content translation via gettext catalogs.
 # Usually you set "language" from the command line for these cases.
-language = None
+language = "en"
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -478,14 +566,7 @@ autosectionlabel_prefix_document = True
 
 # app setup hook
 def setup(app):
-    app.add_config_value('recommonmark_config', {
-        'auto_toc_tree': True,
-        'enable_eval_rst': True,
-        'enable_math': True,
-        'enable_inline_math': True,
-    }, True)
     app.add_config_value('on_rtd', ON_RTD, 'env')
-    app.add_transform(AutoStructify)
 
 # -- Options for jsdoc -------------------------------------------------------
 js_language = 'typescript'

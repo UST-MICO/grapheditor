@@ -4,6 +4,7 @@ node_modules
 .vscode
 .mypy_cache
 docs
+typedoc
 test
 example/test-automated.html
 default.nix
