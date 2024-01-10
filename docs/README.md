@@ -43,6 +43,9 @@ npm install -g typedoc
 
 ```bash
 pip install -r requirements.txt
+
+# using poetry
+poetry install
 ```
 
 Make sure you have the `dot` command from `graphviz`, `typedoc` and a basic `LaTeX` environment in your path!
@@ -52,11 +55,31 @@ Make sure you have the `dot` command from `graphviz`, `typedoc` and a basic `LaT
 
 ```bash
 make html
+
+# using poetry
+poetry run sphinx-build . _build/html
+SKIP_TYPEDOC=True poetry run sphinx-build . _build/html
+
+# force full rebuild
+poetry run sphinx-build -a _build/html
 ```
+
 
 open `_build/html/index.html` in your browser
 
 If the typescript documentation has changed please build the documentation locally and commit the new `typedoc.json`!
+
+**Search for reference targets**
+
+```bash
+poetry run python -m sphinx.ext.intersphinx _build/html/objects.inv | grep search
+```
+
+**Update dependencies:**
+
+```bash
+poetry export --without-hashes --output=requirements.txt
+```
 
 
 ## Enabled Extensions:
@@ -66,4 +89,5 @@ If the typescript documentation has changed please build the documentation local
  *  sphinx.ext.todo
  *  sphinx.ext.imgmath
  *  sphinx.ext.graphviz
+ *  myst (a markdown parser for sphinx)
  *  [sphinx_js](https://github.com/erikrose/sphinx-js)

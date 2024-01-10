@@ -8,3 +8,4 @@ lib-esm
 Pipfile.lock
 .mypy_cache
 docs/changelog.md
+typedoc
