@@ -391,6 +391,26 @@ export class EdgeRenderer {
     }
 
     /**
+     * Get the current stroke width of a path.
+     *
+     * @param singlePathSelection the selection containing the path to measure the stroke width of
+     * @returns the parsed strokeWidth or 1 if parsing failed
+     */
+    protected parseStrokeWidth(singlePathSelection: Selection<SVGPathElement, unknown, any, unknown>): number {
+        const styleWidth: string = singlePathSelection.style('stroke-width') ?? '1px';
+        if (styleWidth.includes('calc')) {
+            // impossible to calculate actual stroke width
+            return 1;
+        }
+        const strokeWidth = parseFloat(styleWidth.replace(/px/, ''));
+        if (isNaN(strokeWidth)) {
+            // stroke width could not be parsed
+            return 1;
+        }
+        return strokeWidth;
+    }
+
+    /**
      * Calculate a normal vector pointing in the direction of the path at the positonOnLine.
      *
      * @param path the path object
@@ -573,7 +593,7 @@ export class EdgeRenderer {
         const self = this;
         edgeSelection.each(function (edge) {
             const singleEdgeSelection = select(this).datum(edge);
-            const strokeWidth: number = parseFloat(singleEdgeSelection.style('stroke-width').replace(/px/, ''));
+            const strokeWidth: number = self.parseStrokeWidth(singleEdgeSelection);
             // eslint-disable-next-line complexity
             singleEdgeSelection.attr('d', (d) => {
                 let sourceCoordinates: Point = d.source != null ? self.objectCache.getNode(d.source) : null;
@@ -699,7 +719,7 @@ export class EdgeRenderer {
         const self = this;
         const path = edgeGroupSelection.select<SVGPathElement>('path.edge');
         const length = path.node().getTotalLength();
-        const strokeWidth: number = parseFloat(path.style('stroke-width').replace(/px/, ''));
+        const strokeWidth: number = this.parseStrokeWidth(path);
         const textSelection = edgeGroupSelection.selectAll<SVGGElement, TextComponent>('g.text-component')
             .data<TextComponent>(d.texts != null ? d.texts : []);
 
@@ -865,7 +885,7 @@ export class EdgeRenderer {
             const marker = select(this);
             const path = parent.select<SVGPathElement>('path.edge');
             const length = path.node().getTotalLength();
-            const strokeWidth: number = parseFloat(path.style('stroke-width').replace(/px/, ''));
+            const strokeWidth: number = self.parseStrokeWidth(path);
             const positionOnLine = normalizePositionOnLine(d.positionOnLine);
             const absolutePositionOnLine = self.calculateAbsolutePositionOnLine(length, positionOnLine, d.absolutePositionOnLine);
 
@@ -888,7 +908,7 @@ export class EdgeRenderer {
         // calculate position size and rotation
         const path = edgeGroupSelection.select<SVGPathElement>('path.edge');
         const length = path.node().getTotalLength();
-        const strokeWidth: number = parseFloat(path.style('stroke-width').replace(/px/, ''));
+        const strokeWidth: number = this.parseStrokeWidth(path);
 
         if (d.markerStart != null) {
             this.updateEndMarkerPosition(path, length, 0, d.markerStart, d.sourceHandle, 'marker-start', strokeWidth, edgeGroupSelection);
