@@ -68,21 +68,27 @@ export class ExtrasRenderer {
         if (oldTemplateID != null && oldTemplateID === templateId && dynamic === oldDynamic) {
             return; // already using right template
         }
-        removeAllChildNodes(element);
+        removeAllChildNodes(element as any);
         if (dynamic) {
             // dynamic template
             if (templateType === 'node') {
-                this.updateDynamicNodeContentTemplate(templateId, element as Selection<SVGGElement, Node, any, unknown>);
+                this.updateDynamicNodeContentTemplate(templateId, element as unknown as Selection<SVGGElement, Node, any, unknown>);
             } else if (templateType === 'marker') {
-                this.updateDynamicMarkerContentTemplate(templateId, element as Selection<SVGGElement, Marker|LinkHandle, any, unknown>, parent);
+                if (parent == null) {
+                    throw Error('Cannot update marker content without parent as context.');
+                }
+                this.updateDynamicMarkerContentTemplate(templateId, element as unknown as Selection<SVGGElement, Marker|LinkHandle, any, unknown>, parent);
             } else if (templateType === 'textcomponent') {
-                this.updateDynamicTextComponentContentTemplate(templateId, element as Selection<SVGGElement, TextComponent, any, unknown>, parent);
+                if (parent == null) {
+                    throw Error('Cannot textcomponent content without parent as context.');
+                }
+                this.updateDynamicTextComponentContentTemplate(templateId, element as unknown as Selection<SVGGElement, TextComponent, any, unknown>, parent);
             } else {
                 console.warn(`Tried to use unsupported template type: ${templateType}`);
             }
         } else {
             // static templates
-            const g = element as Selection<SVGGElement, Node | Marker | LinkHandle, any, unknown>;
+            const g = element as unknown as Selection<SVGGElement, Node | Marker | LinkHandle, any, unknown>;
             this.updateStaticContentTemplate(g, templateId, templateType);
         }
         // set template id used by the element to new id
@@ -168,16 +174,21 @@ export class ExtrasRenderer {
      */
     protected updateStaticContentTemplate<T extends Node | Marker | LinkHandle>(element: Selection<SVGGElement, T, any, unknown>, templateId: string, templateType: string) {
         const graph = this.derefGraph();
-        let newTemplate: Selection<SVGGElement, unknown, any, unknown>;
+        let newTemplate: Selection<SVGGElement, unknown, any, unknown>|null;
         if (templateType === 'node') {
             newTemplate = graph.staticTemplateRegistry.getNodeTemplate(templateId);
         } else if (templateType === 'marker') {
             newTemplate = graph.staticTemplateRegistry.getMarkerTemplate(templateId);
         } else {
             console.warn(`Tried to use unsupported template type: ${templateType}`);
+            return;
+        }
+        if (newTemplate == null) {
+            console.error(`Could not find template content for ${templateId}.`);
+            return;
         }
         // copy template content into element
-        copyTemplateSelectionIntoNode(element, newTemplate);
+        copyTemplateSelectionIntoNode(element as any, newTemplate as any);
     }
 
     /**
@@ -185,7 +196,7 @@ export class ExtrasRenderer {
      *
      * @param groupSelection d3 selection of nodes or edges to update with bound data
      */
-    public updateDynamicProperties = (groupSelection: Selection<SVGGElement, Node | Edge, any, unknown>) => {
+    public updateDynamicProperties = (groupSelection: Selection<SVGGElement, Node, any, unknown>|Selection<SVGGElement, Edge, any, unknown>) => {
         const self = this;
         groupSelection.each(function (d) {
             const singleGoupSelection = select(this);
@@ -193,19 +204,19 @@ export class ExtrasRenderer {
             singleGoupSelection.selectAll<Element, any>('[data-content]:not(text)').datum(function () {
                 const attribute = this.getAttribute('data-content');
                 return recursiveAttributeGet(d, attribute)?.toString();
-            }).text(text => text);
+            }).text(text => `${text}`);
             // update attributes
             self.updatableAttributes.forEach(attr => {
                 singleGoupSelection.selectAll<Element, any>(`[data-${attr}]`).datum(function () {
                     const attribute = this.getAttribute(`data-${attr}`);
                     return recursiveAttributeGet(d, attribute)?.toString();
-                }).attr(attr, value => value);
+                }).attr(attr, value => value as any);
             });
             // update href
             singleGoupSelection.selectAll<Element, any>('[data-href]').datum(function () {
                 const attribute = this.getAttribute('data-href');
                 return recursiveAttributeGet(d, attribute)?.toString();
-            }).attr('xlink:href', value => value);
+            }).attr('xlink:href', value => value as any);
         });
     };
 }

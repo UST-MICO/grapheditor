@@ -17,7 +17,7 @@
 
 import { D3DragEvent, drag } from 'd3-drag';
 import { select, Selection } from 'd3-selection';
-import { NodeDragBehaviour, EventSource, Point, DraggedEdge } from '..';
+import { NodeDragBehaviour, EventSource, Point, DraggedEdge, Marker } from '..';
 import { DynamicMarkerTemplate, DynamicNodeTemplate } from '../dynamic-templates/dynamic-template';
 import GraphEditor from '../grapheditor';
 import { LinkHandle } from '../link-handle';
@@ -92,45 +92,52 @@ export class NodeRenderer {
             .on('mouseout', (event, d) => { graph.onNodeLeave.bind(graph)(event, d); })
             .on('click', (event, d) => { graph.onNodeClick.bind(graph)(event, d); });
 
-        nodeSelection.call(
-            drag<SVGGElement, Node, NodeDragBehaviour<unknown>>()
-                .subject((e, n) => {
-                    if (graph.nodeDragInteraction === 'none') {
-                        return; // no node dragging allowed!
-                    }
-                    const event = e as unknown as D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown>>;
-                    const node = n as unknown as Node;
-                    if (graph.nodeDragInteraction === 'link') {
-                        return this.getNodeLinkDragBehaviour(event, node);
-                    }
 
-                    return this.getNodeMoveDragBehaviour(event, node);
-                })
+
+        nodeSelection.call(
+            drag<SVGGElement, Node, NodeDragBehaviour<unknown, Node>>()
+                .subject(
+                    ((e: unknown, node: Node) => {
+                        if (graph.nodeDragInteraction === 'none') {
+                            return; // no node dragging allowed!
+                        }
+                        if (graph.nodeDragInteraction === 'link') {
+                            return this.getNodeLinkDragBehaviour(e as D3DragEvent<SVGGElement, unknown, NodeDragBehaviour<unknown, unknown>>, node);
+                        }
+
+                        return this.getNodeMoveDragBehaviour(e as D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown, Node>>, node);
+                    }) as any // function is allowed to return null
+                )
                 .container(function (e) {
                     // use edges group as container in linking mode
+                    let container;
                     if (graph.nodeDragInteraction === 'link') {
                         // eslint-disable-next-line newline-per-chained-call
-                        return graph.getSVG().select('g.zoom-group').select<SVGGElement>('g.edges').node();
+                        container = graph.getSVG()?.select('g.zoom-group')?.select<SVGGElement>('g.edges')?.node();
                     } else {
-                        return this.parentElement;
+                        container = this.parentElement;
                     }
+                    if (container == null) {
+                        throw Error('Could not determine containing element for node drag.');
+                    }
+                    return container;
                 })
                 .on('start', (e) => {
-                    const event = e as unknown as D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown>>;
+                    const event = e as unknown as D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown, Node>>;
                     const onStart = event.subject.onStart;
                     if (onStart != null) {
                         onStart(event, event.subject.subject, graph);
                     }
                 })
                 .on('drag', (e) => {
-                    const event = e as unknown as D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown>>;
+                    const event = e as unknown as D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown, Node>>;
                     const onDrag = event.subject.onDrag;
                     if (onDrag != null) {
                         onDrag(event, event.subject.subject, graph);
                     }
                 })
                 .on('end', (e) => {
-                    const event = e as unknown as D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown>>;
+                    const event = e as unknown as D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown, Node>>;
                     const onEnd = event.subject.onEnd;
                     if (onEnd != null) {
                         onEnd(event, event.subject.subject, graph);
@@ -195,9 +202,9 @@ export class NodeRenderer {
                     enter => enter.append('g').classed('link-handle', true)
                 )
                 .each(function (d: LinkHandle) {
-                    const linkHandleG = select(this).datum(d);
+                    const linkHandleG = select(this).datum<LinkHandle|Marker>(d);
                     const templateId = graph.staticTemplateRegistry.getMarkerTemplateId(d.template);
-                    extrasRenderer.updateContentTemplate<LinkHandle>(linkHandleG, templateId, 'marker', d.isDynamicTemplate, node);
+                    extrasRenderer.updateContentTemplate<LinkHandle|Marker>(linkHandleG, templateId, 'marker', d.isDynamicTemplate, node);
                     if (d.isDynamicTemplate) {
                         const dynTemplate = graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicMarkerTemplate>(templateId);
                         if (dynTemplate != null) {
@@ -221,32 +228,34 @@ export class NodeRenderer {
 
             // allow edge drag from link handles
             handleSelection.call(
-                drag<SVGGElement, LinkHandle, NodeDragBehaviour<{ edge: DraggedEdge; capturingGroup?: string }>>()
-                    .subject((e) => {
-                        if (graph.edgeDragInteraction === 'none') {
-                            return; // edge dragging is disabled
-                        }
-                        const event = e as unknown as D3DragEvent<SVGGElement, LinkHandle, NodeDragBehaviour<{ edge: DraggedEdge; capturingGroup?: string }>>;
-                        return self.getNodeLinkDragBehaviour(event, node);
-                    })
+                drag<SVGGElement, LinkHandle, NodeDragBehaviour<{ edge: DraggedEdge; capturingGroup?: string }, LinkHandle>>()
+                    .subject(
+                        ((e: unknown) => {
+                            if (graph.edgeDragInteraction === 'none') {
+                                return; // edge dragging is disabled
+                            }
+                            const event = e as D3DragEvent<SVGGElement, unknown, NodeDragBehaviour<unknown, unknown>>;
+                            return self.getNodeLinkDragBehaviour(event, node);
+                        }) as any  // function is allowed to return null
+                    )
                     // eslint-disable-next-line newline-per-chained-call
-                    .container(() => graph.getSVG().select('g.zoom-group').select<SVGGElement>('g.edges').node())
+                    .container(() => graph.getSVG()?.select('g.zoom-group')?.select<SVGGElement>('g.edges')?.node() as SVGGElement)
                     .on('start', (e) => {
-                        const event = e as unknown as D3DragEvent<SVGGElement, LinkHandle, NodeDragBehaviour<{ edge: DraggedEdge; capturingGroup?: string }>>;
+                        const event = e as unknown as D3DragEvent<SVGGElement, LinkHandle, NodeDragBehaviour<{ edge: DraggedEdge; capturingGroup?: string }, LinkHandle>>;
                         const onStart = event.subject.onStart;
                         if (onStart != null) {
                             onStart(event, event.subject.subject, graph);
                         }
                     })
                     .on('drag', (e) => {
-                        const event = e as unknown as D3DragEvent<SVGGElement, LinkHandle, NodeDragBehaviour<{ edge: DraggedEdge; capturingGroup?: string }>>;
+                        const event = e as unknown as D3DragEvent<SVGGElement, LinkHandle, NodeDragBehaviour<{ edge: DraggedEdge; capturingGroup?: string }, LinkHandle>>;
                         const onDrag = event.subject.onDrag;
                         if (onDrag != null) {
                             onDrag(event, event.subject.subject, graph);
                         }
                     })
                     .on('end', (e) => {
-                        const event = e as unknown as D3DragEvent<SVGGElement, LinkHandle, NodeDragBehaviour<{ edge: DraggedEdge; capturingGroup?: string }>>;
+                        const event = e as unknown as D3DragEvent<SVGGElement, LinkHandle, NodeDragBehaviour<{ edge: DraggedEdge; capturingGroup?: string }, LinkHandle>>;
                         const onEnd = event.subject.onEnd;
                         if (onEnd != null) {
                             onEnd(event, event.subject.subject, graph);
@@ -339,7 +348,7 @@ export class NodeRenderer {
                 return this.getAttribute('data-content');
             });
             textSelection.each(function (attr) {
-                let newText = recursiveAttributeGet(d, attr);
+                let newText: any = recursiveAttributeGet(d, attr);
                 if (newText == null) {
                     newText = '';
                 }
@@ -449,7 +458,7 @@ export class NodeRenderer {
      * @param node the node that is about to be dragged
      * @returns the 'move' drag behaviour
      */
-    protected getNodeMoveDragBehaviour = (event: D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown>>, node: Node) => {
+    protected getNodeMoveDragBehaviour = (event: D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown, Node>>, node: Node) => {
         const graph = this.derefGraph();
         const nodeMoveInfo = this.getNodeMovementInformation(node as unknown as Node, event.x, event.y);
         if (nodeMoveInfo == null) {
@@ -458,14 +467,14 @@ export class NodeRenderer {
         const startTreeParent = graph.groupingManager.getTreeParentOf(nodeMoveInfo.node.id);
         if (startTreeParent != null) {
             const behaviour = graph.groupingManager.getGroupBehaviourOf(startTreeParent);
-            if (behaviour.onNodeMoveStart != null) {
+            if (behaviour?.onNodeMoveStart != null) {
                 const needRender = Boolean(
                     behaviour.onNodeMoveStart(startTreeParent, nodeMoveInfo.node.id.toString(), graph.getNode(startTreeParent), nodeMoveInfo.node, graph)
                 );
                 nodeMoveInfo.needsFullRender = needRender || nodeMoveInfo.needsFullRender;
             }
         }
-        const dragBehaviour: NodeDragBehaviour<NodeMovementInformation> = {
+        const dragBehaviour: NodeDragBehaviour<NodeMovementInformation, Node> = {
             subject: nodeMoveInfo,
             onStart: (innerEvent, subject, g) => this.onNodeDrag('start', subject, EventSource.USER_INTERACTION),
             onDrag: (innerEvent, movementInfo, g) => {
@@ -502,7 +511,7 @@ export class NodeRenderer {
                 const endTreeParent = g.groupingManager.getTreeParentOf(node.id);
                 if (endTreeParent != null) {
                     const behaviour = g.groupingManager.getGroupBehaviourOf(endTreeParent);
-                    if (behaviour.onNodeMoveEnd != null) {
+                    if (behaviour?.onNodeMoveEnd != null) {
                         behaviour.onNodeMoveEnd(endTreeParent, node.id.toString(), g.getNode(endTreeParent), node, g);
                     }
                 }
@@ -529,10 +538,10 @@ export class NodeRenderer {
      * @param node the node that is about to be dragged
      * @returns the 'move' drag behaviour
      */
-    protected getNodeLinkDragBehaviour = (event: D3DragEvent<SVGGElement, unknown, NodeDragBehaviour<unknown>>, node: Node) => {
+    protected getNodeLinkDragBehaviour = (event: D3DragEvent<SVGGElement, unknown, NodeDragBehaviour<unknown, unknown>>, node: Node) => {
         const graph = this.derefGraph();
-        const behaviour: NodeDragBehaviour<{ edge: DraggedEdge; capturingGroup?: string }> = {
-            subject: null,
+        const behaviour: NodeDragBehaviour<{ edge: DraggedEdge; capturingGroup?: string }, LinkHandle> = {
+            subject: null as any, // temporarily set null
             onDrag: (innerEvent, subject, g) => {
                 g.edgeRenderer.updateDraggedEdge(innerEvent as any, subject.edge, subject.capturingGroup);
                 g.edgeRenderer.updateDraggedEdgeGroups();
@@ -546,11 +555,19 @@ export class NodeRenderer {
         if (groupCapturingEdge != null && groupCapturingEdge !== node.id.toString()) {
             const groupNode = graph.getNode(groupCapturingEdge);
             if (groupNode != null) {
-                behaviour.subject = { edge: graph.edgeRenderer.createDraggedEdge(event as any, groupNode), capturingGroup: groupCapturingEdge };
+                const newEdge = graph.edgeRenderer.createDraggedEdge(event as any, groupNode);
+                if (newEdge == null) {
+                    return; // could not build edge for drag subject
+                }
+                behaviour.subject = { edge: newEdge, capturingGroup: groupCapturingEdge };
             }
         }
         if (behaviour.subject == null) {
-            behaviour.subject = { edge: graph.edgeRenderer.createDraggedEdge(event as any, node), capturingGroup: node.id.toString() };
+            const newEdge = graph.edgeRenderer.createDraggedEdge(event as any, node);
+            if (newEdge == null) {
+                return; // could not build edge for drag subject
+            }
+            behaviour.subject = { edge: newEdge, capturingGroup: node.id.toString() };
         }
 
         return behaviour;
@@ -584,7 +601,7 @@ export class NodeRenderer {
         const currentTreeParent = graph.groupingManager.getTreeParentOf(node.id);
         if (currentTreeParent != null) {
             const groupBehaviour = graph.groupingManager.getGroupBehaviourOf(currentTreeParent);
-            if (groupBehaviour.beforeNodeMove != null) {
+            if (groupBehaviour?.beforeNodeMove != null) {
                 const groupNode = graph.getNode(currentTreeParent);
                 needsFullRender = Boolean(groupBehaviour.beforeNodeMove(currentTreeParent, node.id.toString(), groupNode, node, { x: x, y: y }, graph));
             }
@@ -629,15 +646,15 @@ export class NodeRenderer {
      * @param node the node to get the position for
      * @returns the absolute node position (or null)
      */
-    protected getGroupDictatedPositionOfNode(node: Node): Point {
+    protected getGroupDictatedPositionOfNode(node: Node): Point|null {
         const graph = this.derefGraph();
-        let groupRelativePosition: string | Point;
-        let relativeToGroup: string;
+        let groupRelativePosition: string | Point | null = null;
+        let relativeToGroup: string | null = null;
         const gm = graph.groupingManager;
         const treeParent = gm.getTreeParentOf(node.id);
         if (treeParent != null) {
             relativeToGroup = treeParent;
-            groupRelativePosition = gm.getGroupBehaviourOf(relativeToGroup)?.childNodePositions?.get(node.id.toString());
+            groupRelativePosition = gm.getGroupBehaviourOf(relativeToGroup)?.childNodePositions?.get(node.id.toString()) ?? null;
         } else {
             gm.getParentsOf(node.id)?.forEach(parentId => {
                 if (relativeToGroup == null) {
@@ -776,7 +793,7 @@ export class NodeRenderer {
      * @param movementInfo the node movement information
      * @param eventSource the event source
      */
-    public onNodeDrag(eventType: 'start' | 'end', movementInfo: NodeMovementInformation, eventSource) {
+    public onNodeDrag(eventType: 'start' | 'end', movementInfo: NodeMovementInformation, eventSource: unknown) {
         const ev = new CustomEvent(`nodedrag${eventType}`, {
             bubbles: true,
             composed: true,

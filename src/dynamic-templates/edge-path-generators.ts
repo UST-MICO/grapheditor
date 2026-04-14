@@ -33,7 +33,7 @@ export interface EdgePathGenerator {
      * @param startNormal the normal of the link handle of the start point; may be `null` or `{dx: 0, dy: 0}`
      * @param endNormal the normal of the link handle of the end point; may be `null` or `{dx: 0, dy: 0}`
      */
-    generateEdgePath(start: Point, end: Point, startNormal?: RotationVector, endNormal?: RotationVector): string;
+    generateEdgePath(start: Point, end: Point, startNormal?: RotationVector|null, endNormal?: RotationVector|null): string|null;
 }
 
 /**
@@ -60,7 +60,7 @@ export class SmoothedEdgePathGenerator implements EdgePathGenerator {
         this.offsetPointOffset = offsetPointOffset;
     }
 
-    generateEdgePath(start: Point, end: Point, startNormal?: RotationVector, endNormal?: RotationVector): string {
+    generateEdgePath(start: Point, end: Point, startNormal?: RotationVector, endNormal?: RotationVector): string|null {
         const points = [start];
         if (this.useOffsetPoints) {
             if (startNormal != null) {
@@ -90,7 +90,7 @@ export class SteppedEdgePathGenerator implements EdgePathGenerator {
         .y((d) => d.y)
         .curve(curveLinear);
 
-    generateEdgePath(start: Point, end: Point, startNormal?: RotationVector, endNormal?: RotationVector): string {
+    generateEdgePath(start: Point, end: Point, startNormal?: RotationVector, endNormal?: RotationVector): string|null {
         const dx = Math.abs(start.x - end.x);
         const dy = Math.abs(start.y - end.y);
         const points = [start];

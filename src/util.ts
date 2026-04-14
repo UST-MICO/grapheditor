@@ -48,16 +48,12 @@ export function squaredPointDistance(pointA: Point, pointB: Point): number {
  *
  * @param rectangles the rectangles to calculate the bounding rectangle for
  */
-export function calculateBoundingRect(...rectangles: Rect[]): Rect {
-    if (rectangles.length === 0) {
-        return;
-    }
-    const rect = rectangles.pop();
+export function calculateBoundingRect(first: Rect, ...rectangles: Rect[]): Rect {
     const result = {
-        x: rect.x,
-        y: rect.y,
-        width: rect.width,
-        height: rect.height,
+        x: first.x,
+        y: first.y,
+        width: first.width,
+        height: first.height,
     };
     rectangles.forEach(r => {
         if (r.x < result.x) {
@@ -94,11 +90,11 @@ export function removeAllChildNodes(nodeSelection: Selection<SVGElement, any, an
     if (range == null) {
         // fallback when document api is not available
         const node = nodeSelection.node();
-        while (node.lastChild) {
+        while (node?.lastChild) {
             node.lastChild.remove();
         }
     }
-    range.selectNodeContents(nodeSelection.node());
+    range.selectNodeContents(nodeSelection.node() as SVGElement);
     range.deleteContents();
 }
 
@@ -120,13 +116,13 @@ export function copyTemplateSelectionIntoNode(nodeSelection: Selection<SVGElemen
     const range = document?.createRange();
     if (range == null) {
         // fallback when document api is not available
-        const node = nodeSelection.node();
-        templateSelection.node().childNodes.forEach((templateChildNode) => {
+        const node = nodeSelection.node() as SVGElement;
+        templateSelection.node()?.childNodes?.forEach((templateChildNode) => {
             node.appendChild(templateChildNode.cloneNode(true));
         });
     }
-    range.selectNodeContents(templateSelection.node());
-    nodeSelection.node().appendChild(range.cloneContents());
+    range.selectNodeContents(templateSelection.node() as SVGElement);
+    (nodeSelection.node() as SVGElement).appendChild(range.cloneContents());
 }
 
 
@@ -141,26 +137,26 @@ export function copyTemplateSelectionIntoNode(nodeSelection: Selection<SVGElemen
  * @param obj the object to get the attribute from
  * @param attr the attribute or attribute path to get
  */
-export function recursiveAttributeGet(obj: unknown, attr: string): unknown {
+export function recursiveAttributeGet(obj: unknown, attr?: string|null): unknown {
     let result = null;
     try {
         if (attr != null) {
             if (attr.includes('.')) {
                 // recursive decend along path
                 const path = attr.split('.');
-                let temp = obj;
+                let temp: unknown = obj;
                 path.forEach(segment => {
                     if (segment === '()') {
                         temp = (temp as () => unknown)();
                     } else if (temp?.hasOwnProperty(segment)) {
-                        temp = temp[segment];
+                        temp = (temp as any)[segment];
                     } else {
                         temp = null;
                     }
                 });
                 result = temp;
             } else {
-                result = obj[attr];
+                result = (obj as any)[attr];
             }
         }
     } catch (error) { // TODO add debug output

@@ -136,9 +136,9 @@ export class EdgeRenderer {
                             .attr('fill', 'none');
                     })
             )
-            .call(this.updateEdgeGroupClasses.bind(this))
-            .call(this.updateEdgeGroups.bind(this))
-            .call(this.updateEdgePositions.bind(this));
+            .call(this.updateEdgeGroupClasses.bind(this) as any)
+            .call(this.updateEdgeGroups.bind(this) as any)
+            .call(this.updateEdgePositions.bind(this) as any);
     }
 
     /**
@@ -161,7 +161,7 @@ export class EdgeRenderer {
                         return graph.setEdgeClass(
                             className,
                             d,
-                            this.objectCache.getNode(d.source),
+                            this.objectCache.getNode(d.source) as Node,
                             (d.target != null) ? this.objectCache.getNode(d.target) : null
                         );
                     }
@@ -218,7 +218,7 @@ export class EdgeRenderer {
         // update edge drag handles
         setDefaultEdgeDragHandles(d);
         const edgeDragHandles = edgeGroupSelection.selectAll<SVGGElement, EdgeDragHandle>('g.link-handle')
-            .data(d.dragHandles)
+            .data(d.dragHandles ?? [])
             .join(
                 enter => enter.append('g')
                     .classed('link-handle', true)
@@ -231,39 +231,46 @@ export class EdgeRenderer {
 
         edgeDragHandles.call(
             drag<SVGGElement, EdgeDragHandle, { edge: DraggedEdge; capturingGroup?: string; isReversedEdge: boolean }>()
-                .subject((e, h) => {
-                    if (graph.edgeDragInteraction === 'none') {
-                        return; // edge dragging is disabled
-                    }
-                    const event = e as unknown as Event;
-                    const handle = h as unknown as EdgeDragHandle;
-                    const edge = d;
-                    let sourceNode: Node;
-                    if ((handle).isReverseHandle ?? false) {
-                        // a reverse handle flips the edge direction
-                        sourceNode = graph.getNode(edge.target);
-                    } else {
-                        sourceNode = graph.getNode(edge.source);
-                    }
-                    const groupCapturingEdge = graph.groupingManager.getGroupCapturingOutgoingEdge(sourceNode);
-                    if (groupCapturingEdge != null && groupCapturingEdge !== sourceNode.id.toString()) {
-                        const groupNode = graph.getNode(groupCapturingEdge);
-                        if (groupNode != null) {
-                            const newEdge = this.createDraggedEdgeFromExistingEdge(event, edge);
-                            newEdge.source = groupCapturingEdge;
-                            return {
-                                edge: newEdge,
-                                capturingGroup: groupCapturingEdge,
-                                isReversedEdge: handle.isReverseHandle ?? false,
-                            };
+                .subject(
+                    // eslint-disable-next-line complexity
+                    ((event: Event, handle: EdgeDragHandle) => {
+                        if (graph.edgeDragInteraction === 'none') {
+                            return; // edge dragging is disabled
                         }
-                    }
-                    return {
-                        edge: this.createDraggedEdgeFromExistingEdge(event, edge, handle.isReverseHandle ?? false),
-                        capturingGroup: sourceNode.id.toString(),
-                        isReversedEdge: handle.isReverseHandle ?? false,
-                    };
-                })
+                        const edge = d;
+                        let sourceNode: Node|null;
+                        if ((handle).isReverseHandle ?? false) {
+                            // a reverse handle flips the edge direction
+                            sourceNode = graph.getNode(edge.target);
+                        } else {
+                            sourceNode = graph.getNode(edge.source);
+                        }
+                        if (sourceNode == null) {
+                            return; // could not find source node
+                        }
+                        const groupCapturingEdge = graph.groupingManager.getGroupCapturingOutgoingEdge(sourceNode);
+                        if (groupCapturingEdge != null && groupCapturingEdge !== sourceNode.id.toString()) {
+                            const groupNode = graph.getNode(groupCapturingEdge);
+                            if (groupNode != null) {
+                                const newEdge = this.createDraggedEdgeFromExistingEdge(event, edge);
+                                if (newEdge == null) {
+                                    return; // failed to create the dragged edge from an existing edge
+                                }
+                                newEdge.source = groupCapturingEdge;
+                                return {
+                                    edge: newEdge,
+                                    capturingGroup: groupCapturingEdge,
+                                    isReversedEdge: handle.isReverseHandle ?? false,
+                                };
+                            }
+                        }
+                        return {
+                            edge: this.createDraggedEdgeFromExistingEdge(event, edge, handle.isReverseHandle ?? false),
+                            capturingGroup: sourceNode.id.toString(),
+                            isReversedEdge: handle.isReverseHandle ?? false,
+                        };
+                    }) as any  // this function is allowed to return undefined
+                )
                 .container(() => graph.getEdgeSelection().node() as any)
                 .on('start', () => graph.completeRender(false, EventSource.USER_INTERACTION))
                 .on('drag', (event) => {
@@ -302,21 +309,18 @@ export class EdgeRenderer {
                         console.error(`An error occured updating the text component in edge ${edgeId(edge)} before text wrapping`, textComponent, error);
                     }
                 })
-                .attr('data-click', (t) => t.clickEventKey);
+                .attr('data-click', (t) => t.clickEventKey ?? null);
 
             textSelection.select('text')
                 .classed('text', true)
                 .attr('width', (t) => t.width)
-                .attr('height', (t) => t.height)
+                .attr('height', (t) => t.height ?? null)
                 .each(function (text) {
-                    let newText = '';
+                    let newText: string = '';
                     if (text.value != null) {
                         newText = text.value;
                     } else {
-                        newText = recursiveAttributeGet(d, text.attributePath)?.toString();
-                    }
-                    if (newText == null) {
-                        newText = '';
+                        newText = recursiveAttributeGet(d, text.attributePath)?.toString() ?? '';
                     }
                     // make sure it is a string
                     newText = newText.toString();
@@ -333,27 +337,34 @@ export class EdgeRenderer {
                 }
             });
             const path = edgeGroupSelection.select<SVGPathElement>('path.edge');
-            textSelection.call(drag()
-                .subject((event, text) => {
-                    if (!((text as unknown as TextComponent).draggable ?? true)) {
-                        return; // text component is not draggable
-                    }
-                    return text;
-                })
+            textSelection.call(drag<SVGGElement, TextComponent>()
+                .subject(
+                    ((event: Event, text: TextComponent) => {
+                        if (!((text as unknown as TextComponent).draggable ?? true)) {
+                            return; // text component is not draggable
+                        }
+                        return text;
+                    }) as any // function is allowed to return undefined
+                )
                 .on('start', (event, text) => {
                     self.onEdgeTextDrag('start', text as unknown as TextComponent, edge, EventSource.USER_INTERACTION);
                 })
-                .on('drag', ((event, text: TextComponent) => {
-                    const length = path.node().getTotalLength();
+                .on('drag', ((event: DragEvent, text: TextComponent) => {
+                    const pathNode = path.node();
+                    if (pathNode == null) {
+                        console.error('Cannot update textcomponent, svg path element is missing.');
+                        return;
+                    }
+                    const length = pathNode.getTotalLength();
                     const positionOnLine = normalizePositionOnLine(text.positionOnLine);
                     const absolutePositionOnLine = calculateAbsolutePositionOnLine(length, positionOnLine, text.absolutePositionOnLine);
-                    const referencePoint = path.node().getPointAtLength(absolutePositionOnLine);
+                    const referencePoint = pathNode.getPointAtLength(absolutePositionOnLine);
                     text.offsetX = event.x - referencePoint.x;
                     text.offsetY = event.y - referencePoint.y;
                     self.onEdgeTextPositionChange(text, edge);
                     self.updateEdgeTextPositions(edgeGroupSelection, edge);
                 }) as any) // FIXME: remove type hack when types are up to date
-                .on('end', ((event, text: TextComponent) => {
+                .on('end', ((event: unknown, text: TextComponent) => {
                     self.onEdgeTextDrag('end', text, edge, EventSource.USER_INTERACTION);
                 }) as any) // FIXME: remove type hack when types are up to date
             );
@@ -396,7 +407,9 @@ export class EdgeRenderer {
      * @param singlePathSelection the selection containing the path to measure the stroke width of
      * @returns the parsed strokeWidth or 1 if parsing failed
      */
-    protected parseStrokeWidth(singlePathSelection: Selection<SVGPathElement, unknown, any, unknown>): number {
+    protected parseStrokeWidth(
+        singlePathSelection: Selection<SVGPathElement, unknown, any, unknown> | Selection<SVGPathElement, Edge, any, unknown> | Selection<SVGPathElement, DraggedEdge, any, unknown>
+    ): number {
         const styleWidth: string = singlePathSelection.style('stroke-width') ?? '1px';
         if (styleWidth.includes('calc')) {
             // impossible to calculate actual stroke width
@@ -476,14 +489,14 @@ export class EdgeRenderer {
             self.updateEdgeTextPositions(select(this), d);
         });
         edgeGroupSelection.each(function (d) {
-            select(this).selectAll('g.marker:not(.marker-special)').data(d.markers != null ? d.markers : [])
+            select(this).selectAll<SVGGElement, unknown>('g.marker:not(.marker-special)').data(d.markers != null ? d.markers : [])
                 .call(self.updateMarkerPositions.bind(self));
         }).each(function (d) {
             self.updateEndMarkerPositions(select(this), d);
         }).each(function (d) {
             // update link handle position
             setDefaultEdgeDragHandles(d);
-            select(this).selectAll('g.link-handle').data(d.dragHandles)
+            select(this).selectAll<SVGGElement, unknown>('g.link-handle').data(d.dragHandles ?? [])
                 .call(self.updateMarkerPositions.bind(self));
         });
     }
@@ -496,18 +509,24 @@ export class EdgeRenderer {
      */
     protected updateEdgeLinkHandles(edgeSelection: Selection<SVGPathElement, Edge | DraggedEdge, any, unknown>) {
         const graph = this.derefGraph();
+        // eslint-disable-next-line complexity
         edgeSelection.each(edge => {
 
             const sourceNodeSelection = graph.getSingleNodeSelection(edge.source);
             const targetNodeSelection = (edge.target != null) ? graph.getSingleNodeSelection(edge.target) : null;
-            let initialSourceHandles, initialTargetHandles;
+            let initialSourceHandles: LinkHandle[] = [];
+            let initialTargetHandles: LinkHandle[] = [];
             try {
-                initialSourceHandles = getNodeLinkHandles(sourceNodeSelection, graph.staticTemplateRegistry, graph.dynamicTemplateRegistry, graph);
+                if (sourceNodeSelection != null) {
+                    initialSourceHandles = getNodeLinkHandles(sourceNodeSelection, graph.staticTemplateRegistry, graph.dynamicTemplateRegistry, graph);
+                }
             } catch (error) {
                 console.error(`An error occured while calculating the link handles for node ${edge.source}!`, error);
             }
             try {
-                initialTargetHandles = getNodeLinkHandles(targetNodeSelection, graph.staticTemplateRegistry, graph.dynamicTemplateRegistry, graph);
+                if (targetNodeSelection != null) {
+                    initialTargetHandles = getNodeLinkHandles(targetNodeSelection, graph.staticTemplateRegistry, graph.dynamicTemplateRegistry, graph);
+                }
             } catch (error) {
                 console.error(`An error occured while calculating the link handles for node ${edge.target}!`, error);
             }
@@ -517,6 +536,7 @@ export class EdgeRenderer {
                 sourceNode = sourceNodeSelection.datum();
             } else {
                 console.warn('Attempting to render edge without a valid source!');
+                return;
             }
             if (targetNodeSelection != null && !targetNodeSelection.empty()) {
                 targetNode = targetNodeSelection.datum();
@@ -524,6 +544,7 @@ export class EdgeRenderer {
                 targetNode = edge.currentTarget as Point;
             } else {
                 console.warn('Attempting to render edge without a valid target!');
+                return;
             }
 
             const newHandles = applyUserLinkHandleCalculationCallback(
@@ -532,7 +553,9 @@ export class EdgeRenderer {
                 sourceNode,
                 initialTargetHandles,
                 targetNode,
-                graph.calculateLinkHandlesForEdge
+                graph.calculateLinkHandlesForEdge ?? ((e, sourceHandles, s, targetHandles, t) => {
+                    return {sourceHandles, targetHandles};
+                })
             );
 
             const nearestHandles = calculateNearestHandles(newHandles.sourceHandles, sourceNode, newHandles.targetHandles, targetNode);
@@ -554,7 +577,7 @@ export class EdgeRenderer {
             return { dx: 0, dy: 0 };
         }
         const marker = markerSelection.datum();
-        let attachementPointInfo: LineAttachementInfo;
+        let attachementPointInfo: LineAttachementInfo|null = null;
         if (marker.isDynamicTemplate) {
             const dynTemplate = graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicMarkerTemplate>(marker.template);
             try {
@@ -596,15 +619,15 @@ export class EdgeRenderer {
             const strokeWidth: number = self.parseStrokeWidth(singleEdgeSelection);
             // eslint-disable-next-line complexity
             singleEdgeSelection.attr('d', (d) => {
-                let sourceCoordinates: Point = d.source != null ? self.objectCache.getNode(d.source) : null;
-                let targetCoordinates: Point = d.target != null ? self.objectCache.getNode(d.target) : null;
+                let sourceCoordinates: Point|null = d.source != null ? self.objectCache.getNode(d.source) : null;
+                let targetCoordinates: Point|null = d.target != null ? self.objectCache.getNode(d.target) : null;
 
                 if (sourceCoordinates == null) {
                     sourceCoordinates = { x: 0, y: 0 };
                 }
                 if (targetCoordinates == null) {
                     if (d.currentTarget != null) {
-                        targetCoordinates = d.currentTarget;
+                        targetCoordinates = {x: d.currentTarget.x, y: d.currentTarget.y};
                     } else {
                         targetCoordinates = { x: 0, y: 1 };
                     }
@@ -691,7 +714,7 @@ export class EdgeRenderer {
                     points.push(targetCoordinates);
                 }
                 const pathGenerator = graph.edgePathGeneratorRegistry.getEdgePathGenerator(d.pathType) ?? graph.defaultEdgePathGenerator;
-                let path: string;
+                let path: string|null;
                 try {
                     path = pathGenerator.generateEdgePath(points[0], points[points.length - 1], sourceHandleNormal, (d.target != null) ? targetHandleNormal : null);
                 } catch (error) {
@@ -714,11 +737,17 @@ export class EdgeRenderer {
      * @param edgeGroupSelection d3 selection of single edge group
      * @param d edge datum
      */
+    // eslint-disable-next-line complexity
     protected updateEdgeTextPositions(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, d: Edge) {
         const graph = this.derefGraph();
         const self = this;
         const path = edgeGroupSelection.select<SVGPathElement>('path.edge');
-        const length = path.node().getTotalLength();
+        const pathNode = path.node();
+        if (pathNode == null) {
+            console.error('Cannot update text positions for edges without an svg path node.');
+            return;
+        }
+        const length = pathNode.getTotalLength();
         const strokeWidth: number = this.parseStrokeWidth(path);
         const textSelection = edgeGroupSelection.selectAll<SVGGElement, TextComponent>('g.text-component')
             .data<TextComponent>(d.texts != null ? d.texts : []);
@@ -733,21 +762,21 @@ export class EdgeRenderer {
             const targetNodeBB = this.objectCache.getNodeBBox(d.target);
             // add node position to bounding box
             sourceBB = {
-                x: sourceNodeBB.x + sourceNode.x,
-                y: sourceNodeBB.y + sourceNode.y,
-                width: sourceNodeBB.width,
-                height: sourceNodeBB.height,
+                x: (sourceNodeBB?.x ?? 0) + (sourceNode?.x ?? 0),
+                y: (sourceNodeBB?.y ?? 0) + (sourceNode?.y ?? 0),
+                width: sourceNodeBB?.width ?? 10,
+                height: sourceNodeBB?.height ?? 10,
             };
             targetBB = {
-                x: targetNodeBB.x + targetNode.x,
-                y: targetNodeBB.y + targetNode.y,
-                width: targetNodeBB.width,
-                height: targetNodeBB.height,
+                x: (targetNodeBB?.x ?? 0) + (targetNode?.x ?? 0),
+                y: (targetNodeBB?.y ?? 0) + (targetNode?.y ?? 0),
+                width: targetNodeBB?.width ?? 10,
+                height: targetNodeBB?.height ?? 10,
             };
         } catch (error) {
             // use line endpoints as fallback
-            const sourceEndpoint = path.node().getPointAtLength(0);
-            const targetEndpoint = path.node().getPointAtLength(0);
+            const sourceEndpoint = pathNode.getPointAtLength(0);
+            const targetEndpoint = pathNode.getPointAtLength(0);
             sourceBB.x = sourceEndpoint.x;
             sourceBB.y = sourceEndpoint.y;
             targetBB.x = targetEndpoint.x;
@@ -758,11 +787,13 @@ export class EdgeRenderer {
         // eslint-disable-next-line complexity
         textSelection.each(function (t) {
             const text = select(this);
+            // eslint-disable-next-line consistent-this
+            const textNode = this;
             const positionOnLine = normalizePositionOnLine(t.positionOnLine);
             const absolutePositionOnLine = self.calculateAbsolutePositionOnLine(length, positionOnLine, t.absolutePositionOnLine);
-            const pathPoint = path.node().getPointAtLength(absolutePositionOnLine);
+            const pathPoint = pathNode.getPointAtLength(absolutePositionOnLine);
 
-            const edgeNormal = self.calculatePathNormalAtPosition(path.node(), absolutePositionOnLine, pathPoint, length);
+            const edgeNormal = self.calculatePathNormalAtPosition(pathNode, absolutePositionOnLine, pathPoint, length);
 
             // factor in offset coordinates of text component
             const referencePoint = {
@@ -794,12 +825,18 @@ export class EdgeRenderer {
                 angle -= 360;
             }
 
-            let bbox: Rect = text.node().getBBox();
+            let bbox: Rect = textNode.getBBox();
 
             if (initialTransform.includes('scale') || initialTransform.includes('rotate')) {
-                const svgNode = text.node();
-                const ctm = (svgNode.parentElement as unknown as SVGGElement).getScreenCTM().inverse().multiply(svgNode.getScreenCTM());
-                bbox = graph.transformBBox(bbox, ctm);
+                const svgNode = textNode;
+                const outerCTM = (svgNode.parentElement as unknown as SVGGElement).getScreenCTM();
+                const innerCTM = svgNode.getScreenCTM();
+                if (innerCTM != null && outerCTM != null) {
+                    const ctm = outerCTM.inverse().multiply(innerCTM);
+                    bbox = graph.transformBBox(bbox, ctm);
+                } else {
+                    console.error('Could not determine transformations for text node.');
+                }
             } else {
                 bbox = {
                     x: referencePoint.x + bbox.x,
@@ -884,13 +921,17 @@ export class EdgeRenderer {
             const parent = select(this.parentElement);
             const marker = select(this);
             const path = parent.select<SVGPathElement>('path.edge');
-            const length = path.node().getTotalLength();
+            const pathNode = path.node();
+            if (pathNode == null) {
+                return;
+            }
+            const length = pathNode.getTotalLength();
             const strokeWidth: number = self.parseStrokeWidth(path);
             const positionOnLine = normalizePositionOnLine(d.positionOnLine);
             const absolutePositionOnLine = self.calculateAbsolutePositionOnLine(length, positionOnLine, d.absolutePositionOnLine);
 
-            const point = path.node().getPointAtLength(absolutePositionOnLine);
-            const normal = self.calculatePathNormalAtPosition(path.node(), absolutePositionOnLine, point, length);
+            const point = pathNode.getPointAtLength(absolutePositionOnLine);
+            const normal = self.calculatePathNormalAtPosition(pathNode, absolutePositionOnLine, point, length);
             const transform = self.calculatePathObjectTransformation(point, d, strokeWidth, normal);
 
             marker.attr('transform', transform);
@@ -907,15 +948,18 @@ export class EdgeRenderer {
 
         // calculate position size and rotation
         const path = edgeGroupSelection.select<SVGPathElement>('path.edge');
-        const length = path.node().getTotalLength();
+        const length = path.node()?.getTotalLength();
+        if (length == null) {
+            return;
+        }
         const strokeWidth: number = this.parseStrokeWidth(path);
 
         if (d.markerStart != null) {
-            this.updateEndMarkerPosition(path, length, 0, d.markerStart, d.sourceHandle, 'marker-start', strokeWidth, edgeGroupSelection);
+            this.updateEndMarkerPosition(path, length, 0, d.markerStart, d.sourceHandle ?? null, 'marker-start', strokeWidth, edgeGroupSelection);
         }
 
         if (d.markerEnd != null) {
-            this.updateEndMarkerPosition(path, length, 1, d.markerEnd, d.targetHandle, 'marker-end', strokeWidth, edgeGroupSelection);
+            this.updateEndMarkerPosition(path, length, 1, d.markerEnd, d.targetHandle ?? null, 'marker-end', strokeWidth, edgeGroupSelection);
         }
     }
 
@@ -935,7 +979,7 @@ export class EdgeRenderer {
     protected updateEndMarkerPosition(
         path: Selection<SVGPathElement, Edge, any, unknown>,
         length: number, positionOnLine: number,
-        marker: Marker, handle: LinkHandle, markerClass: string,
+        marker: Marker, handle: LinkHandle|null, markerClass: string,
         strokeWidth: number,
         edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>
     ) {
@@ -944,18 +988,22 @@ export class EdgeRenderer {
             .datum(marker);
         // path end point
         const absolutePositionOnLine = this.calculateAbsolutePositionOnLine(length, positionOnLine);
-        const pathPointA = path.node().getPointAtLength(absolutePositionOnLine);
+        const pathNode = path.node();
+        if (pathNode == null) {
+            return;
+        }
+        const pathPointA = pathNode.getPointAtLength(absolutePositionOnLine);
         // calculate angle for marker
-        let markerStartingNormal: RotationVector;
-        if (handle?.normal?.dx !== 0 || handle?.normal?.dy !== 0) {
-            markerStartingNormal = handle?.normal;
+        let markerStartingNormal: RotationVector|null = null;
+        if (handle?.normal != null && (handle.normal.dx !== 0 || handle.normal.dy !== 0)) {
+            markerStartingNormal = handle.normal;
         }
         if (markerClass === 'marker-end' && markerStartingNormal != null) {
             markerStartingNormal = { dx: -markerStartingNormal.dx, dy: -markerStartingNormal.dy };
         }
         if (markerStartingNormal == null) {
             // no link handle for marker present, calculate starting angle from path
-            markerStartingNormal = this.calculatePathNormalAtPosition(path.node(), absolutePositionOnLine, pathPointA, length);
+            markerStartingNormal = this.calculatePathNormalAtPosition(pathNode, absolutePositionOnLine, pathPointA, length);
         }
         // calculate marker offset
         const attachementPointVector: RotationVector = this.calculateLineAttachementVector(markerStartingNormal, markerSelection, strokeWidth);
@@ -986,12 +1034,12 @@ export class EdgeRenderer {
     protected updateMarker(markerSelection: Selection<SVGGElement, Marker, any, unknown>, edge: Edge) {
         const graph = this.derefGraph();
         markerSelection
-            .attr('data-click', (d) => d.clickEventKey)
+            .attr('data-click', (d) => d.clickEventKey ?? null)
             .each(function (marker) {
                 const templateId = graph.staticTemplateRegistry.getMarkerTemplateId(marker.template);
                 graph.extrasRenderer.updateContentTemplate<Marker>(select(this), templateId, 'marker');
                 if (marker.isDynamicTemplate) {
-                    const g = select(this).datum(marker);
+                    const g = select(this).datum<Marker|LinkHandle>(marker);
                     const dynTemplate = graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicMarkerTemplate>(templateId);
                     if (dynTemplate != null) {
                         try {
@@ -1012,8 +1060,8 @@ export class EdgeRenderer {
      * @param d edge datum
      */
     protected updateEndMarkers(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, d: Edge) {
-        this.updateEndMarker(edgeGroupSelection, d.markerStart, 'marker-start', d);
-        this.updateEndMarker(edgeGroupSelection, d.markerEnd, 'marker-end', d);
+        this.updateEndMarker(edgeGroupSelection, d.markerStart ?? null, 'marker-start', d);
+        this.updateEndMarker(edgeGroupSelection, d.markerEnd ?? null, 'marker-end', d);
     }
 
     /**
@@ -1024,7 +1072,7 @@ export class EdgeRenderer {
      * @param markerClass the css class to select for
      * @param edge the edge datum this marker belongs to
      */
-    protected updateEndMarker(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, marker: Marker, markerClass: string, edge: Edge) {
+    protected updateEndMarker(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, marker: Marker|null, markerClass: string, edge: Edge) {
         if (marker == null) {
             // delete
             edgeGroupSelection.select('g.marker.marker-end').remove();
@@ -1052,7 +1100,7 @@ export class EdgeRenderer {
      *
      * @param sourceNode node that edge was dragged from
      */
-    public createDraggedEdge(event: Event, sourceNode: Node): DraggedEdge {
+    public createDraggedEdge(event: Event, sourceNode: Node): DraggedEdge|null {
         const graph = this.derefGraph();
         const validTargets = new Set<string>();
         graph.nodeList.forEach(node => validTargets.add(node.id.toString()));
@@ -1061,7 +1109,7 @@ export class EdgeRenderer {
         let draggedEdge: DraggedEdge = {
             id: sourceNode.id.toString() + Date.now().toString(),
             source: sourceNode.id,
-            target: null,
+            target: null as any, // this is allowed for dragged edges
             validTargets: validTargets,
             currentTarget: { x: (event as any).x, y: (event as any).y },
         };
@@ -1082,7 +1130,7 @@ export class EdgeRenderer {
      * @param reverseEdgeDirection reverse the direction of the returned edge
      */
     // eslint-disable-next-line complexity
-    protected createDraggedEdgeFromExistingEdge(event: Event, edge: Edge, reverseEdgeDirection: boolean = false): DraggedEdge {
+    protected createDraggedEdgeFromExistingEdge(event: Event, edge: Edge, reverseEdgeDirection: boolean = false): DraggedEdge|null {
         const graph = this.derefGraph();
         const validTargets = new Set<string>();
         graph.nodeList.forEach(node => validTargets.add(node.id.toString()));
@@ -1096,14 +1144,14 @@ export class EdgeRenderer {
             id: source.toString() + Date.now().toString(),
             createdFrom: edgeId(edge),
             source: reverseEdgeDirection ? edge.target : edge.source,
-            target: null,
+            target: null as any,  // allowed for dragged edges
             type: edge.type,
             pathType: edge.pathType,
             validTargets: validTargets,
             currentTarget: { x: (event as any).x, y: (event as any).y },
             markers: [],
             texts: [],
-            dragHandles: null,
+            dragHandles: undefined,
             isBidirectional: edge.isBidirectional,
         };
         for (const key in edge) {
@@ -1119,7 +1167,7 @@ export class EdgeRenderer {
         if (reverseEdgeDirection) {
             const flipDirections = (element: PathPositionRotationAndScale) => {
                 // flip positionOnLine
-                if (element.positionOnLine === 'start') {
+                if (element.positionOnLine == null || element.positionOnLine === 'start') {
                     element.positionOnLine = 'end';
                 } else if (element.positionOnLine === 'end') {
                     element.positionOnLine = 'start';
@@ -1135,9 +1183,9 @@ export class EdgeRenderer {
                     element.absolutePositionOnLine = -element.absolutePositionOnLine;
                 }
             };
-            draggedEdge.markers.forEach(flipDirections);
-            draggedEdge.texts.forEach(flipDirections);
-            draggedEdge.dragHandles.forEach(handle => {
+            (draggedEdge.markers ?? []).forEach(flipDirections);
+            (draggedEdge.texts ?? []).forEach(flipDirections);
+            (draggedEdge.dragHandles ?? []).forEach(handle => {
                 flipDirections(handle);
                 // flip isReverseHandle
                 handle.isReverseHandle = !handle.isReverseHandle;
@@ -1168,7 +1216,7 @@ export class EdgeRenderer {
     public updateDraggedEdge(event: Event, edge: DraggedEdge, capturingGroup?: string) {
         const graph = this.derefGraph();
         const oldTarget = edge.target;
-        edge.target = null;
+        edge.target = null as any;  // allowed for dragged edges
         edge.currentTarget.x = (event as any).x;
         edge.currentTarget.y = (event as any).y;
 
@@ -1200,7 +1248,7 @@ export class EdgeRenderer {
                 edge.target = targetNodeId;
             } else {
                 // remove target if no valid target found
-                edge.target = null;
+                edge.target = null as any;  // allowed for dragged edges
             }
 
             // handle group captures
@@ -1231,7 +1279,9 @@ export class EdgeRenderer {
             if (graph.onDraggedEdgeTargetChange != null) {
                 const source = this.objectCache.getNode(edge.source);
                 const target = edge.target != null ? this.objectCache.getNode(edge.target) : null;
-                graph.onDraggedEdgeTargetChange(edge, source, target);
+                if (source != null) { // should not happen normally
+                    graph.onDraggedEdgeTargetChange(edge, source, target ?? undefined);
+                }
             }
         }
     }
@@ -1267,8 +1317,13 @@ export class EdgeRenderer {
             let finalEdge: Edge = edge;
             delete finalEdge.id;
             if (graph.onDropDraggedEdge != null) {
-                finalEdge = graph.onDropDraggedEdge(edge, this.objectCache.getNode(edge.source),
-                    this.objectCache.getNode(edge.target));
+                const sourceNode = this.objectCache.getNode(edge.source);
+                const targetNode = this.objectCache.getNode(edge.target);
+                if (sourceNode == null) {
+                    console.error('Cannot drop a dragged edge without an existing source node.');
+                    return;
+                }
+                finalEdge = graph.onDropDraggedEdge(edge, sourceNode, targetNode);
             }
             if (edge.createdFrom != null && edge.target === existingTarget) {
                 // edge was dropped on the node that was the original target for the edge
@@ -1294,7 +1349,7 @@ export class EdgeRenderer {
      *
      * @param edgeDatum Corresponding datum of edge
      */
-    protected onEdgeClick(event: Event, edgeDatum) {
+    protected onEdgeClick(event: Event, edgeDatum: unknown) {
         const eventDetail: any = {};
         eventDetail.eventSource = EventSource.USER_INTERACTION;
         const path = event.composedPath();
@@ -1361,7 +1416,7 @@ export class EdgeRenderer {
      * @param edge The edge the text component belongs to.
      * @param eventSource the event source
      */
-    protected onEdgeTextDrag(eventType: 'start' | 'end', textComponent: TextComponent, edge: Edge, eventSource) {
+    protected onEdgeTextDrag(eventType: 'start' | 'end', textComponent: TextComponent, edge: Edge, eventSource: unknown) {
         const ev = new CustomEvent(`edgetextdrag${eventType}`, {
             bubbles: true,
             composed: true,

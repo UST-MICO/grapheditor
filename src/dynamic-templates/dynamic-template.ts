@@ -54,7 +54,7 @@ export interface DynamicTemplate<T extends Node|Marker|LinkHandle|TextComponent>
      * @param grapheditor the grapheditor managing this graph
      * @param context additional context for rendering (default: `null`)
      */
-    renderInitialTemplate(g: Selection<SVGGElement, T, any, unknown>, grapheditor: GraphEditor, context: DynamicTemplateContext<T>): void;
+    renderInitialTemplate(g: Selection<SVGGElement, T, any, unknown>, grapheditor: GraphEditor, context: DynamicTemplateContext<T>|null): void;
     /**
      * The update function updates the dynamic parts of the template.
      *
@@ -68,7 +68,7 @@ export interface DynamicTemplate<T extends Node|Marker|LinkHandle|TextComponent>
      * @param grapheditor the grapheditor managing this graph
      * @param context additional context for rendering (default: `null`)
      */
-    updateTemplate(g: Selection<SVGGElement, T, any, unknown>, grapheditor: GraphEditor, context: DynamicTemplateContext<T>): void;
+    updateTemplate(g: Selection<SVGGElement, T, any, unknown>, grapheditor: GraphEditor, context: DynamicTemplateContext<T>|null): void;
 }
 
 /**

@@ -51,12 +51,12 @@ export enum EventSource {
     USER_INTERACTION = 'USER_INTERACTION',
 }
 
-export interface NodeDragBehaviour<T> {
+export interface NodeDragBehaviour<T, D> {
     subject: T;
     container?: SVGElement;
-    onStart?: (event: D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown>>, subject: T, g: GraphEditor) => void;
-    onDrag?: (event: D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown>>, subject: T, g: GraphEditor) => void;
-    onEnd?: (event: D3DragEvent<SVGGElement, Node, NodeDragBehaviour<unknown>>, subject: T, g: GraphEditor) => void;
+    onStart?: (event: D3DragEvent<SVGGElement, D, NodeDragBehaviour<T, D>>, subject: T, g: GraphEditor) => void;
+    onDrag?: (event: D3DragEvent<SVGGElement, D, NodeDragBehaviour<T, D>>, subject: T, g: GraphEditor) => void;
+    onEnd?: (event: D3DragEvent<SVGGElement, D, NodeDragBehaviour<T, D>>, subject: T, g: GraphEditor) => void;
 }
 
 
@@ -64,17 +64,17 @@ export default class GraphEditor extends HTMLElement {
 
     private resizeObserver;
 
-    private svgTemplate: string;
-    private svgDocument;
+    private svgTemplate: string|null = null;
+    private svgDocument: Document|ShadowRoot|null = null;
 
-    private svg: Selection<SVGSVGElement, any, any, any>;
-    private graph: Selection<SVGGElement, any, any, any>;
-    private nodesGroup: Selection<SVGGElement, any, any, any>;
-    private edgesGroup: Selection<SVGGElement, any, any, any>;
+    private svg: Selection<SVGSVGElement, any, any, any>|null = null;
+    private graph: Selection<SVGGElement, any, any, any>|null = null;
+    private nodesGroup: Selection<SVGGElement, any, any, any>|null = null;
+    private edgesGroup: Selection<SVGGElement, any, any, any>|null = null;
 
     private root: ShadowRoot;
-    private zoom: ZoomBehavior<any, any>;
-    private currentZoom: ZoomTransform;
+    private zoom: ZoomBehavior<any, any>|null = null;
+    private currentZoom: ZoomTransform|null = null;
 
     private contentMaxHeight = 1;
     private contentMaxWidth = 1;
@@ -96,8 +96,8 @@ export default class GraphEditor extends HTMLElement {
     private _selectionMode: 'none' | 'single' | 'multiple' = 'multiple';
 
     private _selectedNodes: Set<string> = new Set<string>();
-    private _selectedLinkSource: string|number = null;
-    private _selectedLinkTarget: string|number = null;
+    private _selectedLinkSource: string|number|null = null;
+    private _selectedLinkTarget: string|number|null = null;
     /**
      * The static template registry.
      *
@@ -175,7 +175,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param eventSource The eventSource used for the render event dispatched later by `completeRender`.
      */
-    public onBeforeCompleteRender: (eventSource: EventSource) => void;
+    public onBeforeCompleteRender: ((eventSource: EventSource) => void)|null = null;
 
     /**
      * Callback before a Node is moved.
@@ -187,7 +187,7 @@ export default class GraphEditor extends HTMLElement {
      * @param nodeMovementInfo the movement information containing the node that is about to move
      * @returns the modified movement information
      */
-    public onBeforeNodeMove: (nodeMovementInfo: NodeMovementInformation) => NodeMovementInformation;
+    public onBeforeNodeMove: ((nodeMovementInfo: NodeMovementInformation) => NodeMovementInformation)|null = null;
 
     /**
      * Callback when a new dragged edge is created.
@@ -199,7 +199,7 @@ export default class GraphEditor extends HTMLElement {
      * @param edge the newly created dragged edge
      * @returns the modified dragged edge
      */
-    public onCreateDraggedEdge: (edge: DraggedEdge) => DraggedEdge;
+    public onCreateDraggedEdge: ((edge: DraggedEdge) => DraggedEdge)|null = null;
 
     /**
      * Callback dragged edge has a new target.
@@ -210,7 +210,7 @@ export default class GraphEditor extends HTMLElement {
      * @param sourceNode the source node of the edge
      * @param targetNode the target node of the edge (may be `null` if the edge currently has no target)
      */
-    public onDraggedEdgeTargetChange: (edge: DraggedEdge, sourceNode: Node, targetNode?: Node) => void;
+    public onDraggedEdgeTargetChange: ((edge: DraggedEdge, sourceNode: Node, targetNode?: Node) => void)|null = null;
 
     /**
      * Callback when a existing dragged edge is dropped.
@@ -224,7 +224,7 @@ export default class GraphEditor extends HTMLElement {
      * @param targetNode the target node of the edge (is never `null` when dropping the edge on a target)
      * @returns the updated edge object (must NOT be `null`)
      */
-    public onDropDraggedEdge: (edge: DraggedEdge, sourceNode: Node, targetNode: Node) => Edge;
+    public onDropDraggedEdge: ((edge: DraggedEdge, sourceNode: Node, targetNode: Node|null) => Edge)|null = null;
 
     /**
      * Callback to set/unset a given class for a node.
@@ -235,7 +235,7 @@ export default class GraphEditor extends HTMLElement {
      * @param node the node to set the class for
      * @returns `true` iff the class should be set for this node, false if not
      */
-    public setNodeClass: (className: string, node: Node) => boolean;
+    public setNodeClass: ((className: string, node: Node) => boolean)|null = null;
 
     /**
      * Callback to set/unset a given class for an edge.
@@ -248,7 +248,7 @@ export default class GraphEditor extends HTMLElement {
      * @param the target node of the edge (may be `null` for dragged edges without a target)
      * @returns `true` iff the class should be set for this edge, false if not
      */
-    public setEdgeClass: (className: string, edge: Edge | DraggedEdge, sourceNode: Node, targetNode?: Node) => boolean;
+    public setEdgeClass: ((className: string, edge: Edge | DraggedEdge, sourceNode: Node, targetNode?: Node|null) => boolean)|null = null;
 
     /**
      * Callback to calculate LinkHandle lists used for rendering edges.
@@ -267,13 +267,16 @@ export default class GraphEditor extends HTMLElement {
      * @returns an object containing the (altered) link handle lists
      */
     // eslint-disable-next-line max-len
-    public calculateLinkHandlesForEdge: (edge: Edge | DraggedEdge, sourceHandles: LinkHandle[], source: Node, targetHandles: LinkHandle[], target: Node | Point) => { sourceHandles: LinkHandle[]; targetHandles: LinkHandle[] };
+    public calculateLinkHandlesForEdge: ((edge: Edge | DraggedEdge, sourceHandles: LinkHandle[], source: Node, targetHandles: LinkHandle[], target: Node | Point) => { sourceHandles: LinkHandle[]; targetHandles: LinkHandle[] })|null = null;
 
 
     /**
      * The current zoom transform of the zoom group in the svg.
      */
     public get currentZoomTransform(): ZoomTransform {
+        if (this.currentZoom == null) {
+            return new ZoomTransform(1, 0, 0);
+        }
         return this.currentZoom;
     }
 
@@ -281,10 +284,14 @@ export default class GraphEditor extends HTMLElement {
      * The currently visible area in graph coordinates.
      */
     public get currentViewWindow(): Rect {
-        const minX = this.currentZoom.invertX(0);
-        const minY = this.currentZoom.invertY(0);
-        const maxX = this.currentZoom.invertX(this.contentMaxWidth);
-        const maxY = this.currentZoom.invertY(this.contentMaxHeight);
+        const currentZoom = this.currentZoom;
+        if (currentZoom == null) {
+            return {x: 0, y: 0, width: 100, height: 100};
+        }
+        const minX = currentZoom.invertX(0);
+        const minY = currentZoom.invertY(0);
+        const maxX = currentZoom.invertX(this.contentMaxWidth);
+        const maxY = currentZoom.invertY(this.contentMaxHeight);
         return {
             x: minX,
             y: minY,
@@ -318,7 +325,7 @@ export default class GraphEditor extends HTMLElement {
         newClasses.forEach(className => this.classesToRemove.delete(className));
 
         // update attribute
-        const isJson = this.getAttribute('classes').trim().startsWith('[');
+        const isJson = this.getAttribute('classes')?.trim()?.startsWith('[') ?? false;
         if (isJson) {
             this.setAttribute('classes', JSON.stringify(newClasses));
         } else {
@@ -563,8 +570,8 @@ export default class GraphEditor extends HTMLElement {
         });
 
         // update size if window was resized
-        if ((window as any).ResizeObserver != null) {
-            this.resizeObserver = new (window as any).ResizeObserver((entries) => {
+        if (window.ResizeObserver != null) {
+            this.resizeObserver = new window.ResizeObserver((_) => {
                 if (this.svg != null) { // only if svg is initialized
                     this.updateSize();
                 }
@@ -575,6 +582,10 @@ export default class GraphEditor extends HTMLElement {
     connectedCallback(): void {
         if (!this.isConnected) {
             return;
+        }
+
+        if (this.parentElement == null) {
+            throw Error('Element is not correctly connected to dom.');
         }
 
         // bind resize observer to parent node
@@ -798,7 +809,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param nodeId the id of the node
      */
-    public getNode(nodeId: number | string): Node {
+    public getNode(nodeId: number | string): Node|null {
         return this.objectCache.getNode(nodeId);
     }
 
@@ -817,7 +828,7 @@ export default class GraphEditor extends HTMLElement {
         if (index >= 0) {
             this.deselectNode(nodeId);
 
-            const newEdgeList = [];
+            const newEdgeList: Edge[] = [];
             this._edges.forEach(edge => {
                 // eslint-disable-next-line eqeqeq
                 if (edge.source == nodeId) { // number/string conversion is needed for this test
@@ -851,7 +862,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param node the node to get the drop zones of
      */
-    public getNodeDropZonesForNode(node: Node | number | string): Map<string, NodeDropZone> {
+    public getNodeDropZonesForNode(node: Node | number | string): Map<string, NodeDropZone>|null {
         const id: string | number = (node as Node).id != null ? (node as Node).id : (node as number | string);
         return this.objectCache.getAllDropZones(id);
     }
@@ -871,7 +882,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param node the node to get the bounding box of
      */
-    public getNodeBBox(node: Node | number | string): Rect {
+    public getNodeBBox(node: Node | number | string): Rect|null {
         const id: string | number = (node as Node).id != null ? (node as Node).id : (node as number | string);
         return this.objectCache.getNodeBBox(id);
     }
@@ -1011,7 +1022,7 @@ export default class GraphEditor extends HTMLElement {
      * @param edgeId the id of the edge (use the `edgeId` function to compute the id)
      */
     // eslint-disable-next-line no-shadow
-    public getEdge(edgeId: number | string): Edge {
+    public getEdge(edgeId: number | string): Edge|null {
         return this.objectCache.getEdge(edgeId);
     }
 
@@ -1148,16 +1159,23 @@ export default class GraphEditor extends HTMLElement {
         if (!this.isConnected || this.svgTemplate == null) {
             return;
         }
-        const svgTemplate = select<HTMLTemplateElement, unknown>(this.svgTemplate);
-        if (svgTemplate.empty()) {
+        const svgTemplateNode = select<HTMLTemplateElement, unknown>(this.svgTemplate).node();
+        if (svgTemplateNode == null) {
             return;
         }
-        const clone = document.importNode(svgTemplate.node().content, true);
+        const clone = document.importNode(svgTemplateNode.content, true);
         const slotSelection = select(this.root as any).select<HTMLDivElement>('slot[name="graph"]');
         slotSelection.selectAll('svg').remove();
-        slotSelection.node().append(clone);
-        const svgSelection = slotSelection.select<SVGSVGElement>('svg');
-        this.initialize(svgSelection.node());
+        const slotNode = slotSelection.node();
+        if (slotNode == null) {
+            throw Error('The svg template did not contain a slot for the graph svg.');
+        }
+        slotNode.append(clone);
+        const svgSelectionNode = slotSelection.select<SVGSVGElement>('svg').node();
+        if (svgSelectionNode == null) {
+            throw Error('Could not find an svg node to initilize the graph for!');
+        }
+        this.initialize(svgSelectionNode);
         this.svgDocument = this.shadowRoot;
     }
 
@@ -1166,14 +1184,15 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param slot the slot that changed
      */
+    // eslint-disable-next-line complexity
     private graphSlotChanged(slot: HTMLSlotElement) {
-        let svg;
+        let svg: SVGSVGElement|null = null;
         if (this.svg != null && !this.svg.empty()) {
             const oldSvg = this.svg.node();
-            svg = slot.assignedElements().find(el => el === oldSvg);
+            svg = slot.assignedElements().find(el => el === oldSvg) as SVGSVGElement;
         }
         if (svg == null) {
-            svg = slot.assignedElements().find(el => el.tagName === 'svg');
+            svg = slot.assignedElements().find(el => el.tagName === 'svg') as SVGSVGElement;
         }
         if (svg == null) {
             if (this.svg != null || this.svgTemplate != null) {
@@ -1266,7 +1285,7 @@ export default class GraphEditor extends HTMLElement {
                     }
                 }
                 graph.attr('transform', transform.toString());
-                const oldZoom = this.currentZoom;
+                const oldZoom = this.currentZoom ?? new ZoomTransform(1, 0, 0);
                 this.currentZoom = transform;
                 let eventSource = EventSource.USER_INTERACTION;
                 if (sourceIsUserGesture) {
@@ -1345,6 +1364,9 @@ export default class GraphEditor extends HTMLElement {
         }
 
         const svg = this.svg;
+        if (svg == null) {
+            return;
+        }
 
         const box: SVGRect = (svg.select('g.zoom-group').select('g.nodes').node() as any).getBBox();
         this.zoomToBox(box);
@@ -1375,7 +1397,9 @@ export default class GraphEditor extends HTMLElement {
         if (isNaN(xCorrection) || isNaN(yCorrection)) {
             newZoom = zoomIdentity;
         }
-        this.svg.call(this.zoom.transform, newZoom);
+        if (this.svg != null && this.zoom != null) {
+            this.svg.call(this.zoom.transform, newZoom);
+        }
     }
 
     /**
@@ -1389,8 +1413,10 @@ export default class GraphEditor extends HTMLElement {
             this.addDefaultTemplates(svg);
             this.staticTemplateRegistry.updateTemplateCache(svg);
         } else {
-            this.addDefaultTemplates(this.svg);
-            this.staticTemplateRegistry.updateTemplateCache(this.svg);
+            if (this.svg != null) {
+                this.addDefaultTemplates(this.svg);
+                this.staticTemplateRegistry.updateTemplateCache(this.svg);
+            }
         }
         if (this.dynamicTemplateRegistry.getDynamicTemplate('default-textcomponent') == null) {
             this.dynamicTemplateRegistry.addDynamicTemplate('default-textcomponent', new DefaultTextComponentTemplate());
@@ -1436,30 +1462,41 @@ export default class GraphEditor extends HTMLElement {
 
     private attachZoomAndBrush() {
         const svg = this.svg;
+        if (svg == null) {
+            throw Error('Cannot attach zoom and brush if svg element is not known!');
+        }
+        if (this.zoom == null) {
+            throw Error('Failed to attach zoom behaviour.');
+        }
 
         // attach zoom behaviour, current interaction modes are applied in event filter
         svg.call(this.zoom);
 
         // attach brush behaviour for background drag interaction
         const container = svg.select<SVGGElement>('g.zoom-group').node();
-        svg.call(drag<SVGGElement, {rect: Selection<SVGRectElement, unknown, SVGGElement, unknown>; start: Point}>()
+        if (container == null) {
+            throw Error('Could not find .zoom-group container.');
+        }
+        const dragBehaviour = drag<SVGGElement, {rect: Selection<SVGRectElement, unknown, SVGGElement, unknown>; start: Point}>()
             .container(() => container)
-            .subject(() => {
-                if (this._backgroundDragInteraction === 'none') {
-                    return; // no drag interaction
-                }
-                if (this._backgroundDragInteraction === 'move') {
-                    return; // handled by zoom behaviour
-                }
-                if (this._backgroundDragInteraction === 'select' && this._selectionMode === 'none') {
-                    return; // selection brush should only work if selections are allowed
-                }
-                const rect = select(container).append('rect').classed('brush', true);
-                return {
-                    rect: rect,
-                    start: {x: 0, y: 0},
-                };
-            })
+            .subject(
+                (() => {
+                    if (this._backgroundDragInteraction === 'none') {
+                        return; // no drag interaction
+                    }
+                    if (this._backgroundDragInteraction === 'move') {
+                        return; // handled by zoom behaviour
+                    }
+                    if (this._backgroundDragInteraction === 'select' && this._selectionMode === 'none') {
+                        return; // selection brush should only work if selections are allowed
+                    }
+                    const rect = select(container).append('rect').classed('brush', true);
+                    return {
+                        rect: rect,
+                        start: {x: 0, y: 0},
+                    };
+                }) as any  // disable type check as this function is allowed to return null/undefined
+            )
             .on('start', (event) => {
                 const start: Point = (event as any).subject.start;
                 start.x = (event as any).x;
@@ -1535,7 +1572,7 @@ export default class GraphEditor extends HTMLElement {
                             y: brushRect.y + (brushRect.height / 2),
                         };
                         let distance = Infinity;
-                        let selectedNode: string = null;
+                        let selectedNode: string|null = null;
                         selected.forEach(nodeId => {
                             const node = this.getNode(nodeId);
                             if (node == null) {
@@ -1559,8 +1596,8 @@ export default class GraphEditor extends HTMLElement {
                     this._selectedNodes = selected;
                     this.onSelectionChangeInternal(EventSource.USER_INTERACTION);
                 }
-            })
-        );
+            });
+        svg.call( dragBehaviour as any, []);
     }
 
     /**
@@ -1586,9 +1623,15 @@ export default class GraphEditor extends HTMLElement {
         this.updateSize();
 
         // update nodes ////////////////////////////////////////////////////////
+        if (this.nodesGroup == null) {
+            throw Error('Failed to render nodes, missing group element.');
+        }
         this.nodeRenderer.completeNodeGroupsRender(this.nodesGroup, this._nodes, forceUpdateTemplates);
 
         // update edges ////////////////////////////////////////////////////////
+        if (this.edgesGroup == null) {
+            throw Error('Failed to render edges, missing group element.');
+        }
         this.edgeRenderer.completeEdgeGroupsRender(this.edgesGroup, this._edges, forceUpdateTemplates);
 
 
@@ -1606,8 +1649,9 @@ export default class GraphEditor extends HTMLElement {
      * @param clientX the x coordinate in the client coordinate system
      * @param clientY the y coordinate in the client coordinate system
      */
+    // eslint-disable-next-line complexity
     public getNodesFromPoint(clientX: number, clientY: number): Node[] {
-        const possibleTargets = this.svgDocument.elementsFromPoint(clientX, clientY);
+        const possibleTargets = this.svgDocument?.elementsFromPoint(clientX, clientY) ?? [];
         if (possibleTargets.length === 0) {
             return [];
         }
@@ -1615,7 +1659,7 @@ export default class GraphEditor extends HTMLElement {
         const nodes: Node[] = [];
         for (let currentIndex = 0; currentIndex < possibleTargets.length; currentIndex++) {
             const element = possibleTargets[currentIndex];
-            if (element === this.svg.node()) {
+            if (element != null && element === this.svg?.node()) {
                 break;
             }
             let target = select(element);
@@ -1630,11 +1674,11 @@ export default class GraphEditor extends HTMLElement {
                     }
                     break;
                 }
-                const parent = target.node().parentElement;
-                if ((parent as unknown) === this.svg.node()) {
+                const parent = target.node()?.parentElement;
+                if (parent == null || (parent as unknown) === this.svg?.node()) {
                     break;
                 }
-                target = select(parent);
+                target = select(parent as Element);
             }
         }
         return nodes;
@@ -1661,18 +1705,22 @@ export default class GraphEditor extends HTMLElement {
     // eslint-disable-next-line complexity
     public moveNode(nodeId: string | number, x: number, y: number, updatePositions: boolean = false): boolean {
         const node = this.objectCache.getNode(nodeId);
+        if (node == null) {
+            return false; // node was not found, cancel movement
+        }
         const nodeMovementInfo = this.nodeRenderer.getNodeMovementInformation(node, node.x, node.y);
         if (nodeMovementInfo == null) {
-            return; // move was cancelled by callback
+            return false; // move was cancelled by callback
         }
         nodeMovementInfo.needsFullRender = nodeMovementInfo.needsFullRender ?? false;
         this.nodeRenderer.onNodeDrag('start', nodeMovementInfo, EventSource.API);
         const startTreeParent = this.groupingManager.getTreeParentOf(nodeMovementInfo.node.id);
         if (startTreeParent != null) {
+            const startGroupNode = this.objectCache.getNode(startTreeParent);
             const behaviour = this.groupingManager.getGroupBehaviourOf(startTreeParent);
-            if (behaviour.onNodeMoveStart != null) {
+            if (behaviour?.onNodeMoveStart != null && startGroupNode != null) {
                 const needRender = Boolean(
-                    behaviour.onNodeMoveStart(startTreeParent, nodeMovementInfo.node.id.toString(), this.objectCache.getNode(startTreeParent), nodeMovementInfo.node, this)
+                    behaviour.onNodeMoveStart(startTreeParent, nodeMovementInfo.node.id.toString(), startGroupNode, nodeMovementInfo.node, this)
                 );
                 nodeMovementInfo.needsFullRender = needRender || nodeMovementInfo.needsFullRender;
             }
@@ -1684,10 +1732,11 @@ export default class GraphEditor extends HTMLElement {
 
         const endTreeParent = this.groupingManager.getTreeParentOf(nodeMovementInfo.node.id);
         if (endTreeParent != null) {
+            const endGroupNode = this.objectCache.getNode(endTreeParent);
             const behaviour = this.groupingManager.getGroupBehaviourOf(endTreeParent);
-            if (behaviour.onNodeMoveEnd != null) {
+            if (behaviour?.onNodeMoveEnd != null && endGroupNode != null) {
                 const needRender = Boolean(
-                    behaviour.onNodeMoveEnd(endTreeParent, nodeMovementInfo.node.id.toString(), this.objectCache.getNode(endTreeParent), nodeMovementInfo.node, this)
+                    behaviour.onNodeMoveEnd(endTreeParent, nodeMovementInfo.node.id.toString(), endGroupNode, nodeMovementInfo.node, this)
                 );
                 nodeMovementInfo.needsFullRender = needRender || nodeMovementInfo.needsFullRender;
             }
@@ -1717,10 +1766,15 @@ export default class GraphEditor extends HTMLElement {
      * @returns the same point in screen/client coordinates
      */
     public getClientPointFromGraphCoordinates(graphPoint: Point): Point {
-        const p = this.svg.node().createSVGPoint();
+        const svgNode = this.svg?.node();
+        const transformation = this.nodesGroup?.node()?.getScreenCTM();
+        if (svgNode == null || transformation == null) {
+            throw Error('Could not calculate client point, graph not initialized correctly.');
+        }
+        const p = svgNode.createSVGPoint();
         p.x = graphPoint.x;
         p.y = graphPoint.y;
-        return p.matrixTransform(this.nodesGroup.node().getScreenCTM());
+        return p.matrixTransform(transformation);
     }
 
 
@@ -1733,10 +1787,15 @@ export default class GraphEditor extends HTMLElement {
      * @returns the same point in graph coordinates
      */
     public getGraphPointFromClientCoordinates(clientPoint: Point): Point {
-        const p = this.svg.node().createSVGPoint();
+        const svgNode = this.svg?.node();
+        const transformation = this.nodesGroup?.node()?.getScreenCTM();
+        if (svgNode == null || transformation == null) {
+            throw Error('Could not calculate graph point, graph not initialized correctly.');
+        }
+        const p = svgNode.createSVGPoint();
         p.x = clientPoint.x;
         p.y = clientPoint.y;
-        return p.matrixTransform(this.nodesGroup.node().getScreenCTM().inverse());
+        return p.matrixTransform(transformation.inverse());
     }
 
 
@@ -1749,17 +1808,21 @@ export default class GraphEditor extends HTMLElement {
     public updateTextElements(force: boolean = false): void { // TODO profile this
         const self = this;
 
-        this.nodesGroup
-            .selectAll<SVGGElement, Node>('g.node')
-            .data<Node>(this._nodes, (d: Node) => d.id.toString())
-            .call(this.nodeRenderer.updateNodeText.bind(this.nodeRenderer), force);
+        if (this.nodesGroup != null) {
+            this.nodesGroup
+                .selectAll<SVGGElement, Node>('g.node')
+                .data<Node>(this._nodes, (d: Node) => d.id.toString())
+                .call(this.nodeRenderer.updateNodeText.bind(this.nodeRenderer), force);
+        }
 
-        this.edgesGroup
-            .selectAll<SVGGElement, Edge>('g.edge-group:not(.dragged)')
-            .data<Edge>(this._edges, edgeId)
-            .each(function (d) {
-                self.edgeRenderer.updateEdgeText(select(this), d, force);
-            });
+        if (this.edgesGroup != null) {
+            this.edgesGroup
+                .selectAll<SVGGElement, Edge>('g.edge-group:not(.dragged)')
+                .data<Edge>(this._edges, edgeId)
+                .each(function (d) {
+                    self.edgeRenderer.updateEdgeText(select(this), d, force);
+                });
+        }
         this.onRender(EventSource.API, 'text');
     }
 
@@ -1767,14 +1830,14 @@ export default class GraphEditor extends HTMLElement {
     /**
      * Get the d3 selection of the current SVG used by this grapheditor.
      */
-    public getSVG(): Selection<SVGSVGElement, any, any, any> {
+    public getSVG(): Selection<SVGSVGElement, any, any, any>|null {
         return this.svg;
     }
 
     /**
      * Get the d3 selection of the SVG g element containing the graph.
      */
-    public getGraphGroup(): Selection<SVGGElement, any, any, any> {
+    public getGraphGroup(): Selection<SVGGElement, any, any, any>|null {
         return this.graph;
     }
 
@@ -1782,6 +1845,9 @@ export default class GraphEditor extends HTMLElement {
      * Get the d3 selection of the SVG g element containing all node groups.
      */
     public getNodesGroup(): Selection<SVGGElement, any, any, any> {
+        if (this.nodesGroup == null) {
+            throw Error('Could not get node group, graph is not initialized correctly.');
+        }
         return this.nodesGroup;
     }
 
@@ -1789,6 +1855,9 @@ export default class GraphEditor extends HTMLElement {
      * Get the d3 selection of the SVG g element containing all edge groups.
      */
     public getEdgesGroup(): Selection<SVGGElement, any, any, any> {
+        if (this.edgesGroup == null) {
+            throw Error('Could not get edge group, graph is not initialized correctly.');
+        }
         return this.edgesGroup;
     }
 
@@ -1796,6 +1865,9 @@ export default class GraphEditor extends HTMLElement {
      * Get the node selection with bound data.
      */
     public getNodeSelection(): Selection<SVGGElement, Node, any, unknown> {
+        if (this.nodesGroup == null) {
+            throw Error('Could not get node group, graph is not initialized correctly.');
+        }
         return this.nodesGroup
             .selectAll<SVGGElement, Node>('g.node')
             .data<Node>(this._nodes, (d: Node) => d.id.toString());
@@ -1805,6 +1877,9 @@ export default class GraphEditor extends HTMLElement {
      * Get the edge selection with bound data.
      */
     public getEdgeSelection(): Selection<SVGGElement, Edge, any, unknown> {
+        if (this.edgesGroup == null) {
+            throw Error('Could not get edge group, graph is not initialized correctly.');
+        }
         return this.edgesGroup
             .selectAll<SVGGElement, Edge>('g.edge-group:not(.dragged)')
             .data<Edge>(this._edges, edgeId);
@@ -1814,6 +1889,9 @@ export default class GraphEditor extends HTMLElement {
      * Get the dragged edge selection with bound data.
      */
     public getDraggedEdgeSelection(): Selection<SVGGElement, DraggedEdge, any, unknown> {
+        if (this.edgesGroup == null) {
+            throw Error('Could not get edge group, graph is not initialized correctly.');
+        }
         return this.edgesGroup
             .selectAll<SVGGElement, DraggedEdge>('g.edge-group.dragged')
             .data<DraggedEdge>(this.draggedEdges, edgeId);
@@ -1825,10 +1903,10 @@ export default class GraphEditor extends HTMLElement {
      * @param nodeId the id of the edge to select
      */
     // eslint-disable-next-line no-shadow
-    public getSingleEdgeSelection(edgeId: string): Selection<SVGGElement, Edge, any, unknown> {
+    public getSingleEdgeSelection(edgeId: string): Selection<SVGGElement, Edge, any, unknown>|null {
         const edge = this.objectCache.getEdge(edgeId);
         if (edge != null) {
-            return this.edgesGroup.select<SVGGElement>(`g.edge-group[data-id="${CSS.escape(edgeId)}"]`).datum(edge);
+            return this.edgesGroup?.select<SVGGElement>(`g.edge-group[data-id="${CSS.escape(edgeId)}"]`)?.datum(edge) ?? null;
         }
         return null;
     }
@@ -1838,10 +1916,10 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param nodeId the id of the node to select
      */
-    public getSingleNodeSelection(nodeId: string | number): Selection<SVGGElement, Node, any, unknown> {
+    public getSingleNodeSelection(nodeId: string | number): Selection<SVGGElement, Node, any, unknown>|null {
         const node = this.objectCache.getNode(nodeId);
         if (node != null) {
-            return this.nodesGroup.select<SVGGElement>(`g.node[data-id="${CSS.escape(nodeId.toString())}"]`).datum(node);
+            return this.nodesGroup?.select<SVGGElement>(`g.node[data-id="${CSS.escape(nodeId.toString())}"]`)?.datum(node) ?? null;
         }
         return null;
     }
@@ -1895,7 +1973,11 @@ export default class GraphEditor extends HTMLElement {
      * @param transformation the transformation matrix
      */
     public transformBBox(bbox: Rect, transformation: DOMMatrix): Rect {
-        const p = this.svg.node().createSVGPoint();
+        const svgNode = this.svg?.node();
+        if (svgNode == null) {
+            throw Error('Cannot transform bbox without svg node for context.');
+        }
+        const p = svgNode.createSVGPoint();
 
         p.x = bbox.x;
         p.y = bbox.y;
@@ -1927,20 +2009,24 @@ export default class GraphEditor extends HTMLElement {
      * @param eventSource the event source used for render events (default: `EventSource.API`)
      */
     public updateGraphPositions(eventSource: EventSource = EventSource.API): void {
-        this.nodesGroup
-            .selectAll<any, Node>('g.node')
-            .data<Node>(this._nodes, (d: Node) => d.id.toString())
-            .call(this.nodeRenderer.updateNodePositions);
+        if (this.nodesGroup != null) {
+            this.nodesGroup
+                .selectAll<any, Node>('g.node')
+                .data<Node>(this._nodes, (d: Node) => d.id.toString())
+                .call(this.nodeRenderer.updateNodePositions);
+        }
 
-        this.edgesGroup
-            .selectAll('g.edge-group:not(.dragged)')
-            .data(this._edges, edgeId)
-            .call(this.edgeRenderer.updateEdgePositions.bind(this.edgeRenderer));
+        if (this.edgesGroup != null) {
+            this.edgesGroup
+                .selectAll<SVGGElement, unknown>('g.edge-group:not(.dragged)')
+                .data<Edge>(this._edges, (datum) => edgeId(datum as Edge))
+                .call(this.edgeRenderer.updateEdgePositions.bind(this.edgeRenderer));
 
-        this.edgesGroup
-            .selectAll('g.edge-group.dragged')
-            .data(this.draggedEdges, edgeId)
-            .call(this.edgeRenderer.updateEdgePositions.bind(this.edgeRenderer));
+            this.edgesGroup
+                .selectAll<SVGGElement, unknown>('g.edge-group.dragged')
+                .data<Edge>(this.draggedEdges, (datum) => edgeId(datum as Edge))
+                .call(this.edgeRenderer.updateEdgePositions.bind(this.edgeRenderer));
+        }
 
         this.onRender(eventSource, 'positions');
     }
@@ -2181,10 +2267,10 @@ export default class GraphEditor extends HTMLElement {
             return;
         }
         this._selectedLinkTarget = nodeDatum.id;
-        let oldEdge: Edge = null;
+        let oldEdge: Edge|null = null;
         this.objectCache.getEdgesBySource(this._selectedLinkSource).forEach((e) => {
             // only need to check target as source is guaranteed
-            if (e.target.toString() === this._selectedLinkTarget.toString()) {
+            if (e.target.toString() === (this._selectedLinkTarget?.toString() ?? '')) {
                 // found an existing edge
                 oldEdge = e;
             }
@@ -2224,7 +2310,7 @@ export default class GraphEditor extends HTMLElement {
         if (nodeSelection == null) {
             nodeSelection = this.getNodeSelection();
         }
-        this.nodeRenderer.updateNodeHighligts(nodeSelection, this.hovered, this._selectedLinkSource, this._selectedLinkTarget);
+        this.nodeRenderer.updateNodeHighligts(nodeSelection, this.hovered, this._selectedLinkSource ?? undefined, this._selectedLinkTarget ?? undefined);
     }
 
     /**
@@ -2234,15 +2320,19 @@ export default class GraphEditor extends HTMLElement {
         if (edgeSelection == null) {
             edgeSelection = this.getEdgeSelection();
         }
-        this.edgeRenderer.updateEdgeHighligts(edgeSelection, this.hovered, this._selectedLinkSource, this._selectedLinkTarget);
+        this.edgeRenderer.updateEdgeHighligts(edgeSelection, this.hovered, this._selectedLinkSource ?? undefined, this._selectedLinkTarget ?? undefined);
     }
 
     /**
      * Create and dispatch a 'backgroundclick' event.
      */
     private onBackgroundClick(event: Event) {
+        const graphNode = this.graph?.node();
         if (this.currentZoom == null) {
-            this.currentZoom = zoomTransform(this.graph.node());
+            if (graphNode == null) {
+                return;  // should be impossible to reach this branch
+            }
+            this.currentZoom = zoomTransform(graphNode);
         }
         const ev = new CustomEvent('backgroundclick', {
             bubbles: true,
@@ -2347,7 +2437,7 @@ export default class GraphEditor extends HTMLElement {
      *
      * @param oldSVG the old svg if any
      */
-    private onInitializedSVG(oldSVG?: Selection<SVGSVGElement, any, any, any>) {
+    private onInitializedSVG(oldSVG?: Selection<SVGSVGElement, any, any, any>|null) {
         const detail: any = {
             eventSource: EventSource.INTERNAL,
             newSVG: this.svg,

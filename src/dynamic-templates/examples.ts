@@ -43,8 +43,8 @@ export class DynamicBoxTemplate implements DynamicNodeTemplate {
     }
 
     updateTemplate(g: Selection<SVGGElement, Node, any, unknown>, grapheditor: GraphEditor, context: DynamicTemplateContext<Node>): void {
-        const width = g.datum().width;
-        const height = g.datum().height;
+        const width = g.datum().width ?? 10;
+        const height = g.datum().height ?? 10;
         g.select('rect')
             .attr('x', -width / 2)
             .attr('y', -height / 2)
@@ -58,8 +58,8 @@ export class DynamicBoxTemplate implements DynamicNodeTemplate {
 
     getLinkHandles(g: Selection<SVGGElement, Node, any, unknown>, grapheditor: GraphEditor): LinkHandle[] {
         const node = g.datum();
-        const width = node.width;
-        const height = node.height;
+        const width = node.width ?? 10;
+        const height = node.height ?? 10;
         return handlesForRectangle(-width / 2, -height / 2, width, height, this.linkHandleOptions);
     }
 }

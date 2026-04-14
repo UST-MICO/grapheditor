@@ -49,7 +49,7 @@ export function getNodeLinkHandles(
         // TODO proper logging
         return [];
     }
-    return templateCache.getNodeTemplateLinkHandles(node.type);
+    return templateCache.getNodeTemplateLinkHandles(node.type ?? null);
 }
 
 /**

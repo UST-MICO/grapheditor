@@ -26,11 +26,11 @@ import { filterDropzonesByType, calculateSquaredDistanceFromNodeToDropZone } fro
  */
 export interface TreeInformation {
     /** The root (group id) of the tree. The tree root has itself as the tree root. */
-    treeRoot: string;
+    treeRoot: string|null;
     /** The parent group id of this group. The tree root has no parent. */
-    treeParent: string;
+    treeParent: string|null;
     /** The depth of the group in the tree. The tree root has depth 0. */
-    treeDepth: number;
+    treeDepth: number|null;
 }
 
 /**
@@ -50,14 +50,14 @@ export class NodeGroup implements TreeInformation {
     public groupDepth: number;
 
     /** The root of the tree this group belongs to. Null if the group is not part of a tree. */
-    public treeRoot: string;
+    public treeRoot: string|null = null;
     /** The parent that has the same tree root as this group that should be considered the parent for this group and this tree. */
-    public treeParent: string;
+    public treeParent: string|null = null;
     /** The depth of the group in the tree. Initialized as 0. `treeParent.treeDepth + 1` */
-    public treeDepth: number;
+    public treeDepth: number|null = null;
 
     /** The group behaviour that determines how this group acts. */
-    public groupBehaviour: GroupBehaviour;
+    public groupBehaviour: GroupBehaviour|null = null;
 
     constructor(nodeId: string) {
         this.groupId = nodeId;
@@ -78,7 +78,7 @@ export class NodeGroup implements TreeInformation {
  * @param graphEditor the instance of the grapheditor.
  * @returns true iff the action should be performed.
  */
-export type GroupBehaviourDecisionCallback = (group: string, childGroup: string, groupNode: Node, childNode: Node, graphEditor: GraphEditor) => boolean;
+export type GroupBehaviourDecisionCallback = (group: string, childGroup: string, groupNode: Node|null, childNode: Node|null, graphEditor: GraphEditor) => boolean;
 
 /**
  * A function that given a group, the corresponding node and an edge
@@ -90,7 +90,7 @@ export type GroupBehaviourDecisionCallback = (group: string, childGroup: string,
  * @param graphEditor the instance of the grapheditor.
  * @returns the id of an existing Node that should handle this edge (as its source or target)
  */
-export type GroupBehaviourEdgeDelegationCallback = (group: string, groupNode: Node, edge: Edge, graphEditor: GraphEditor) => string;
+export type GroupBehaviourEdgeDelegationCallback = (group: string, groupNode: Node|null, edge: Edge, graphEditor: GraphEditor) => string;
 
 
 /**
@@ -186,7 +186,7 @@ export interface GroupBehaviour {
      *      The actual position of the child node may not be the same as atPosition
      *      as it is only updated **after** the node was moved.
      */
-    afterNodeJoinedGroup?: (group: string, childGroup: string, groupNode: Node, childNode: Node, graphEditor: GraphEditor, atPosition?: Point) => void;
+    afterNodeJoinedGroup?: (group: string, childGroup: string, groupNode: Node|null, childNode: Node|null, graphEditor: GraphEditor, atPosition?: Point) => void;
     /**
      * Callback called after the childGroup has left the parent group.
      *
@@ -198,7 +198,7 @@ export interface GroupBehaviour {
      * @param childNode the node corresponding to the child group, may be null
      * @param graphEditor the instance of the grapheditor
      */
-    afterNodeLeftGroup?: (group: string, childGroup: string, groupNode: Node, childNode: Node, graphEditor: GraphEditor) => void;
+    afterNodeLeftGroup?: (group: string, childGroup: string, groupNode: Node|null, childNode: Node|null, graphEditor: GraphEditor) => void;
 
     /**
      * Callback called before a direct child in the same tree is moved.
@@ -212,7 +212,7 @@ export interface GroupBehaviour {
      * @param graphEditor the instance of the grapheditor
      * @returns `true` if the graph needs to be completely rerendered to reflect all changes
      */
-    onNodeMoveStart?: (group: string, childGroup: string, groupNode: Node, childNode: Node, graphEditor: GraphEditor) => boolean|void;
+    onNodeMoveStart?: (group: string, childGroup: string, groupNode: Node|null, childNode: Node, graphEditor: GraphEditor) => boolean|void;
     /**
      * Callback called before a direct child in the same tree is moved to a new position.
      *
@@ -226,7 +226,7 @@ export interface GroupBehaviour {
      * @param graphEditor the instance of the grapheditor
      * @returns `true` if the graph needs to be completely rerendered to reflect all changes
      */
-    beforeNodeMove?: (group: string, childGroup: string, groupNode: Node, childNode: Node, newPosition: Point, graphEditor: GraphEditor) => boolean|void;
+    beforeNodeMove?: (group: string, childGroup: string, groupNode: Node|null, childNode: Node, newPosition: Point, graphEditor: GraphEditor) => boolean|void;
     /**
      * Callback called after a direct child in the same tree finished moving.
      *
@@ -239,7 +239,7 @@ export interface GroupBehaviour {
      * @param graphEditor the instance of the grapheditor
      * @returns `true` if the graph needs to be completely rerendered to reflect all changes
      */
-    onNodeMoveEnd?: (group: string, childGroup: string, groupNode: Node, childNode: Node, graphEditor: GraphEditor) => boolean|void;
+    onNodeMoveEnd?: (group: string, childGroup: string, groupNode: Node|null, childNode: Node, graphEditor: GraphEditor) => boolean|void;
 
     /** A map mapping the id of occupied drop zones to the id of the node occupying them. */
     occupiedDropZones?: Map<string, string>;
@@ -276,7 +276,9 @@ export interface GroupBehaviour {
  * @param graphEditor the instance of the grapheditor.
  * @returns true iff the node can join the group
  */
-export function defaultCaptureThisDraggedNode(this: GroupBehaviour, group: string, childGroup: string, groupNode: Node, childNode: Node, graphEditor: GraphEditor): boolean {
+export function defaultCaptureThisDraggedNode(
+    this: GroupBehaviour, group: string, childGroup: string, groupNode: Node|null, childNode: Node|null, graphEditor: GraphEditor
+): boolean {
     if (this.allowFreePositioning) {
         return true;
     }
@@ -284,7 +286,10 @@ export function defaultCaptureThisDraggedNode(this: GroupBehaviour, group: strin
         return false;
     }
     const dropZones = graphEditor.getNodeDropZonesForNode(group);
-    for (const zone of filterDropzonesByType(dropZones, childNode.type)) {
+    if (dropZones == null) {
+        return false;  // no dropzones available
+    }
+    for (const zone of filterDropzonesByType(dropZones, childNode.type ?? '')) {
         if (this.occupiedDropZones != null) {
             if (this.occupiedDropZones.has(zone.id)) {
                 // drop zone is occupied
@@ -325,7 +330,9 @@ export function defaultCaptureThisDraggedNode(this: GroupBehaviour, group: strin
  * @param graphEditor the instance of the grapheditor
  */
 // eslint-disable-next-line complexity
-export function defaultBeforeNodeMove(this: GroupBehaviour, group: string, childGroup: string, groupNode: Node, childNode: Node, newPosition: Point, graphEditor: GraphEditor) {
+export function defaultBeforeNodeMove(
+    this: GroupBehaviour, group: string, childGroup: string, groupNode: Node|null, childNode: Node, newPosition: Point, graphEditor: GraphEditor
+) {
     if (groupNode == null || childNode == null) {
         return;
     }
@@ -340,10 +347,10 @@ export function defaultBeforeNodeMove(this: GroupBehaviour, group: string, child
         }
 
         // find nearest dropZone
-        let bestDropZone: string;
-        let bestDistance: number;
-        let lastDropZone: string;
-        for (const dropZone of filterDropzonesByType(dropZones, childNode.type)) {
+        let bestDropZone: string|null = null;
+        let bestDistance: number|null = null;
+        let lastDropZone: string|null = null;
+        for (const dropZone of filterDropzonesByType(dropZones, childNode.type ?? '')) {
             // only consider free dropzones
             if (this.occupiedDropZones.has(dropZone.id)) {
                 if (this.occupiedDropZones.get(dropZone.id) === childNode.id.toString()) {
@@ -394,8 +401,8 @@ export function defaultBeforeNodeMove(this: GroupBehaviour, group: string, child
  *      as it is only updated **after** the node was moved.
  */
 // eslint-disable-next-line max-len
-export function defaultAfterNodeJoinedGroup(this: GroupBehaviour, group: string, childGroup: string, groupNode: Node, childNode: Node, graphEditor: GraphEditor, atPosition?: Point) {
-    if (this.beforeNodeMove != null) {
+export function defaultAfterNodeJoinedGroup(this: GroupBehaviour, group: string, childGroup: string, groupNode: Node|null, childNode: Node|null, graphEditor: GraphEditor, atPosition?: Point) {
+    if (this.beforeNodeMove != null && childNode != null) {
         this.beforeNodeMove(group, childGroup, groupNode, childNode, atPosition ?? childNode, graphEditor);
     }
 }
@@ -413,16 +420,17 @@ export function defaultAfterNodeJoinedGroup(this: GroupBehaviour, group: string,
  * @param childNode the node corresponding to the child group, may be null
  * @param graphEditor the instance of the grapheditor
  */
-export function defaultAfterNodeLeftGroup(this: GroupBehaviour, group: string, childGroup: string, groupNode: Node, childNode: Node, graphEditor: GraphEditor) {
-    if (this.occupiedDropZones != null) {
+export function defaultAfterNodeLeftGroup(this: GroupBehaviour, group: string, childGroup: string, groupNode: Node|null, childNode: Node|null, graphEditor: GraphEditor) {
+    const dropZones = this.occupiedDropZones;
+    if (dropZones != null) {
         // cleanup occupied dropzones
         const toDelete = new Set<string>();
-        this.occupiedDropZones.forEach((nodeId, zoneId) => {
+        dropZones.forEach((nodeId, zoneId) => {
             if (childGroup === nodeId) {
                 toDelete.add(zoneId);
             }
         });
-        toDelete.forEach(zoneId => this.occupiedDropZones.delete(zoneId));
+        toDelete.forEach(zoneId => dropZones.delete(zoneId));
     }
     this.childNodePositions?.delete(childGroup);
 }
@@ -486,8 +494,9 @@ export class GroupingManager {
      */
     protected getGroupForNode(nodeId: string|number) {
         const groupId = nodeId.toString();
-        if (this.groupsById.has(groupId)) {
-            return this.groupsById.get(groupId);
+        const foundGroup = this.groupsById.get(groupId);
+        if (foundGroup != null) {
+            return foundGroup;
         }
         const newGroup = new NodeGroup(groupId);
         newGroup.groupBehaviour = {
@@ -524,6 +533,11 @@ export class GroupingManager {
      */
     addNodeToGroup(groupId: string|number, nodeId: string|number, atPosition?: Point, eventSource: EventSource = EventSource.API, sourceEvent?: Event): boolean {
         const graph = this.derefGraph();
+        const childNode = graph.getNode(nodeId);
+        if (childNode == null) {
+            console.error(`Node ${nodeId} does not exist in graph!`);
+            return false;
+        }
         const group = this.getGroupForNode(groupId);
         if (group.children.has(nodeId.toString())) {
             console.error(`Adding node ${nodeId} to group ${groupId} would create a cycle!`);
@@ -538,6 +552,11 @@ export class GroupingManager {
             console.error(`Adding node ${nodeId} to group ${groupId} would create a cycle!`);
             return false;
         }
+        const groupNode = graph.getNode(groupId);
+        if (groupNode == null) {
+            console.error(`A node for group ${groupId} does not exist in graph!`);
+            return false;
+        }
         const childGroup = this.getGroupForNode(nodeId);
         group.children.add(childGroup.groupId);
         childGroup.parents.add(group.groupId);
@@ -545,8 +564,6 @@ export class GroupingManager {
         if (group.treeRoot != null) {
             this.propagateTreeRoot(group, childGroup, eventSource, sourceEvent);
         }
-        const groupNode = graph.getNode(groupId);
-        const childNode = graph.getNode(nodeId);
         if (group.groupBehaviour?.afterNodeJoinedGroup != null) {
             group.groupBehaviour.afterNodeJoinedGroup(group.groupId, childGroup.groupId, groupNode, childNode, graph, atPosition);
         }
@@ -599,8 +616,8 @@ export class GroupingManager {
      *
      * @param groupId the id of the group (e.g. the node id)
      */
-    getTreeParentOf(groupId: string|number): string {
-        return this.groupsById.get(groupId.toString())?.treeParent;
+    getTreeParentOf(groupId: string|number): string|null {
+        return this.groupsById.get(groupId.toString())?.treeParent ?? null;
     }
 
     /**
@@ -610,8 +627,8 @@ export class GroupingManager {
      *
      * @param groupId the id of the group (e.g. the node id)
      */
-    getTreeRootOf(groupId: string|number): string {
-        return this.groupsById.get(groupId.toString())?.treeRoot;
+    getTreeRootOf(groupId: string|number): string|null {
+        return this.groupsById.get(groupId.toString())?.treeRoot ?? null;
     }
 
     /**
@@ -622,8 +639,8 @@ export class GroupingManager {
      *
      * @param groupId the id of the group (e.g. the node id)
      */
-    getTreeDepthOf(groupId: string|number): number {
-        return this.groupsById.get(groupId.toString())?.treeDepth;
+    getTreeDepthOf(groupId: string|number): number|null {
+        return this.groupsById.get(groupId.toString())?.treeDepth ?? null;
     }
 
     /**
@@ -636,7 +653,7 @@ export class GroupingManager {
         const expanded = new Set<string>();
         const toExpand = [groupId.toString()];
         while (toExpand.length > 0) {
-            const idToExpand = toExpand.pop();
+            const idToExpand: string = toExpand.pop() as string; // checked in loop condition
             expanded.add(idToExpand);
             const group = this.groupsById.get(idToExpand);
             if (group != null) {
@@ -678,7 +695,7 @@ export class GroupingManager {
         };
         child.treeRoot = parent.treeRoot;
         child.treeParent = parent.groupId;
-        child.treeDepth = parent.treeDepth + 1;
+        child.treeDepth = (parent.treeDepth ?? 0) + 1;
         this.dispatchTreeChangedEvent(child.groupId, oldTreeInfo, child, eventSource, sourceEvent);
         child.children.forEach(cId => this.propagateTreeRoot(child, this.getGroupForNode(cId), eventSource, sourceEvent));
     }
@@ -743,7 +760,7 @@ export class GroupingManager {
         if (group.groupBehaviour?.afterNodeLeftGroup != null) {
             group.groupBehaviour.afterNodeLeftGroup(group.groupId, childGroup.groupId, groupNode, childNode, graph);
         }
-        this.afterGroupLeave(group.groupId, childGroup.groupId, groupNode, childNode, eventSource, sourceEvent);
+        this.afterGroupLeave(group.groupId, childGroup.groupId, groupNode ?? undefined, childNode ?? undefined, eventSource, sourceEvent);
         return true;
     }
 
@@ -761,7 +778,9 @@ export class GroupingManager {
      */
     leaveTree(groupId: string|number, eventSource: EventSource = EventSource.API, sourceEvent?: Event): void {
         const group = this.getGroupForNode(groupId);
-        this._leaveTree(group, group.treeRoot, false, eventSource, sourceEvent);
+        if (group.treeRoot != null) {
+            this._leaveTree(group, group.treeRoot, false, eventSource, sourceEvent);
+        }
     }
 
     /**
@@ -793,7 +812,7 @@ export class GroupingManager {
         group.children.forEach(cId => this._leaveTree(this.getGroupForNode(cId), treeRootId, false, eventSource, sourceEvent));
         if (rejoin) {
             // rejoin the same tree if possible
-            let closestParent: NodeGroup;
+            let closestParent: NodeGroup|null = null;
             // find the parent that is closest to the treeRoot of this node
             group.parents.forEach(pId => {
                 const parent = this.getGroupForNode(pId);
@@ -805,7 +824,10 @@ export class GroupingManager {
                     // do not join the same parent again!
                     return;
                 }
-                if (closestParent == null || parent.treeDepth < closestParent.treeDepth) {
+                if (closestParent == null) {
+                    closestParent = parent;
+                }
+                if (parent.treeDepth != null && closestParent.treeDepth != null && parent.treeDepth < closestParent.treeDepth) {
                     closestParent = parent;
                 }
             });
@@ -914,7 +936,7 @@ export class GroupingManager {
      *
      * @param groupId the group to get the group behaviour for
      */
-    getGroupBehaviourOf(groupId: string|number): GroupBehaviour {
+    getGroupBehaviourOf(groupId: string|number): GroupBehaviour|null {
         const group = this.groupsById.get(groupId.toString());
         if (group == null) {
             return null;
@@ -954,12 +976,12 @@ export class GroupingManager {
     protected getGroupWithProperty(childNode: Node, groupProperty: string, groupDecisionCallback: string, strategy: 'closest-parent' | 'largest-group', nodeForDecisionCallback?: Node): string {
         const graph = this.derefGraph();
         const childId = childNode.id.toString();
-        let currentGroup: NodeGroup = this.groupsById.get(childId); // the child group is never checked
-        let validGroup: string;
+        let currentGroup: NodeGroup|null = this.groupsById.get(childId) ?? null; // the child group is never checked
+        let validGroup: string|null = null;
         while (currentGroup?.treeParent != null && currentGroup.groupId !== currentGroup.treeRoot) {
             const parentGroup = this.getGroupForNode(currentGroup.treeParent);
             // test basic group property
-            if (parentGroup.groupBehaviour[groupProperty]) {
+            if (parentGroup?.groupBehaviour?.[groupProperty]) {
                 const behaviour = parentGroup.groupBehaviour;
                 // test fine grade callback decision
                 if (behaviour[groupDecisionCallback] == null ||
@@ -1051,15 +1073,15 @@ export class GroupingManager {
      * @returns the group id capturing the (dragged) node or null no group was found
      */
     // eslint-disable-next-line complexity
-    getGroupCapturingDraggedNode(groupId: string|number, childGroupId: string|number, groupNode: Node, node: Node): string {
-        const group: NodeGroup = this.groupsById.get(groupId.toString());
+    getGroupCapturingDraggedNode(groupId: string|number, childGroupId: string|number, groupNode: Node, node: Node): string|null {
+        const group: NodeGroup|null = this.groupsById.get(groupId.toString()) ?? null;
 
         // check first group
         // test if node tries to join itself
         if (groupId !== childGroupId.toString()) {
             const behaviour = group?.groupBehaviour;
             // test if group allows nodes to join
-            if (behaviour?.captureDraggedNodes ?? false) {
+            if (group != null && behaviour != null && (behaviour?.captureDraggedNodes ?? false)) {
                 // test if node joining the group would create a cycle
                 if (!(this.getAllChildrenOf(node.id)?.has(group.groupId) ?? false)) {
                     // test if group allows this specific node to join
@@ -1076,15 +1098,15 @@ export class GroupingManager {
         if (matchingGroup === groupId.toString()) {
             // groupNode.id was used as falback by this.getGroupWithProperty
             // first group was already checked (and failed)
-            return;
+            return null;
         }
 
         // extra checks for possible cycles
         if (matchingGroup === childGroupId.toString()) {
-            return; // a group cannot join itself
+            return null; // a group cannot join itself
         }
         if (this.getAllChildrenOf(node.id)?.has(matchingGroup)) {
-            return; // node cannot join the group as it would create a cycle!
+            return null; // node cannot join the group as it would create a cycle!
         }
 
         // return the found group
@@ -1101,7 +1123,7 @@ export class GroupingManager {
     getCanDraggedNodeLeaveGroup(groupId: string|number, childGroupId: string|number, childNode: Node): boolean {
         const graph = this.derefGraph();
         const groupBehaviour = this.getGroupBehaviourOf(groupId);
-        if (groupBehaviour?.allowDraggedNodesLeavingGroup ?? false) {
+        if (groupBehaviour != null && (groupBehaviour?.allowDraggedNodesLeavingGroup ?? false)) {
             if (groupBehaviour.allowThisDraggedNodeLeavingGroup != null) {
                 const groupNode = graph.getNode(groupId);
                 return groupBehaviour.allowThisDraggedNodeLeavingGroup(groupId.toString(), childGroupId.toString(), groupNode, childNode, graph);
@@ -1152,7 +1174,7 @@ export class GroupingManager {
      * @param sourceEvent the source event to use, may be null
      */
     // eslint-disable-next-line max-len
-    private dispatchGroupChangeEvent(eventType: 'groupjoin'|'groupleave', eventSource: EventSource, parentGroupId: string, childGroupId: string, parentNode: Node, childNode: Node, sourceEvent: Event) {
+    private dispatchGroupChangeEvent(eventType: 'groupjoin'|'groupleave', eventSource: EventSource, parentGroupId: string, childGroupId: string, parentNode?: Node, childNode?: Node, sourceEvent?: Event) {
         const details: any = {
             eventSource: eventSource,
             parentGroup: parentGroupId,
@@ -1185,7 +1207,7 @@ export class GroupingManager {
      * @param eventSource the event source to use
      * @param sourceEvent the source event to use, may be null
      */
-    private dispatchGroupDepthChangedEvent(groupId, oldDepth: number, newDepth: number, eventSource: EventSource, sourceEvent?: Event) {
+    private dispatchGroupDepthChangedEvent(groupId: string, oldDepth: number, newDepth: number, eventSource: EventSource, sourceEvent?: Event) {
         const details: any = {
             eventSource: eventSource,
             group: groupId,
@@ -1213,7 +1235,7 @@ export class GroupingManager {
      * @param eventSource the event source to use
      * @param sourceEvent the source event to use, may be null
      */
-    private dispatchTreeChangedEvent(groupId, oldInfo: TreeInformation, newInfo: TreeInformation, eventSource: EventSource, sourceEvent?: Event) {
+    private dispatchTreeChangedEvent(groupId: string, oldInfo: TreeInformation, newInfo: TreeInformation, eventSource: EventSource, sourceEvent?: Event) {
         const details: any = {
             eventSource: eventSource,
             group: groupId,

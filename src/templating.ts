@@ -24,6 +24,8 @@ import { Node } from './node';
 import { EdgePathGenerator } from './dynamic-templates/edge-path-generators';
 import { Rect } from './util';
 
+type AnyTemplate = DynamicTemplate<Node>|DynamicTemplate<Marker|LinkHandle>|DynamicTemplate<TextComponent>;
+
 /**
  * Registry for edge path generators.
  *
@@ -76,11 +78,11 @@ export class EdgePathGeneratorRegistry {
      * If the id was not found the id 'default' will be used instead.
      * @param pathGeneratorId the id to retrieve
      */
-    getEdgePathGenerator(pathGeneratorId: string): EdgePathGenerator {
+    getEdgePathGenerator(pathGeneratorId?: string|null): EdgePathGenerator|null {
         if (pathGeneratorId == null || !this.pathGenerators.has(pathGeneratorId)) {
-            return this.pathGenerators.get('default');
+            return this.pathGenerators.get('default') ?? null;
         }
-        return this.pathGenerators.get(pathGeneratorId);
+        return this.pathGenerators.get(pathGeneratorId) ?? null;
     }
 }
 
@@ -121,20 +123,22 @@ export class StaticTemplateRegistry {
         const templates = svg.select('defs').selectAll<SVGGElement, unknown>('g[data-template-type]');
         const idSet = new Set<string>();
 
-        const getWorkableTemplate = (id, templateNode, finishedCallback: (bBox: DOMRect, temp: Selection<SVGGElement, unknown, any, unknown>) => void) => {
+        const getWorkableTemplate = (
+            id: string, templateNode: SVGGElement, finishedCallback: (bBox: DOMRect, temp: (Selection<SVGGElement, unknown, any, unknown>)|null) => void
+        ) => {
             let bBox: DOMRect;
             // temp svg group, only used if getBBox() does not work in defs tag (e.g. firefox)
-            let temp: Selection<SVGGElement, unknown, any, unknown>;
+            let temp: Selection<SVGGElement, unknown, any, unknown>|null = null;
             try {
                 bBox = templateNode.getBBox();
                 finishedCallback?.(bBox, temp);
             } catch (error) {
                 // workaround to get BBox in firefox (copy it into temp group, then get BBox)
                 temp = svg.append('g').attr('id', 'temp-template-measurements');
-                const node = temp.node();
+                const node = temp.node() as SVGGElement;
                 node.appendChild(templateNode.cloneNode(true));
                 if (node.isConnected) {
-                    bBox = temp.select<SVGGElement>('g').node().getBBox();
+                    bBox = (temp.select<SVGGElement>('g').node() as SVGGElement).getBBox();
                     finishedCallback?.(bBox, temp);
                     return;
                 }
@@ -143,8 +147,8 @@ export class StaticTemplateRegistry {
                 let tries = 0;
                 // use setInterval to avoid busy waiting
                 const intervalId = setInterval(() => {
-                    if (node.isConnected) {
-                        bBox = temp.select<SVGGElement>('g').node().getBBox();
+                    if (node.isConnected && temp != null) {
+                        bBox = (temp.select<SVGGElement>('g').node() as SVGGElement).getBBox();
                         finishedCallback?.(bBox, temp);
                         clearInterval(intervalId);
                         return;
@@ -169,7 +173,7 @@ export class StaticTemplateRegistry {
             }
             idSet.add(id);
 
-            getWorkableTemplate(id, this, (bBox: DOMRect, temp: Selection<SVGGElement, unknown, any, unknown>) => {
+            getWorkableTemplate(id, this, (bBox: DOMRect, temp: Selection<SVGGElement, unknown, any, unknown>|null) => {
                 // this part may be executed asynchrounously if the workaround for firefox engages...
                 templateBBoxes.set(id, bBox);
                 if (template.attr('data-template-type').toLowerCase() === 'node') {
@@ -206,8 +210,8 @@ export class StaticTemplateRegistry {
      *
      * @param id the template id
      */
-    getTemplateBBox(id: string): Rect {
-        return this.templateBBoxes.get(id);
+    getTemplateBBox(id: string): Rect|null {
+        return this.templateBBoxes.get(id) ?? null;
     }
 
     /**
@@ -217,7 +221,7 @@ export class StaticTemplateRegistry {
      *
      * @param nodeType the type of the node
      */
-    getNodeTemplateId(nodeType: string): string {
+    getNodeTemplateId(nodeType?: string|null): string {
         if (nodeType == null || !this.nodeTemplates.has(nodeType)) {
             return 'default';
         } else {
@@ -231,8 +235,8 @@ export class StaticTemplateRegistry {
      * This method uses `getNodeTemplateId`.
      * @param id the template id (normally the node type)
      */
-    getNodeTemplate(id: string): Selection<SVGGElement, unknown, any, unknown> {
-        return this.nodeTemplates.get(this.getNodeTemplateId(id));
+    getNodeTemplate(id: string|null): Selection<SVGGElement, unknown, any, unknown>|null {
+        return this.nodeTemplates.get(this.getNodeTemplateId(id)) ?? null;
     }
 
     /**
@@ -241,7 +245,7 @@ export class StaticTemplateRegistry {
      * This method uses `getNodeTemplateId`.
      * @param id the template id (normally the node type)
      */
-    getNodeTemplateLinkHandles(id: string): LinkHandle[] {
+    getNodeTemplateLinkHandles(id: string|null): LinkHandle[] {
         const handles = this.nodeTemplateLinkHandles.get(this.getNodeTemplateId(id));
         if (handles == null) {
             return [];
@@ -256,7 +260,7 @@ export class StaticTemplateRegistry {
      *
      * @param nodeType the type of the marker
      */
-    getMarkerTemplateId(markerType: string): string {
+    getMarkerTemplateId(markerType?: string|null): string {
         if (markerType == null || !this.markerTemplates.has(markerType)) {
             return 'default-marker';
         } else {
@@ -270,8 +274,8 @@ export class StaticTemplateRegistry {
      * This method uses `getMarkerTemplateId`.
      * @param id the template id (normally the marker type)
      */
-    getMarkerTemplate(markerType: string): Selection<SVGGElement, unknown, any, unknown> {
-        return this.markerTemplates.get(this.getMarkerTemplateId(markerType));
+    getMarkerTemplate(markerType: string): Selection<SVGGElement, unknown, any, unknown>|null {
+        return this.markerTemplates.get(this.getMarkerTemplateId(markerType)) ?? null;
     }
 
     /**
@@ -280,8 +284,8 @@ export class StaticTemplateRegistry {
      * This method uses `getMarkerTemplateId`.
      * @param id the template id (normally the marker type)
      */
-    getMarkerAttachementPointInfo(markerType: string): LineAttachementInfo {
-        return this.markerTemplateLineAttachements.get(this.getMarkerTemplateId(markerType));
+    getMarkerAttachementPointInfo(markerType: string): LineAttachementInfo|null {
+        return this.markerTemplateLineAttachements.get(this.getMarkerTemplateId(markerType)) ?? null;
     }
 
 }
@@ -293,17 +297,17 @@ export class StaticTemplateRegistry {
  */
 export class DynymicTemplateRegistry {
 
-    private templates: Map<string, DynamicTemplate<Node|Marker|LinkHandle|TextComponent>>;
+    private templates: Map<string, AnyTemplate>;
 
     constructor() {
-        this.templates = new Map<string, DynamicTemplate<Node|Marker|LinkHandle|TextComponent>>();
+        this.templates = new Map<string, AnyTemplate>();
     }
 
     /**
      * Clears all dynamic templates (including any default templates).
      */
     public clearAllTemplates(): void {
-        this.templates = new Map<string, DynamicTemplate<Node|Marker|LinkHandle|TextComponent>>();
+        this.templates = new Map<string, AnyTemplate>();
     }
 
     /**
@@ -314,7 +318,7 @@ export class DynymicTemplateRegistry {
      * @param templateId the id of the new template
      * @param template the new dynamic template (`null` will remove the template with `templateId`)
      */
-    public addDynamicTemplate(templateId: string, template: DynamicTemplate<Node|Marker|LinkHandle|TextComponent>): void {
+    public addDynamicTemplate(templateId: string, template: AnyTemplate): void {
         if (template == null) {
             this.removeDynamicTemplate(templateId);
             return;
@@ -332,7 +336,7 @@ export class DynymicTemplateRegistry {
      *
      * @param templateId the template id
      */
-    public getDynamicTemplate<T extends DynamicTemplate<Node|Marker|LinkHandle|TextComponent>>(templateId: string): T {
+    public getDynamicTemplate<T extends AnyTemplate>(templateId: string): T {
         return this.templates.get(templateId) as T;
     }
 
@@ -358,7 +362,7 @@ function calculateLinkHandles(nodeTemplate: Selection<SVGGElement, unknown, any,
         backgroundSelection = nodeTemplate.select(':first-child');
     }
 
-    let linkHandles: LinkHandle[];
+    let linkHandles: LinkHandle[] | null;
     if (backgroundSelection.empty()) {
         linkHandles = [{
             id: 1,
@@ -380,12 +384,12 @@ function calculateLinkHandles(nodeTemplate: Selection<SVGGElement, unknown, any,
     linkHandlesOptions = linkHandlesOptions.toLowerCase();
     if (linkHandles != null) {
         // link handles were set explicitly by a json
-    } else if (backgroundSelection.node().tagName === 'circle') {
+    } else if (backgroundSelection.node()?.tagName === 'circle') {
         const x = parseFloat(backgroundSelection.attr('cx'));
         const y = parseFloat(backgroundSelection.attr('cy'));
         const radius = parseFloat(backgroundSelection.attr('r'));
         linkHandles = handlesForCircle(x, y, radius, linkHandlesOptions);
-    } else if (backgroundSelection.node().tagName === 'rect') {
+    } else if (backgroundSelection.node()?.tagName === 'rect') {
         const x = parseFloat(backgroundSelection.attr('x'));
         const y = parseFloat(backgroundSelection.attr('y'));
         const width = parseFloat(backgroundSelection.attr('width'));
@@ -393,17 +397,27 @@ function calculateLinkHandles(nodeTemplate: Selection<SVGGElement, unknown, any,
         if (!isNaN(x + y + width + height)) {
             linkHandles = handlesForRectangle(x, y, width, height, linkHandlesOptions);
         }
-    } else if (backgroundSelection.node().tagName === 'polygon') {
+    } else if (backgroundSelection.node()?.tagName === 'polygon') {
         const points: Point[] = [];
         for (const point of backgroundSelection.property('points')) {
             points.push(point);
         }
         linkHandles = handlesForPolygon(points, linkHandlesOptions);
-    } else if (backgroundSelection.node().tagName === 'path') {
+    } else if (backgroundSelection.node()?.tagName === 'path') {
         linkHandles = handlesForPath(backgroundSelection.node() as unknown as SVGPathElement, linkHandlesOptions);
     } else {
-        const bBox = backgroundSelection.node().getBBox();
-        linkHandles = handlesForRectangle(bBox.x, bBox.y, bBox.width, bBox.height, linkHandlesOptions);
+        const bBox = backgroundSelection.node()?.getBBox();
+        if (bBox != null) {
+            linkHandles = handlesForRectangle(bBox.x, bBox.y, bBox.width, bBox.height, linkHandlesOptions);
+        }
+    }
+
+    if (linkHandles == null) {
+        linkHandles = [{
+            id: 1,
+            x: 0,
+            y: 0,
+        }];
     }
 
     // cleanup link handles:

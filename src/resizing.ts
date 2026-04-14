@@ -329,16 +329,18 @@ function clampDelta(d: number, value: number, min: number, max: number): number 
  * @param graphEditor the grapheditor instance
  * @param resizeStrategy the resize strategy used for this node
  */
-function getNodeBBox(nodeId: string, graphEditor: GraphEditor, resizeStrategy: ResizeStrategy): Rect {
-    let bbox: Rect;
+function getNodeBBox(nodeId: string, graphEditor: GraphEditor, resizeStrategy?: ResizeStrategy|null): Rect|null {
+    let bbox: Rect|null = null;
     if (resizeStrategy?.getNodeDimensions != null) {
         try {
             const node = graphEditor.getNode(nodeId);
+            if (node == null) {
+                throw Error(`Cannot get dimensions for missing node ${nodeId}.`);
+            }
             bbox = resizeStrategy.getNodeDimensions(node, graphEditor);
         } catch (error) {
             // eslint-disable-next-line max-len
             console.warn(`Something went wrong when fetching the dimensions of node ${nodeId}. Falling back to bounding box of node.`, error);
-            bbox = graphEditor.getNodeBBox(nodeId);
         }
     }
     if (bbox == null) {
@@ -381,7 +383,7 @@ export class ResizingManager {
 
     // overlay group selection
     /** The selection of the group layer containing all resize overlays. */
-    protected overlayGroup: Selection<SVGGElement, any, any, any>;
+    protected overlayGroup: Selection<SVGGElement, any, any, any>|null = null;
 
     /** The currently active resize overlays by node id with resize options. */
     protected resizeOptions: Map<string, ResizeOverlayOptions> = new Map();
@@ -394,19 +396,27 @@ export class ResizingManager {
 
     constructor(graphEditor: GraphEditor) {
         this.graphEditor = new WeakRef<GraphEditor>(graphEditor);
-        this.svgChange = (changeEvent: CustomEvent) => { this.initializeGraph(this.derefGraph().getGraphGroup()); };
-        graphEditor.addEventListener('svginitialized', this.svgChange);
-        this.initializeGraph(this.derefGraph().getGraphGroup());
+        this.svgChange = (changeEvent: CustomEvent) => {
+            const svgGroup = this.derefGraph().getGraphGroup();
+            if (svgGroup != null) {
+                this.initializeGraph(svgGroup);
+            }
+        };
+        graphEditor.addEventListener('svginitialized', this.svgChange as any);
+        const svgGroup = this.derefGraph().getGraphGroup();
+        if (svgGroup != null) {
+            this.initializeGraph(svgGroup);
+        }
 
         this.nodePositionChange = (positionChangeEvent: CustomEvent) => {
             const nodeId = positionChangeEvent.detail.node.id;
-            if (this.isResizeOverlayVisible(nodeId)) {
+            if (this.isResizeOverlayVisible(nodeId) && this.overlayGroup != null) {
                 this.overlayGroup.selectAll<SVGGElement, string>('g.resize-overlay')
                     .data<string>(this.resizeOverlays)
                     .call(this.updateOverlayPositions.bind(this));
             }
         };
-        graphEditor.addEventListener('nodepositionchange', this.nodePositionChange);
+        graphEditor.addEventListener('nodepositionchange', this.nodePositionChange as any);
         this.resizeStrategies.set('default', new DefaultResizeStrategy());
     }
 
@@ -428,8 +438,8 @@ export class ResizingManager {
      */
     public unlink(): void {
         const graph = this.derefGraph();
-        graph.removeEventListener('svginitialized', this.svgChange);
-        graph.removeEventListener('nodepositionchange', this.nodePositionChange);
+        graph.removeEventListener('svginitialized', this.svgChange as any);
+        graph.removeEventListener('nodepositionchange', this.nodePositionChange as any);
     }
 
     /**
@@ -465,11 +475,11 @@ export class ResizingManager {
         }
         const graph = this.derefGraph();
 
-        const resizeStrat = this.resizeStrategies.get(options.resizeStrategy ?? 'default');
+        const resizeStrat = this.resizeStrategies.get(options?.resizeStrategy ?? 'default');
 
         if (resizeStrat == null) {
             // eslint-disable-next-line max-len
-            console.warn(`Could not find the resize strategy ${options.resizeStrategy ?? 'default'} to use! Resizing will not have any effect on the node without a resize strategy.`);
+            console.warn(`Could not find the resize strategy ${options?.resizeStrategy ?? 'default'} to use! Resizing will not have any effect on the node without a resize strategy.`);
         }
 
         const node = graph.getNode(nodeId);
@@ -480,7 +490,7 @@ export class ResizingManager {
             return;
         }
 
-        this.resizeOptions.set(nodeId, options);
+        this.resizeOptions.set(nodeId, options ?? {});
 
         this.resizeOverlays.push(nodeId);
         this.updateOverlays();
@@ -524,6 +534,9 @@ export class ResizingManager {
      * Use this method to update the resize overlay manually if needed.
      */
     public updateOverlays(): void {
+        if (this.overlayGroup == null) {
+            return;
+        }
         const self = this;
         this.overlayGroup.selectAll<SVGGElement, string>('g.resize-overlay')
             .data<string>(this.resizeOverlays)
@@ -552,11 +565,15 @@ export class ResizingManager {
      */
     protected updateOverlay(overlaySelection: Selection<SVGGElement, any, any, any>, nodeId: string) {
         const graph = this.derefGraph();
-        const options: ResizeOverlayOptions = this.resizeOptions.get(nodeId);
-        let bbox: Rect = this.currentlyResizing.get(nodeId);
+        const options: ResizeOverlayOptions = this.resizeOptions.get(nodeId) ?? {};
+        let bbox: Rect|null = this.currentlyResizing.get(nodeId) ?? null;
         if (bbox == null) {
             const resizeStrat = this.resizeStrategies.get(options.resizeStrategy ?? 'default');
             bbox = getNodeBBox(nodeId, graph, resizeStrat);
+        }
+        if (bbox == null) {
+            console.error(`Could not get node dimensions for node ${nodeId} to update resize overlay.`);
+            return;
         }
 
         overlaySelection.select('rect.outline')
@@ -586,16 +603,16 @@ export class ResizingManager {
                 // handle templates
                 const oldTemplate = handleSelection.attr('template');
                 if (oldTemplate !== handle.template) {
-                    removeAllChildNodes(handleSelection);
+                    removeAllChildNodes(handleSelection as any);
                     const template = templateRegistry.getMarkerTemplate(handle.template);
                     if (template != null) {
-                        copyTemplateSelectionIntoNode(handleSelection, template);
+                        copyTemplateSelectionIntoNode(handleSelection as any, template as any);
                         handleSelection.attr('template', handle.template);
                     } else {
                         console.warn(`ould not find a static marker template ${handle.template}! Trying default marker template.`);
                         const defaultTemplate = templateRegistry.getMarkerTemplate('default-marker');
                         if (defaultTemplate != null) {
-                            copyTemplateSelectionIntoNode(handleSelection, defaultTemplate);
+                            copyTemplateSelectionIntoNode(handleSelection as any, defaultTemplate as any);
                         }
                         handleSelection.attr('template', 'default-marker');
                     }
@@ -614,27 +631,33 @@ export class ResizingManager {
             .call(this.updateResizeHandlePositions.bind(this))
             .call(
                 drag<SVGGElement, ResizeHandle, ResizeInformation>()
-                    .subject((event, handle) => {
-                        if (this.currentlyResizing.has(nodeId)) {
-                            return;
-                        }
-                        const node = graph.getNode(nodeId);
-                        const resizeStrategy = this.resizeStrategies.get(options.resizeStrategy ?? 'default');
-                        if (resizeStrategy == null) {
-                            console.warn(`Could not find the resize strategy "${options.resizeStrategy ?? 'default'}"!`);
-                        }
-                        // eslint-disable-next-line no-shadow
-                        const bbox = getNodeBBox(nodeId, graph, resizeStrategy);
-                        this.currentlyResizing.set(nodeId, bbox);
-                        const handler = this.resizeHandlerFromHandle(options, handle as any);
-                        return {
-                            handler: handler,
-                            start: {x: 0, y: 0},
-                            startRect: bbox,
-                            node: node,
-                            resizeStrategy: resizeStrategy,
-                        };
-                    })
+                    .subject(
+                        ((event: Event, handle: ResizeHandle) => {
+                            if (this.currentlyResizing.has(nodeId)) {
+                                return;
+                            }
+                            const node = graph.getNode(nodeId);
+                            const resizeStrategy = this.resizeStrategies.get(options.resizeStrategy ?? 'default');
+                            if (resizeStrategy == null) {
+                                console.warn(`Could not find the resize strategy "${options.resizeStrategy ?? 'default'}"!`);
+                            }
+                            // eslint-disable-next-line no-shadow
+                            const bbox = getNodeBBox(nodeId, graph, resizeStrategy);
+                            if (bbox == null) {
+                                console.warn(`Could not find node dimensions for node ${nodeId}!`);
+                                return;
+                            }
+                            this.currentlyResizing.set(nodeId, bbox);
+                            const handler = this.resizeHandlerFromHandle(options, handle as any);
+                            return {
+                                handler: handler,
+                                start: {x: 0, y: 0},
+                                startRect: bbox,
+                                node: node,
+                                resizeStrategy: resizeStrategy,
+                            };
+                        }) as any // function is allowed to return undefined
+                    )
                     .on('start', (event) => {
                         (event as any).subject.start = {x: event.x, y: event.y};
                     })
@@ -674,13 +697,18 @@ export class ResizingManager {
                     })
                     .on('end', (event) => {
                         const resizeInfo: ResizeInformation = (event as any).subject;
-                        this._resizeNode(resizeInfo.resizeStrategy, resizeInfo.node, this.currentlyResizing.get(nodeId));
+                        const currentTargetBbox = this.currentlyResizing.get(nodeId);
+                        if (currentTargetBbox != null) {
+                            this._resizeNode(resizeInfo.resizeStrategy, resizeInfo.node, currentTargetBbox);
+                        }
                         this.currentlyResizing.delete(nodeId);
 
                         // eslint-disable-next-line no-shadow
                         const bbox = getNodeBBox(nodeId, graph, resizeInfo.resizeStrategy);
 
-                        this.updateOverlayDimensions(overlaySelection, nodeId, resizeHandlesFromOptions(options, bbox));
+                        if (bbox != null) {
+                            this.updateOverlayDimensions(overlaySelection, nodeId, resizeHandlesFromOptions(options, bbox));
+                        }
                     })
             );
     }
@@ -693,13 +721,17 @@ export class ResizingManager {
      * @param nodeId the node id for that selection
      * @param resizeHandles the resize handle list for that selection (must have the right dimensions)
      */
-    protected updateOverlayDimensions(overlaySelection: Selection<SVGGElement, string, SVGGElement, any>, nodeId, resizeHandles: ResizeHandle[]) {
+    protected updateOverlayDimensions(overlaySelection: Selection<SVGGElement, string, SVGGElement, any>, nodeId: string, resizeHandles: ResizeHandle[]) {
         const graph = this.derefGraph();
-        const options: ResizeOverlayOptions = this.resizeOptions.get(nodeId);
-        let bbox: Rect = this.currentlyResizing.get(nodeId);
+        const options: ResizeOverlayOptions = this.resizeOptions.get(nodeId) ?? {};
+        let bbox: Rect|null = this.currentlyResizing.get(nodeId) ?? null;
         if (bbox == null) {
             const resizeStrat = this.resizeStrategies.get(options.resizeStrategy ?? 'default');
             bbox = getNodeBBox(nodeId, graph, resizeStrat);
+        }
+
+        if (bbox == null) {
+            return;
         }
 
         overlaySelection.select('rect.outline')
@@ -740,7 +772,9 @@ export class ResizingManager {
         const graph = this.derefGraph();
         overlaySelection.each(function(nodeId) {
             const node = graph.getNode(nodeId);
-            select(this).attr('transform', `translate(${node.x},${node.y})`);
+            if (node != null) {
+                select(this).attr('transform', `translate(${node.x},${node.y})`);
+            }
         });
     }
 
@@ -871,7 +905,7 @@ export class ResizingManager {
      * @param oldBBox the old bounding box of the node
      * @param eventSource the source of the event (default EventSource.API)
      */
-    public dispatchNodeResizeEvent(node: Node, newBBox: Rect, oldBBox?: Rect, eventSource: EventSource= EventSource.API): void {
+    public dispatchNodeResizeEvent(node: Node, newBBox: Rect|null, oldBBox?: Rect|null, eventSource: EventSource= EventSource.API): void {
         const detail: any = {
             eventSource: eventSource,
             node: node,
@@ -908,17 +942,17 @@ export class ResizingManager {
         let maxWidth = Infinity;
         let maxHeight = Infinity;
 
-        if (options.minWidth > 0) {
+        if (options.minWidth != null && options.minWidth > 0) {
             minWidth = options.minWidth;
         }
-        if (options.minHeight > 0) {
+        if (options.minHeight != null && options.minHeight > 0) {
             minHeight = options.minHeight;
         }
 
-        if (options.maxWidth >= minWidth) {
+        if (options.maxWidth != null && options.maxWidth >= minWidth) {
             maxWidth = options.maxWidth;
         }
-        if (options.maxHeight >= minHeight) {
+        if (options.maxHeight != null && options.maxHeight >= minHeight) {
             maxHeight = options.maxHeight;
         }
 

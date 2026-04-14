@@ -54,7 +54,7 @@ export interface PathPositionRotationAndScale extends RotationData {
  * Normalize the positionOnLine argument to a number. (Default: `0`)
  * @param positionOnLine
  */
-export function normalizePositionOnLine(positionOnLine: number|'start'|'end') {
+export function normalizePositionOnLine(positionOnLine: number|'start'|'end'|null|undefined) {
     if (positionOnLine == null || positionOnLine === 'start') {
         return 0;
     }

@@ -110,13 +110,13 @@ export class GraphObjectCache {
      */
     addEdgeToCache(edge: Edge): void {
         this.edges.set(edgeId(edge), edge);
-        let bySource: Set<Edge> = this.edgesBySource.get(edge.source.toString());
+        let bySource: Set<Edge>|undefined = this.edgesBySource.get(edge.source.toString());
         if (bySource == null) {
             bySource = new Set();
             this.edgesBySource.set(edge.source.toString(), bySource);
         }
         bySource.add(edge);
-        let byTarget: Set<Edge> = this.edgesByTarget.get(edge.target.toString());
+        let byTarget: Set<Edge>|undefined = this.edgesByTarget.get(edge.target.toString());
         if (byTarget == null) {
             byTarget = new Set();
             this.edgesByTarget.set(edge.target.toString(), byTarget);
@@ -142,8 +142,8 @@ export class GraphObjectCache {
      *
      * @param id the node id
      */
-    getNode(id: number|string): Node {
-        return this.nodes.get(id.toString());
+    getNode(id: number|string): Node|null {
+        return this.nodes.get(id.toString()) ?? null;
     }
 
     /**
@@ -161,8 +161,8 @@ export class GraphObjectCache {
      *
      * @param id the node id
      */
-    getNodeBBox(id: number|string): Rect {
-        return this.nodeBBoxes.get(id.toString());
+    getNodeBBox(id: number|string): Rect|null {
+        return this.nodeBBoxes.get(id.toString()) ?? null;
     }
 
     /**
@@ -180,8 +180,8 @@ export class GraphObjectCache {
      *
      * @param id the id of the node to get the dropzones for
      */
-    getAllDropZones(id: number|string): Map<string, NodeDropZone> {
-        return this.nodeDropZones.get(id.toString());
+    getAllDropZones(id: number|string): Map<string, NodeDropZone>|null {
+        return this.nodeDropZones.get(id.toString()) ?? null;
     }
 
     /**
@@ -190,8 +190,11 @@ export class GraphObjectCache {
      * @param id the id of the node to get the dropzone for
      * @param dropZoneId the id of the dropzones
      */
-    getDropZone(id: number|string, dropZoneId: string): NodeDropZone {
-        return this.nodeDropZones.get(id.toString())?.get(dropZoneId);
+    getDropZone(id: number|string|null, dropZoneId: string): NodeDropZone|null {
+        if (id == null) {
+            return null;
+        }
+        return this.nodeDropZones.get(id.toString())?.get(dropZoneId) ?? null;
     }
 
     /**
@@ -199,8 +202,11 @@ export class GraphObjectCache {
      *
      * @param id the edge id
      */
-    getEdge(id: number|string): Edge {
-        return this.edges.get(id?.toString());
+    getEdge(id: number|string|null|undefined): Edge|null {
+        if (id == null) {
+            return null;
+        }
+        return this.edges.get(id.toString()) ?? null;
     }
 
     /**

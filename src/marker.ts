@@ -39,7 +39,7 @@ export interface Marker extends PathPositionRotationAndScale {
  */
 export class LineAttachementInfo {
 
-    private isDirectional: boolean;
+    private isDirectional: boolean = false;
     private lineAttachementAngle: number;
     private attachementOffset: number;
 
@@ -56,41 +56,47 @@ export class LineAttachementInfo {
      * @param lineAttachementPoint the attachement point relative to 0,0 in the template
      */
     constructor(lineAttachementPoint: string|number|Point) {
+        let attachementOffset: number|null = null;
+        let lineAttachementAngle: number|null = null;
         if (lineAttachementPoint == null) {
             lineAttachementPoint = 0;
         }
         if (typeof lineAttachementPoint === 'number') {
-            this.attachementOffset = lineAttachementPoint;
-            this.lineAttachementAngle = 0;
+            attachementOffset = lineAttachementPoint;
+            lineAttachementAngle = 0;
             this.isDirectional = false;
         } else if (typeof lineAttachementPoint === 'string') {
             const coords = lineAttachementPoint.toString().split(' ');
             if (coords.length === 1) {
-                this.attachementOffset = parseFloat(coords[0]);
-                this.lineAttachementAngle = 0;
+                attachementOffset = parseFloat(coords[0]);
+                lineAttachementAngle = 0;
                 this.isDirectional = false;
             } else if (coords.length === 2) {
                 const normal = {dx: parseFloat(coords[0]), dy: parseFloat(coords[1])};
-                this.attachementOffset = calculateLength(normal);
-                this.lineAttachementAngle = calculateAngle(normal);
+                attachementOffset = calculateLength(normal);
+                lineAttachementAngle = calculateAngle(normal);
                 this.isDirectional = true;
             } else {
                 console.warn('lineAttachementPoint must be one or two numbers seperated by a space!');
             }
         } else {
             const normal = {dx: lineAttachementPoint.x, dy: lineAttachementPoint.y};
-            this.attachementOffset = calculateLength(normal);
-            this.lineAttachementAngle = calculateAngle(normal);
+            attachementOffset = calculateLength(normal);
+            lineAttachementAngle = calculateAngle(normal);
             this.isDirectional = true;
         }
-        if (this.attachementOffset == null || isNaN(this.attachementOffset)) {
+        if (attachementOffset == null || isNaN(attachementOffset)) {
             console.warn('Could not parse attachement offset! Using 0 instead.');
             this.attachementOffset = 0;
+        } else {
+            this.attachementOffset = attachementOffset;
         }
-        if (this.lineAttachementAngle == null || isNaN(this.lineAttachementAngle)) {
+        if (lineAttachementAngle == null || isNaN(lineAttachementAngle)) {
             console.warn('Could not parse attachement angle! Using 0 instead.');
             this.lineAttachementAngle = 0;
             this.isDirectional = false;
+        } else {
+            this.lineAttachementAngle = lineAttachementAngle;
         }
     }
 
