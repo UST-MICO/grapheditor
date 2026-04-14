@@ -34,6 +34,7 @@ Do NOT use this webcomponent if you want to
 * Display a large number of complex nodes (everything above 100 nodes should be testet for performance issues)
 * Require the best and fastest text wrapping for large amounts of text in nodes
   (Text wrapping is implemented using custom javascript as browsers do not natively support text wrapping in SVGs)
+* Use server side rendering (the library depends on some APIs that are only available when running in a browser)
 
 
 Features
