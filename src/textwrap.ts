@@ -16,6 +16,16 @@
  */
 
 import { select, Selection } from 'd3-selection';
+import { Rect, calculateBoundingRect } from './util';
+
+/**
+ * Cache for specific text measurements.
+ */
+interface TextCache {
+    font: string;
+    measurements: Map<string, number>;
+    measuredLineHeight?: number;
+}
 
 /**
  * Properties used to wrap text in a text element.
@@ -29,11 +39,49 @@ interface TextProperties {
     wrapLineDefIndex?: number;
     lineheight?: number;
     centerY?: number;
+    font?: string;
+    fontSize?: number;
+    fontWeight?: string;
+    fontStyle?: string;
+    fontVariant?: string;
+    lang?: string;
     overflowMode?: string;
     wordBreak?: string;
     lastWrappedText?: string;
     lastWrappedOverflow?: boolean;
+    textCache?: TextCache;
 }
+
+/**
+ * Build a font string from text properties.
+ *
+ * @param props text properties
+ * @returns css font string that can be used with the canvas api
+ */
+function textPropertiesToFont(props: TextProperties): string {
+    let font: string = '';
+    if (props.fontStyle) {
+        font += `${props.fontStyle} `;
+    }
+    if (props.fontVariant) {
+        font += `${props.fontVariant} `;
+    }
+    if (props.fontWeight) {
+        font += `${props.fontWeight} `;
+    }
+    if (props.fontSize) {
+        font += `${props.fontSize}px `;
+    } else {
+        font += '16px ';
+    }
+    if (props.font) {
+        font += props.font;
+    } else {
+        font += 'sans-serif';
+    }
+    return font;
+}
+
 
 /**
  * Determine if the properties have changed significantly.
@@ -43,54 +91,176 @@ interface TextProperties {
  * @returns true iff the properties have changed in a way that makes re-wrapping text neccessary
  */
 function propsHaveChanged(newProps: TextProperties, oldProps: TextProperties) {
-    if (newProps.x !== oldProps.x) {
-        return true;
-    }
-    if (newProps.y !== oldProps.y) {
-        return true;
-    }
-    if (newProps.width !== oldProps.width) {
-        return true;
-    }
-    if (newProps.height !== oldProps.height) {
-        return true;
-    }
-    if (newProps.wrapLines !== oldProps.wrapLines) {
-        return true;
-    }
-    if (newProps.centerY !== oldProps.centerY) {
-        return true;
-    }
-    if (newProps.overflowMode !== oldProps.overflowMode) {
-        return true;
-    }
-    if (newProps.wordBreak !== oldProps.wordBreak) {
+    const mustMatch: (keyof TextProperties)[] = [
+        'x',
+        'y',
+        'width',
+        'height',
+        'wrapLines',
+        'centerY',
+        'font',
+        'fontSize',
+        'fontWeight',
+        'fontStyle',
+        'fontVariant',
+        'lang',
+        'overflowMode',
+        'wordBreak',
+    ];
+    if (mustMatch.some(attr => newProps[attr] !== oldProps[attr])) {
         return true;
     }
     return false;
+}
+
+const sharedCanvas = new OffscreenCanvas(1, 1).getContext('2d');new OffscreenCanvas(1, 1).getContext('2d');
+if (sharedCanvas == null) {
+    console.error('Textwrapping relies on the OffscreenCanvas API, which is currently not available!');
+}
+
+const segmenterCache = new Map<string, Intl.Segmenter>();
+
+/**
+ * Get a segmenter from cache or create a new one.
+ *
+ * @param lang the language for the segmenter
+ * @param granularity the desired segment granularity
+ * @returns a segmenter
+ */
+function getSegmenter(lang: string|undefined, granularity: 'grapheme'|'word') {
+    const key = `${granularity}__${lang}`;
+    let segmenter = segmenterCache.get(key);
+    if (segmenter != null) {
+        segmenterCache.delete(key); // delete and reinsert later to move key to latest position
+    } else {
+        segmenter = new Intl.Segmenter(lang, {granularity: granularity});
+    }
+    segmenterCache.set(key, segmenter);
+
+    if (segmenterCache.size > 20) { // keep up to 20 segmenters
+        const oldestKey = segmenterCache.keys().next()
+        if (!oldestKey.done && oldestKey.value != null) {
+            segmenterCache.delete(oldestKey.value);
+        }
+    }
+
+    return segmenter;
 }
 
 /** Cache for the last used text wrapping properties by text element. */
 const textCache: WeakMap<SVGTextElement|SVGTSpanElement, TextProperties> = new WeakMap();
 
 /**
- * Wrap text in an svg text element.
+ * Assert that a given value is a CSSUnitValue.
  *
- * Only wraps text if a 'width' or 'data-width' attribute is
- * present on text element.
- *
- * For multiline wrapping an additional 'height' or 'data-height'
- * attribute is neccessary.
- *
- * Partly uses css attributes 'text-overflow' and 'word-break'
- * to determine how to wrap text.
- *
- * @param element element to wrap text into
- * @param newText text to wrap
- * @param force force rewrap
+ * @param val value to check
  */
-// eslint-disable-next-line complexity
-export function wrapText(element: SVGTextElement, newText: string, force: boolean = false): void {
+function assertIsCSSUnitValue(val: CSSStyleValue): asserts val is CSSUnitValue {
+    if (typeof val !== 'object') {
+        throw new Error('Not an object!');
+    }
+    if ((val as any).value == null || (val as any).unit == null) {
+        throw new Error('Not a CSSUnitValue!');
+    }
+}
+
+/**
+ * Update the lang attribute of the given text properties.
+ *
+ * @param text the text element to get the language from
+ * @param props the text properties to update
+ * @returns the text properties
+ */
+function updateLang(text: SVGTextElement, props: TextProperties) {
+    let currentElement: Element|null = text;
+    while (currentElement != null) {
+        if (Object.hasOwn(currentElement, 'lang')) {
+            const lang = (currentElement as any).lang;
+            if (typeof lang === 'string') {
+                props.lang = lang;
+            } else {
+                props.lang = undefined;
+            }
+            return props;
+        }
+        currentElement = currentElement.parentElement;
+    }
+    return props
+}
+
+/**
+ * Get a px unit number for the given style attribute.
+ *
+ * @param style the style attribute to get
+ * @param styleMap the new style css map
+ * @param oldStyleDeclaration the old computed style css map
+ * @returns a number in px units or none
+ */
+function getStylePxValue(style: string, styleMap: StylePropertyMapReadOnly|null, oldStyleDeclaration: CSSStyleDeclaration|null): number|null {
+    if (styleMap != null) {
+        const value = styleMap.get(style);
+        if (value == null) {
+            return null;
+        }
+        assertIsCSSUnitValue(value);
+        if (value.unit === 'px') {
+            return value.value;
+        }
+    }
+    if (oldStyleDeclaration != null) {
+        const value = oldStyleDeclaration.getPropertyValue(style)?.toLowerCase();
+        if (value === '') {
+            return null;
+        }
+        const parser = /^\s*(?<value>[0-9.]*)\s*(?<unit>px)\s*$/
+        const parts = parser.exec(value);
+        if (parts == null) {
+            throw Error(`Unable to parse "${value}" as a pixel value.`);
+        }
+        if (parts[2] === "px") {
+            return parseFloat(parts[1]);
+        }
+    }
+    throw Error('Unable to determine style values, either styleMap, or oldStyleDeclaration must be provided.');
+}
+
+/**
+ * Get a string value for a given style attribute.
+ *
+ * @param style the style attribute to get
+ * @param styleMap the new style css map
+ * @param oldStyleDeclaration the old computed style css map
+ * @returns the string value of the style attribute or `null`
+ */
+function getStyleStringValue(style: string, styleMap: StylePropertyMapReadOnly|null, oldStyleDeclaration: CSSStyleDeclaration|null): string|null {
+    if (styleMap != null) {
+        const value = styleMap.get(style);
+        return value?.toString() ?? null;
+    }
+    if (oldStyleDeclaration != null) {
+        const value = oldStyleDeclaration.getPropertyValue(style);
+        if (value === '') {
+            return null;
+        }
+        return value;
+    }
+    throw Error('Unable to determine style values, either styleMap, or oldStyleDeclaration must be provided.');
+}
+
+/**
+ * Get text properties for a given SVGTextElement.
+ *
+ * @param element the element to get the text properties for
+ * @returns the built text properties
+ */
+export function getTextProperties(element: SVGTextElement): TextProperties|null {
+    let styleMap: StylePropertyMapReadOnly|null = null;
+    let oldStyleDeclaration: CSSStyleDeclaration|null = null;
+    if (element.computedStyleMap != null) {
+        styleMap = element.computedStyleMap();
+    } else {
+        oldStyleDeclaration = window.getComputedStyle(element);
+    }
     const text = select(element);
     let x = parseFloat(text.attr('x'));
     if (isNaN(x)) {
@@ -130,14 +300,6 @@ export function wrapText(element: SVGTextElement, newText: string, force: boolea
         props.wrapLines = wrapLines;
     }
 
-    if (isNaN(width) && wrapLines == null) {
-        // no text wrapping possible (missing information)
-        text.selectAll('tspan').remove(); // clear previous dom content
-        text.text(newText);
-        textCache.delete(text.node() as SVGTextElement); // clear all properties
-        return;
-    }
-
     // parse vertical text center
     const verticalCenter = text.attr('data-text-center-y');
     let centerY: number|null = null;
@@ -154,18 +316,80 @@ export function wrapText(element: SVGTextElement, newText: string, force: boolea
     }
 
     // get overflowMode from css style attribute
-    let overflowMode = text.style('text-overflow');
+    let overflowMode = getStyleStringValue('text-overflow', styleMap, oldStyleDeclaration);
     if (overflowMode == null) {
         overflowMode = 'ellipsis';
     }
     props.overflowMode = overflowMode;
 
     // get wordBreak from css style attribute
-    let wordBreak = text.style('word-break');
+    let wordBreak = getStyleStringValue('word-break', styleMap, oldStyleDeclaration);
     if (wordBreak == null) {
         wordBreak = 'break-word';
     }
     props.wordBreak = wordBreak;
+
+    // get font specifics from css
+    const fontFamily = getStyleStringValue('font-family', styleMap, oldStyleDeclaration) ?? undefined;
+    const fontSize = getStylePxValue('font-size', styleMap, oldStyleDeclaration);
+    const fontWeight = getStyleStringValue('font-weight', styleMap, oldStyleDeclaration) ?? undefined;
+    const fontVariant = getStyleStringValue('font-variant', styleMap, oldStyleDeclaration) ?? undefined;
+    const fontStyle = getStyleStringValue('font-style', styleMap, oldStyleDeclaration) ?? undefined;
+
+    props.font = fontFamily;
+
+    if (fontSize != null && !isNaN(fontSize)) {
+        props.fontSize = fontSize;
+    }
+
+    props.fontWeight = fontWeight;
+    props.fontVariant = fontVariant;
+    props.fontStyle = fontStyle;
+
+    const fontString = textPropertiesToFont(props);
+    if (props.textCache == null || props.textCache.font !== fontString) {
+        props.textCache = {
+            font: fontString,
+            measurements: new Map(),
+        };
+    }
+    updateLang(element, props);
+    return props;
+}
+
+/**
+ * Wrap text in an svg text element.
+ *
+ * Only wraps text if a 'width' or 'data-width' attribute is
+ * present on text element.
+ *
+ * For multiline wrapping an additional 'height' or 'data-height'
+ * attribute is neccessary.
+ *
+ * Partly uses css attributes 'text-overflow' and 'word-break'
+ * to determine how to wrap text.
+ *
+ * @param element element to wrap text into
+ * @param newText text to wrap
+ * @param force force rewrap
+ */
+// eslint-disable-next-line complexity
+export function wrapText(element: SVGTextElement, newText: string, force: boolean = false): void {
+    const text = select(element);
+    const props = getTextProperties(element);
+    if (props == null) {
+        return;
+    }
+
+    const hasNoWidth = props.width == null || isNaN(props.width)
+
+    if (sharedCanvas == null || (hasNoWidth && props.wrapLines == null)) {
+        // no text wrapping possible (missing information)
+        text.selectAll('tspan').remove(); // clear previous dom content
+        text.text(newText);
+        textCache.delete(text.node() as SVGTextElement); // clear all properties
+        return;
+    }
 
     const oldProps = textCache.get(text.node() as SVGTextElement);
     if (!force && oldProps != null && !propsHaveChanged(props, oldProps)) {
@@ -179,14 +403,14 @@ export function wrapText(element: SVGTextElement, newText: string, force: boolea
         }
     }
 
-    if (wrapLines != null) {
+    if (props.wrapLines != null) {
         // handle special wrap lines!
         const def = wrapTextLines(text, newText, props, force);
-        resetTextTransform(text, isCenteredVertically);
+        resetTextTransform(text, props, props.centerY != null);
         if (def.scale !== 1) {
             scaleText(text, def.scale);
         }
-        const newY = centerTextVertically(text, centerY, true);
+        const newY = centerTextVertically(text, props, true);
         if (newY != null) {
             props.y = newY;
         }
@@ -194,13 +418,13 @@ export function wrapText(element: SVGTextElement, newText: string, force: boolea
         return;
     }
 
-    if (isNaN(height)) {
+    if (props.height == null || isNaN(props.height)) {
         // no height => wrap a single line
-        const unwrappedText = wrapSingleLine(element, width, newText, overflowMode, wordBreak, force);
+        const unwrappedText = wrapSingleLine(element, props.width as number, newText, props, true, force);
         props.lastWrappedText = newText.substring(0, newText.length - unwrappedText.length);
         props.lastWrappedOverflow = lTrim(unwrappedText) !== '';
-        resetTextTransform(text, isCenteredVertically);
-        const newY = centerTextVertically(text, centerY, false);
+        resetTextTransform(text, props, props.centerY != null);
+        const newY = centerTextVertically(text, props, false);
         if (newY != null) {
             props.y = newY;
         }
@@ -209,19 +433,19 @@ export function wrapText(element: SVGTextElement, newText: string, force: boolea
     }
 
     // wrap multiline
-    const spanSelection = calculateMultiline(text, height, x, y, force);
+    const spanSelection = calculateMultiline(text, props.height, props.x, props.y, force);
     const lines = spanSelection.nodes();
     let currentNewText = newText;
     for (let index = 0; index < lines.length; index++) {
         const line = lines[index];
-        const notLast = index < (lines.length - 1);
-        const unwrappedText = wrapSingleLine(line, width, currentNewText, notLast ? 'clip' : overflowMode, notLast ? wordBreak : 'break-all', force);
+        const isLastLine = index >= (lines.length - 1);
+        const unwrappedText = wrapSingleLine(line, props.width as number, currentNewText, props, isLastLine, force);
         currentNewText = lTrim(unwrappedText);
         props.lastWrappedText = newText.substring(0, newText.length - unwrappedText.length);
         props.lastWrappedOverflow = currentNewText !== '';
     }
-    resetTextTransform(text, isCenteredVertically);
-    const newY = centerTextVertically(text, centerY, true);
+    resetTextTransform(text, props, props.centerY != null);
+    const newY = centerTextVertically(text, props, true);
     if (newY != null) {
         props.y = newY;
     }
@@ -253,6 +477,145 @@ export function rTrim(text: string) {
  */
 export function lTrim(text: string) {
     return text.replace(/^\s+/, '');
+}
+
+/**
+ * Class to get text measurements without using dom APIs.
+ */
+class TextEval {
+    private textCache: TextCache;
+    private measureContext: OffscreenCanvasRenderingContext2D;
+    private segmenter: Intl.Segmenter;
+    private graphemeSegmenter: Intl.Segmenter;
+
+    /**
+     * Create a new evaluation object for wrapping text.
+     *
+     * @param props the text properties of the element to wrap text for
+     */
+    constructor (props: TextProperties) {
+        if (props.textCache == null) {
+            throw Error('Text properties need populated textCache!');
+        }
+        this.textCache = props.textCache;
+        if (sharedCanvas == null) {
+            throw Error('Failed to get measurement context for text wrapping.');
+        }
+        this.measureContext = sharedCanvas;
+        let granularity: 'word'|'grapheme' = 'word';
+        if (props.wordBreak === 'break-all') {
+            granularity = 'grapheme';
+        }
+        this.segmenter = getSegmenter(props.lang, granularity);
+        if (granularity === 'grapheme') {
+            this.graphemeSegmenter = this.segmenter;
+        } else {
+            this.graphemeSegmenter = getSegmenter(props.lang, 'grapheme');
+        }
+    }
+
+    /**
+     * Get an estimated BBox of a text without calling dom API that cause layout calculations.
+     *
+     * This function does not use the cache.
+     *
+     * @param text the text to build the BBox for
+     * @returns a bounding box that roughly matches the dom getBBox (but assumes origin at x=0 and y=0)
+     */
+    public measureBBoxOnce(text: string): Rect {
+        this.measureContext.font = this.textCache.font;
+        const data = this.measureContext.measureText(text);
+        const height = Math.abs(data.fontBoundingBoxAscent) + Math.abs(data.fontBoundingBoxDescent);
+        return {
+            x: data.actualBoundingBoxLeft,
+            y: -data.fontBoundingBoxAscent,
+            width: data.width,
+            height: height,
+        }
+    }
+
+    /**
+     * Get the width of a given text.
+     *
+     * This function does not use the cache.
+     *
+     * @param text the text to get the width for.
+     * @returns the estimated width of the text
+     */
+    public measureWidthOnce(text: string): number {
+        this.measureContext.font = this.textCache.font;
+        return this.measureContext.measureText(text).width;
+    }
+
+    /**
+     * Get the width of a given word or grapheme.
+     *
+     * @param text the text to get the width for.
+     * @returns the estimated width of the text
+     */
+    public measureWidth(text: string): number {
+        if (text === '') {
+            return 0;
+        }
+        const cached = this.textCache.measurements.get(text);
+        if (cached != null) {
+            return cached;
+        }
+        const width = this.measureWidthOnce(text)
+        this.textCache.measurements.set(text, width);
+        return width;
+    }
+
+    /**
+     * Get a segmenter to split a string into smaller segments for wrapping.
+     *
+     * @param wordBreak "break-word" | "break-all"
+     * @returns a segmenter instance to split a string into smaller segments
+     */
+    public getSegmenter(wordBreak: string) {
+        if (wordBreak === 'break-all') {
+            return this.graphemeSegmenter;
+        }
+        return this.segmenter;
+    }
+
+
+    /**
+     * Wrap single line of text based on current text properties.
+     *
+     * @param text the text to wrap in the line
+     * @param width width of the line
+     * @param overflowChar wrapping mode
+     * @param wordBreak how words should be segmented for wrapping
+     */
+    public wrapText(text: string, width: number, overflowChar: string, wordBreak: string): {text: string, width: number, overflow: string} {
+        if (text == null || text === '') {
+            return {text: '', width: 0, overflow: ''};
+        }
+        let wrapped = '';
+        const overflowCharWidth = this.measureWidth(overflowChar);
+        let wrappedWidth = 0 + overflowCharWidth;
+
+        const segmenter = this.getSegmenter(wordBreak);
+        for (const segment of segmenter.segment(text)) {
+            const segmentText = segment.segment;
+            const segmentWidth = this.measureWidth(segmentText);
+            if ((wrappedWidth + segmentWidth) > width) {
+                if (wrappedWidth === 0) { // is first word/segment
+                    if (wordBreak === 'break-all') { // already breaking up words
+                        return {text: overflowChar, width: wrappedWidth, overflow: text};
+                    } else { // try break up word
+                        return this.wrapText(text, width, overflowChar, 'break-all');
+                    }
+                }
+                return {text: wrapped+overflowChar, width: wrappedWidth, overflow: text.substring(wrapped.length)};
+            }
+            wrapped += segmentText;
+            wrappedWidth += segmentWidth;
+        }
+
+        return {text: wrapped, width: wrappedWidth-overflowCharWidth, overflow: ''};
+    }
 }
 
 /**
@@ -368,11 +731,11 @@ export function wrapTextLines(text: Selection<SVGTextElement, unknown, null, und
         throw Error(`Could not read attribute "y" of the text element! ${textNode}`);
     }
 
+    const ctx = new TextEval(props);
+
     // calculate minimal length needed
     text.selectAll('tspan').remove();
-    text.text(newText);
-    const minimalCumulativeLineLength = textNode.getComputedTextLength();
-    text.text(null);
+    const minimalCumulativeLineLength = ctx.measureWidthOnce(newText);
 
     // check shortcuts based on older attempts
     let firstLineDefIndex = 0;
@@ -433,8 +796,8 @@ export function wrapTextLines(text: Selection<SVGTextElement, unknown, null, und
         for (let index = 0; index < spans.length; index++) { // wrap lines
             const line = spans[index];
             const width = lines[index].width;
-            const notLast = index < (spans.length - 1);
-            const lastWrappedText = wrapSingleLine(line, width, currentNewText, notLast ? 'clip' : props.overflowMode, notLast ? props.wordBreak : 'break-all', force);
+            const isLastLine = index >= (spans.length - 1);
+            const lastWrappedText = wrapSingleLine(line, width, currentNewText, props, isLastLine, force);
             props.lastWrappedText = newText.substring(0, newText.length - lastWrappedText.length);
             currentNewText = lTrim(lastWrappedText);
             if (currentNewText.length === 0) {
@@ -453,6 +816,57 @@ export function wrapTextLines(text: Selection<SVGTextElement, unknown, null, und
 }
 
 /**
+ * Get an estimated bounding box for a text element without calling `getBBox()`.
+ *
+ * @param text the text element selection to estimate the bbox for
+ * @param props the text properties for the element required for the text measurements
+ * @returns an estimated bounding box or `null`
+ */
+function getTextBBox(text: Selection<SVGTextElement, unknown, null, undefined>, props: TextProperties): Rect|null {
+    const textNode = text.node();
+    if (textNode == null) {
+        return null;  // cannot reset transform without a dom node to reset
+    }
+    const ctx = new TextEval(props);
+
+    const spanSelection = text.selectAll('tspan');
+
+    if (spanSelection.empty()) {
+        const x = parseFloat(text.attr('x'));
+        const y = parseFloat(text.attr('y'));
+        const textBox = ctx.measureBBoxOnce(text.text());
+        textBox.x += x;
+        textBox.y += y;
+        return textBox;
+    }
+
+    const boxes: Rect[] = [];
+    spanSelection.each((_, index, nodes) => {
+        const line = nodes[index] as unknown as SVGTSpanElement;
+        if (line == null || line.textContent === '') {
+            return;
+        }
+        const x = parseFloat(line.getAttribute("x") ?? '0');
+        const y = parseFloat(line.getAttribute("y") ?? '0');
+        const textBox = ctx.measureBBoxOnce(line.textContent);
+        textBox.x += x;
+        textBox.y += y;
+        boxes.push(textBox);
+    });
+
+    if (boxes.length === 0) {
+        // fallback to getBBox
+        return textNode.getBBox();
+    }
+    if (boxes.length === 1) {
+        return boxes[0];
+    }
+
+    const firstRect = boxes.pop() as Rect; // list must have at least one rect here
+    return calculateBoundingRect(firstRect ,...boxes);
+}
+
+/**
  * Reset the "transform" attribute and set a more useful transform origin for
  * scaling text.
  *
@@ -467,14 +881,14 @@ export function wrapTextLines(text: Selection<SVGTextElement, unknown, null, und
  * to be in a weird place.
  *
  * @param text the text selection to reset the transformation for (must have an x attribute!)
+ * @param props the text properties of the text element
  * @param isVerticallyCentered if the text is vertically centered it should scale from/towards that center vertically
  */
-export function resetTextTransform(text: Selection<SVGTextElement, unknown, null, undefined>, isVerticallyCentered: boolean= false) {
-    const textNode = text.node();
-    if (textNode == null) {
-        return;  // cannot reset transform without a dom node to reset
+export function resetTextTransform(text: Selection<SVGTextElement, unknown, null, undefined>, props: TextProperties, isVerticallyCentered: boolean= false) {
+    const bbox = getTextBBox(text, props);
+    if (bbox == null) {
+        return;  // cannot reset transform without bounding box data
     }
-    const bbox = textNode.getBBox();
     const originX = text.attr('x') ?? 0;
     let originY: number;
     if (isVerticallyCentered) {
@@ -513,11 +927,12 @@ export function scaleText(text: Selection<SVGTextElement, unknown, null, undefin
  * attribute by prepending translation!
  *
  * @param text the text selection to center vertically around the attribute 'data-text-center-y'
- * @param centerY if set, this value is used instead of the attribute 'data-text-center-y'
+ * @param props the text properties of the text element
  * @param multiline true if the text is a multiline text containing tSpans
  * @returns the new y coordinate set (if any)
  */
-export function centerTextVertically(text: Selection<SVGTextElement, unknown, null, undefined>, centerY?: number|null, multiline: boolean = false) {
+export function centerTextVertically(text: Selection<SVGTextElement, unknown, null, undefined>, props: TextProperties, multiline: boolean = false) {
+    let centerY = props.centerY;
     if (centerY == null) {
         // try to parse center from text node
         const centerVertical = text.attr('data-text-center-y');
@@ -530,10 +945,10 @@ export function centerTextVertically(text: Selection<SVGTextElement, unknown, nu
         return;
     }
     const textNode = text.node();
-    if (textNode == null) {
+    const bbox = getTextBBox(text, props);
+    if (textNode == null || bbox == null) {
         return;
     }
-    const bbox = textNode.getBBox();
     const currentCy = bbox.y + (bbox.height / 2);
 
     const delta = centerY - currentCy;
@@ -570,7 +985,7 @@ export function centerTextVertically(text: Selection<SVGTextElement, unknown, nu
 export function calculateMultiline(text: Selection<SVGTextElement, unknown, null, undefined>, height: number, x: number, y: number, force: boolean = false, linespacing: string = 'auto') {
     let lineheight = parseFloat(text.attr('data-lineheight'));
     if (force || isNaN(lineheight)) {
-        lineheight = calculateLineHeight(text);
+        lineheight = calculateLineHeight(text);  // FIXME update line height calculation
     }
     lineheight = Math.abs(lineheight); // don't allow negative lineheight
     const lines: number[] = [];
@@ -612,7 +1027,7 @@ export function calculateMultiline(text: Selection<SVGTextElement, unknown, null
  * @param text the text element to calculate the line height for
  * @returns the line height in svg units
  */
-function calculateLineHeight(text: Selection<SVGTextElement, unknown, null, undefined>) {
+function calculateLineHeight(text: Selection<SVGTextElement, unknown, null, undefined>) { // FIXME use new text measurement approach for this
     let lineheight: number|null = null;
     const styleLineheight = text.style('line-height');
     const styleFontSize = text.style('font-size');
@@ -641,17 +1056,19 @@ function calculateLineHeight(text: Selection<SVGTextElement, unknown, null, unde
 /**
  * Wrap text in a single line and return the overflow.
  *
- * @param element element to wraptext into
+ * @param element element to wrap text into
  * @param width max linewidth for text
  * @param newText new text to set
- * @param mode wrapping mode
- * @param wordBreak break mode
+ * @param props the text properties object associated with the element
+ * @param isLastLine true if this line is the last line being wrapped
  * @param force force rewrap
  * @returns the overflow text
  */
 // eslint-disable-next-line complexity
-export function wrapSingleLine(element: SVGTextElement | SVGTSpanElement, width: number,
-    newText: string, mode: string = 'ellipsis', wordBreak: string = 'break-word', force: boolean = false
+export function wrapSingleLine(
+    element: SVGTextElement | SVGTSpanElement, width: number,
+    newText: string, props: TextProperties,
+    isLastLine: boolean, force: boolean = false,
 ): string {
 
     const text = select(element);
@@ -675,164 +1092,12 @@ export function wrapSingleLine(element: SVGTextElement | SVGTSpanElement, width:
         }
     }
 
-    // Try naive without wrapping
-    text.text(newText);
-    const textNode = text.node();
-    if (textNode != null && textNode.getComputedTextLength() <= width) {
-        return suffix;
-    }
-    const boundary = /(?<!^)(?<!\d[,.])\b(?![,.]\d)\s*|\s+|$/gmu;
-    const nextWordBoundary = boundary.exec(newText)?.index ?? 0;
-    const isOneWord = nextWordBoundary === 0 || nextWordBoundary === newText.length;
+    const ctx = new TextEval(props);
+    const mode = (isLastLine ? props.overflowMode : 'clip') ?? 'clip';
+    const wordBreak = (isLastLine ? 'break-all' : props.wordBreak) ?? 'break-word';
+    const overflowChar = mode === 'clip' ? '' : '…';
 
-    if (wordBreak === 'break-all' || isOneWord) {
-        return wrapCharacters(newText, text, width, mode === 'clip' ? '' : '…') + suffix;
-    } else {
-        return wrapWords(newText, text, width, mode === 'clip' ? '' : '…') + suffix;
-    }
-}
-
-/**
- * Wrap single line, can break after every character.
- *
- * @param newText new text to set
- * @param text d3 selection of element to wrap text into
- * @param width width of the  line
- * @param overflowChar wrapping mode
- */
-function wrapCharacters(newText: string, text: Selection<SVGTextElement | SVGTSpanElement, unknown, null, undefined>, width: number, overflowChar: string) {
-    // find out width of overflow char
-    const textNode = text.node();
-    if (textNode == null) {
-        throw Error('Cannot wrap text without a dom node!');
-    }
-    let overflowCharWidth = 0;
-    if (overflowChar) {
-        text.text(overflowChar);
-        overflowCharWidth = textNode.getExtentOfChar(0).width;
-        text.text(newText);
-    }
-    // find better upper bound from svg
-    const start = textNode.getStartPositionOfChar(0);
-    start.x += (width - overflowCharWidth);
-    // always a char here as this method only gets called when the line is too long
-    let firstOutside = textNode.getCharNumAtPosition(start);
-    if (firstOutside < 0) { // because firefox sometimes does this...
-        firstOutside = bruteForceLastOutside(textNode, newText.length, start.x);
-    }
-    let lastNonClippingChar = firstOutside;
-
-    for (let char = firstOutside; char > 0; char--) {
-        const charStart = textNode.getEndPositionOfChar(char);
-        if (charStart.x < start.x) {
-            lastNonClippingChar = char;
-            break;
-        }
-    }
-
-    const newSubstring = rTrim(newText.substring(0, lastNonClippingChar));
-    if (overflowChar) {
-        text.text(newSubstring + overflowChar);
-    } else {
-        text.text(newSubstring);
-    }
-    return lTrim(newText.substring(lastNonClippingChar));
-}
-
-
-/**
- * Wrap single line, can break at spaces only.
- *
- * @param newText new text to set
- * @param text d3 selection of element to wrap text into
- * @param width width of the  line
- * @param overflowChar wrapping mode
- */
-// eslint-disable-next-line complexity
-function wrapWords(newText: string, text: Selection<SVGTextElement | SVGTSpanElement, unknown, null, undefined>, width: number, overflowChar: string) {
-    // find out width of overflow char
-    const textNode = text.node();
-    if (textNode == null) {
-        throw Error('Cannot wrap text without a dom node!');
-    }
-    let overflowCharWidth = 0;
-    if (overflowChar) {
-        text.text(overflowChar);
-        overflowCharWidth = textNode.getExtentOfChar(0).width;
-        text.text(newText);
-    }
-    // find better upper bound from svg
-    const start = textNode.getStartPositionOfChar(0);
-    start.x += (width - overflowCharWidth);
-    // always a char here as this method only gets called when the line is too long
-    let firstOutside = textNode.getCharNumAtPosition(start);
-    if (firstOutside < 0 || textNode.getStartPositionOfChar(firstOutside).x > start.x) { // because firefox sometimes does this...
-        // sometimes firefox does not find the char (firstOutside == -1)
-        // sometimes the char firefox found is not correct (second check tests if that char actually starts inside the bounds)
-        firstOutside = bruteForceLastOutside(textNode, newText.length, start.x);
-    }
-
-    const WORD_BOUNDARY = /(?<!^)(?<!\d[,.])\b(?![,.]\d)\s*|\s+|$/gmu;
-    let lastIndex = WORD_BOUNDARY.lastIndex;
-    let lastBoundary: RegExpExecArray | null = null;
-    let boundary: RegExpExecArray | null = WORD_BOUNDARY.exec(newText);
-
-    let lastInsideBoundary = null;
-
-    let counter = 0; // counter to catch infinite loops
-    while (!(lastBoundary == null && boundary == null) && boundary != null && boundary.index < (newText.length - 1)) {
-        counter++;
-        if (counter > 10000) {
-            console.warn('Wrapping the text encountered a loop!', 'Text to wrap:', newText);
-            break;
-        }
-        if (boundary.index <= firstOutside) {
-            lastInsideBoundary = boundary.index;
-        } else {
-            break;
-        }
-        lastBoundary = boundary;
-        if (boundary.length > 0) {
-            WORD_BOUNDARY.lastIndex += boundary.length;
-            lastIndex = WORD_BOUNDARY.lastIndex;
-        }
-        boundary = WORD_BOUNDARY.exec(newText);
-        if (boundary?.index === lastIndex) {
-            boundary = WORD_BOUNDARY.exec(newText);
-            if (boundary == null) {
-                break; // WORD_BOUNDARY.lastIndex already exceeds newText.length
-            }
-        }
-    }
-    if (lastInsideBoundary == null) {
-        // one long word
-        return wrapCharacters(newText, text, width, '-');
-    }
-    text.text(rTrim(newText.substring(0, lastInsideBoundary)) + overflowChar);
-    return lTrim(newText.substring(lastInsideBoundary));
-}
-
-/**
- * Brute force find the character that crosses the xBoundary (because firefox).
- *
- * @param textNode the text or tSpan node in question
- * @param textLength the maximum length of the string inside that node
- * @param xBoundary the x coordinate that the text element must not cross
- */
-function bruteForceLastOutside(textNode: SVGTextElement | SVGTSpanElement, textLength: number, xBoundary: number): number {
-    const maxChars = textNode.getNumberOfChars();
-    for (let i = 0; i < textLength; i++) {
-        if (maxChars !== 0 && i >= maxChars) { // firefox may also report getNumberOfChars() as 0
-            return i;
-        }
-        try {
-            const end = textNode.getEndPositionOfChar(i);
-            if (end.x > xBoundary) {
-                return i;
-            }
-        } catch (error) { // catch error when trying to access character that cannot be accessed
-            return i;
-        }
-    }
-    return textLength;
+    const result = ctx.wrapText(newText, width, overflowChar, wordBreak);
+    text.text(result.text);
+    return lTrim(result.overflow);
 }

@@ -1,17 +1,18 @@
 {
   "compileOnSave": false,
   "compilerOptions": {
+    "rootDir": ".",
     "outDir": "lib",
     "sourceMap": true,
     "declaration": true,
-    "module": "CommonJS",
-    "moduleResolution": "node",
-    "target": "es6",
+    "module": "Node16",
+    "moduleResolution": "node16",
+    "target": "es2020",
     "typeRoots": [
       "node_modules/@types"
     ],
     "lib": [
-      "es2018",
+      "es2020",
       "dom",
       "ESNext"
     ]

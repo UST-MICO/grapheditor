@@ -1,5 +1,8 @@
-import {assert} from '/chai/chai.js';
+import '/chai/chai.js';
+//import {assert} from '/chai/chai.js';
 import simulant from '/simulant/simulant.es.js';
+
+const assert = window.chai.assert; // fixme: after mocha update
 
 function _fireEventsSequentially(events) {
     const nextEvent = events.pop();

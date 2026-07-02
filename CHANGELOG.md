@@ -7,6 +7,14 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 
 ## [Unreleased]
 
+### Refactored
+
+- Refactored text wrapping code to use offscreen canvas to measure text
+
+### Incompatible changes
+
+- Updated to TypeScript 6 compiler
+
 
 ## [0.7.0] - 2024-01-10
 

@@ -58,9 +58,7 @@
                 "accessibility": "explicit"
             }
         ],
-        "@typescript-eslint/indent": ["error", 4, {
-            "ignoredNodes": ["MemberExpression"]
-        }],
+        "@stylistic/indent": ["error", 4, {"ignoredNodes": ["MemberExpression"]}],
         "@typescript-eslint/member-delimiter-style": [
             "error",
             {

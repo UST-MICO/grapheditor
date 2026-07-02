@@ -1,4 +1,7 @@
-import {assert} from '/chai/chai.js';
+import '/chai/chai.js';
+//import {assert} from '/chai/chai.js';
+
+const assert = window.chai.assert; // fixme: after mocha update
 
 describe('GraphEditor Basics', function () {
     afterEach(function () {
