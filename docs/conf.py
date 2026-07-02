@@ -18,331 +18,306 @@
 import os
 from pathlib import Path
 from shutil import copyfile
-from typing import Any, List, Tuple
-
-TS_DOC_COMMAND = ["npm", "run", "doc", "--"]
+from typing import Any, Sequence
 
 ON_RTD = os.environ.get('READTHEDOCS') == 'True'
 SKIP_TYPEDOC = ON_RTD or os.environ.get('SKIP_TYPEDOC') == 'True'
 
+PROJECT_PATH = Path(__file__).parent.parent
+PROJECT_PATH_STR = str(PROJECT_PATH)
+
 # -- sphinx-js Monkey patch --------------------------------------------------
 
-import os
-from pathlib import Path
-import sphinx_js
-from sphinx_js.typedoc import Analyzer, make_path_segments, relpath
-from sphinx_js.analyzer_utils import Command
-from sphinx_js import ir
-import subprocess
-from errno import ENOENT
-from json import dumps, load, dump
-from sphinx.errors import SphinxError
-from typing import List
-import re
-
-LINK_REGEX = re.compile(r'\{\@link\s+(\w+)\s*\}')
+import os  # noqa: E402
+from pathlib import Path  # noqa: E402
+from sphinx.util import rst  # noqa: E402
+import sphinx_js  # noqa: E402
+from sphinx_js import typedoc, renderers  # noqa: E402
+from sphinx_js.typedoc import typedoc_output  # noqa: E402
+from sphinx_js.analyzer_utils import Command  # noqa: E402
+from sphinx_js import ir  # noqa: E402
+import subprocess  # noqa: E402
+from errno import ENOENT  # noqa: E402
+from json import dumps, loads as json_loads  # noqa: E402
+from sphinx.errors import SphinxError  # noqa: E402
 
 TYPE_LINK_REPLACERS = {
-    'Module': ':js:mod:`~{}`',
-    'Function': ':js:func:`~{}`',
-    'Method': ':js:meth:`~{}`',
-    'Class': ':js:class:`~{}`',
-    'Interface': ':js:class:`~{}`',
-    'Enumeration': ':js:class:`~{}`',
-    'Property': ':js:attr:`~{}`',
-    'Accessor': ':js:meth:`~{}`',
+    'module': ':js:mod:`~{}`',
+    'function': ':js:func:`~{}`',
+    'method': ':js:meth:`~{}`',
+    'class': ':js:class:`~{}`',
+    'interface': ':js:class:`~{}`',
+    'enumeration': ':js:class:`~{}`',
+    'attribute': ':js:attr:`~{}`',
+    'property': ':js:attr:`~{}`',
+    'accessor': ':js:meth:`~{}`',
 }
 
 
-GROUP_TO_KIND_STRING = {
-    'Constructors': 'Constructor',
-    'Accessors': 'Accessor',
-    'References': 'Reference',  # TODO check
-    'Variables': 'Variable',  # TODO check
-    'Modules': 'Module',
-    'External Modules': 'External module',  # TODO check
-    'Properties': 'Property',
-    'Enumerations': 'Enumeration',  # TODO check
-    'Classes': 'Class',
-    'Enumeration Members': 'Enumeration member',  # TODO check
-    'Methods': 'Method',
-    'Functions': 'Function',
-    'Interfaces': 'Interface',
-    'Call Signatures': 'Call signature',  # TODO check
-    'Constructor Signatures': 'Constructor signature'  # TODO check
-}
+def patch_javascript():
+    js_path = Path(sphinx_js.__path__[0]) / "js" / "convertTopLevel.ts"
+    PATCH_START = "// START MONKEYPATCH xdaCb1up"
+    PATCH_END = "// END MONKEYPATCH"
+    CURRENT_PATCH_VERSION = "2"
+
+    text_content = js_path.read_text(encoding="utf-8").splitlines(keepends=True)
+
+    patch_start_line = None
+    patch_end_line = None
+    for i, line in enumerate(text_content):
+        if patch_start_line is None and line.lstrip().startswith(PATCH_START):
+            patch_start_line = i
+        if patch_end_line is None and line.lstrip().startswith(PATCH_END):
+            patch_end_line = i
+    if patch_start_line is not None and patch_end_line is not None and patch_start_line > patch_end_line:
+        raise ValueError("Cannot apply patch to a malformed patched file!")
+    if patch_start_line is not None and patch_end_line is None:
+        raise ValueError("Cannot apply patch to a malformed patched file, missing patch end indicator!")
+
+    CURRENT_PATCH_START = f"{PATCH_START} ({CURRENT_PATCH_VERSION})"
+    if patch_start_line and text_content[patch_start_line].lstrip().startswith(CURRENT_PATCH_START):
+        return  # patch already applied
+
+    if patch_start_line is None:
+        is_in_function = 0
+        for i, line in enumerate(text_content):
+            if line.startswith("function renderCommentContent("):
+                is_in_function = True
+            if is_in_function and line.startswith("}"):
+                break  # no longer in the correct function
+            if is_in_function and line.startswith('    throw new Error("Not implemented'):
+                # in the case where the patch is not yet applied, start and end index
+                # overlap for the rest of the logic to work the same in all cases
+                patch_start_line = i
+                patch_end_line = i - 1
+
+    assert patch_start_line is not None
+    assert patch_end_line is not None
+
+    patched_content = []
+    patched_content.extend(text_content[:patch_start_line])
+    patched_content += f"    {CURRENT_PATCH_START}\n"
+    patched_content.extend([
+        '    if (x.kind === "inline-tag" && x.tag === "@link") {\n',
+        '      return { type: "text", text: `{@link ${x.text}}` };\n'
+        '    }\n'
+    ])
+    patched_content += f"    {PATCH_END}\n"
+    patched_content.extend(text_content[patch_end_line+1:])
+
+    js_path.write_text("".join(patched_content), encoding="utf-8")
 
 
-class CustomAnalyzer(Analyzer):
-
-    def __init__(self, base_dir: str, json, **kwargs) -> None:
-        """
-        :arg json: The loaded JSON output from typedoc
-        :arg base_dir: The absolute path of the dir relative to which to
-            construct file-path segments of object paths
-        """
-        self._index_by_name_and_kind = {}
-        base_dir = base_dir.removesuffix("/docs") + "/src"
-        super().__init__(base_dir=base_dir, json=json, **kwargs)
-        del self._index_by_name_and_kind
-
-    @classmethod
-    def from_disk(cls, abs_source_paths: List[str], app, base_dir: str):
-        assert len(abs_source_paths) == 1, "only one project in this repository"
-        doc_folder = Path(app.confdir)
-        ts_project_folder = Path(abs_source_paths[0])
-
-        json = CustomAnalyzer._load_typedoc_output(ts_project_folder, doc_folder, app.config.jsdoc_config_path)
-        return cls(base_dir=base_dir, json=json)
-
-    @staticmethod
-    def _load_typedoc_output(abs_source_path: Path, sphinx_conf_dir: Path, jsdoc_config_path):
-        command = Command(TS_DOC_COMMAND[0])
-        if len(TS_DOC_COMMAND) > 1:
-            command.add(*TS_DOC_COMMAND[1:])
-        if jsdoc_config_path:
-            command.add('--tsconfig', jsdoc_config_path)
-
-        json_path = sphinx_conf_dir / Path('typedoc.json')
-
-        command.add('--json', str(json_path), str(abs_source_path))
-
-        if not SKIP_TYPEDOC:
-            try:
-                subprocess.call(command.make())
-            except OSError as exc:
-                if exc.errno == ENOENT:
-                    raise SphinxError('%s was not found. Install it using "npm install -g typedoc".' % command.program)
-                else:
-                    raise
-
-            def sanitize_typedoc_json(typedoc):
-                """Make all paths relative to not leak path info to github."""
-                if not isinstance(typedoc, dict):
-                    return
-                for key in typedoc:
-                    if isinstance(typedoc[key], dict):
-                        sanitize_typedoc_json(typedoc[key])
-                    if isinstance(typedoc[key], list):
-                        for entry in typedoc[key]:
-                            sanitize_typedoc_json(entry)
-                    if key == 'originalName':
-                        filepath = typedoc[key]
-                        if filepath:
-                            p = Path(filepath)
-                            typedoc[key] = str(p.relative_to(abs_source_path))
-            sanitized_doc = {}
-            with json_path.open() as typedoc_json:
-                typedoc = load(typedoc_json)
-                sanitize_typedoc_json(typedoc)
-                sanitized_doc = typedoc
-            with json_path.open(mode='w') as typedoc_json:
-                dump(sanitized_doc, typedoc_json)
+# apply javascript patch
+patch_javascript()
 
 
-        with json_path.open() as typedoc:
-            # typedoc emits a valid JSON file even if it finds no TS files in the dir:
-            return load(typedoc)
+old_typedoc_output = typedoc_output
 
-    def get_object(self, path_suffix, as_type=None):
-        return super().get_object(path_suffix, as_type)
 
-    def _convert_all_nodes(self, root):
-        # the only place wher building _index_by_name_and_kind makes sense
-        for type_ in self._index.values():
-            if "name" in type_ and "kind" in type_:
-                self._index_by_name_and_kind[(type_["name"], type_["kind"])] = type_
+def _sanitize_data_recursive(data, parent_key: str|None = None):
+    if isinstance(data, dict):
+        sanitized = {
+            k: _sanitize_data_recursive(v, k) for k, v in data.items()
+        }
+        # Fix sphinx_js not being able to properly map default export of grapheditor
+        # to its original name
+        match sanitized:
+            case {"deppath": "grapheditor", "kind": "class", "constructor_": _, "name": "default"}:
+                sanitized["name"] = "GraphEditor"
+                if sanitized["path"][-1] == "default":
+                    sanitized["path"][-1] = "GraphEditor"
+                return sanitized
+        return sanitized
+    if isinstance(data, list):
+        if parent_key in ("path", "exported_from"):
+            new_path = [_sanitize_data_recursive(v) for v in data]
+            if len(new_path) > 2 and new_path[0] == "./" and new_path[1] == "docs/" and new_path[2] == "src/":
+                new_path = new_path[3:]
+            elif len(new_path) > 1 and new_path[0] == "./" and new_path[1] == "src/":
+                new_path = new_path[2:]
+            if len(new_path) == 2 and new_path[0] == "grapheditor." and new_path[1] == "default":
+                return ["grapheditor.", "GraphEditor"]
+            return new_path
+        return [_sanitize_data_recursive(v) for v in data]
+    if isinstance(data, str):
+        if data.startswith(PROJECT_PATH_STR):
+            return str(Path(data).relative_to(PROJECT_PATH))
+        if data.startswith("./docs/src/"):
+            return data.removeprefix("./docs/src/")
+        if data.startswith("/home/fabian"):
+            raise ValueError(data.startswith(PROJECT_PATH_STR), data)
+    return data
 
-        if root and "kindString" not in root:
-            root["kindString"] = "Module"
 
-        return super()._convert_all_nodes(root)
+def sanitize_json(json_path: Path):
+    data = json_loads(json_path.read_text())
+    sanitized = _sanitize_data_recursive(data)
+    sanitized_text = dumps(sanitized, indent=4)
+    if "/home/fabian" in sanitized_text:
+        raise ValueError("FAILED")
+    json_path.write_text(dumps(sanitized, indent=4))
 
-    def _get_js_role_for_type(self, type_name: str, default_replacer=None):
-        for kind, replacer in TYPE_LINK_REPLACERS.items():
-            if (type_name, kind) in self._index_by_name_and_kind:
-                return replacer.format(type_name)
-        if default_replacer:
-            return default_replacer.format(type_name)
-        return type_name
 
-    def _type_name(self, type):
-        """Return a string description of a type.
+NAME_TO_KIND = {}
 
-        :arg type: A TypeDoc-emitted type node
 
-        """
-        if type is None:
-            return "NONE"
-        type_of_type = type.get('type')
+def _typedoc_output(
+    abs_source_paths: Sequence[str],
+    base_dir: str,
+    sphinx_conf_dir: str | Path,
+    typedoc_config_path: str | None,
+    tsconfig_path: str | None,
+    ts_sphinx_js_config: str | None,
+) -> tuple[list[ir.TopLevelUnion], dict[str, Any]]:
+    if len(abs_source_paths) != 1:
+        raise ValueError("Monkeypatch does not work with multiple sources!")
+    json_path = Path(sphinx_conf_dir) / "typedoc_output.json"
+    TYPEDOC_NODE_MODULES = str(Path('../node_modules').resolve())
 
-        if type_of_type == 'reflection':
-            declaration = type.get('declaration', {})
-            if declaration.get('signatures'):
-                names = []
-                for signature in declaration.get('signatures'):
-                    name = '(' + ', '.join(
-                        p.get('name') + ': ' + self._type_name(p.get('type'))
-                        for p in signature.get('parameters', [])
-                        if p.get('type')
-                    ) + ') => ' + self._type_name(signature.get('type'))
-                    names.append(name)
-                return ' '.join(names)
-            elif declaration.get('children'):
-                variables = ', '.join(
-                    v.get('name') + ': ' + self._type_name(v.get('type'))
-                    for v in declaration.get('children')
-                    if v.get('type')
-                )
-                names = []
-                if declaration.get('indexSignature'):
-                    extras = [variables]
-                    index_signature = declaration.get('indexSignature')
-                    if isinstance(index_signature, dict):
-                        index_signature = [index_signature]
-                    for sig in index_signature:
-                        inner_text = ''
-                        if sig.get('parameters'):
-                            p = sig.get('parameters')[0]
-                            inner_text += p.get('name') + ': ' + self._type_name(p.get('type'))
-                        extras.append('[' + inner_text + ']: ' + self._type_name(sig.get('type')))
-                    names.append('{' + ', '.join(extras) + '}')
-                else:
-                    names.append('{' + variables + '}')
-                return ''.join(names)
-        elif type_of_type == 'typeParameter':
-            names = [type.get('name')]
-            constraint_type = type.get('constraint').get('type')
-            if constraint_type == 'union' or constraint_type == 'reference':
-                names.append("extends")
-                names.append(self._type_name(type.get('constraint')))
-            else:
-                print('Encountered unknown constraint type for typeParameter', constraint_type)
-            return ' '.join(names)
-        elif type_of_type == 'literal':
-            value = type.get('value')
-            if isinstance(value, str):
-                return '"{}"'.format(value)
-            elif value is None:
-                return "null"
-            else:
-                return str(value)
-        return super()._type_name(type)
+    if not SKIP_TYPEDOC:
+        env = os.environ.copy()
+        env["TYPEDOC_NODE_MODULES"] = TYPEDOC_NODE_MODULES
+        command = Command("npx")
+        command.add("tsx@4.15.8")
+        dir_ = Path(sphinx_js.__path__[0]) / "js"
+        command.add("--tsconfig", str(dir_ / "tsconfig.json"))
+        command.add("--import", str(dir_ / "registerImportHook.mjs"))
+        command.add(str(dir_ / "main.ts"))
+        if ts_sphinx_js_config:
+            command.add("--sphinxJsConfig", ts_sphinx_js_config)
+        command.add("--entryPointStrategy", "expand")
 
-    def _convert_node(self, node) -> Tuple[ir.TopLevel, List[dict]]:
-        # override convert to fix errors with build
-        for group in node.get("groups", []):
-            group_kind_string = GROUP_TO_KIND_STRING.get(group.get("title", ""))
-            if group_kind_string:
-                for node_id in group.get("children", []):
-                    self._index.get(node_id, {})["kindString"] = group_kind_string
-        kind_string = node.get('kindString')
-        if kind_string in ('Function', 'Constructor', 'Method'):
-            # grab source from parent node if possible (should always be possible?)
-            parent = node
-            while parent:
-                if 'sources' in parent:
-                    break
-                parent = node.get('__parent')
-            else:
-                raise KeyError('Node of Kind {} has no "sources" attribute and no parent node could provide one!'.format(kind_string))
-            if parent:
-                node['sources'] = parent['sources']
-        if kind_string == 'Class':
-            if node.get('name') == 'default':
-                # default exports somehow get the name 'default' from typedoc, this tries to fix it
-                DEFAULT_EXPORT_NAME_FIXES = {
-                    'grapheditor.ts': 'GraphEditor',
-                }
-                for source in node.get('sources'):
-                    file_name = source.get('fileName')
-                    if file_name in DEFAULT_EXPORT_NAME_FIXES:
-                        node['name'] = DEFAULT_EXPORT_NAME_FIXES[file_name]
-        elif kind_string == 'Accessor':
-            get_signature = node.get('getSignature')
-            if get_signature and not isinstance(get_signature, list):
-                node["getSignature"] = [get_signature]
-            set_signature = node.get('setSignature')
-            if set_signature and not isinstance(set_signature, list):
-                node["setSignature"] = [set_signature]
-        elif kind_string in ['Function', 'Constructor', 'Method']:
-            for sig in node.get('signatures', []):
-                sig['kindString'] = 'Call signature'
+        # hardcoded typedoc config path
+        typedoc_config_path = str(
+            (Path(sphinx_conf_dir).parent / "typedoc.json").resolve()
+        )
+        command.add("--options", typedoc_config_path)
 
-        return super()._convert_node(node)
+        # hardcoded tsconfig path
+        tsconfig_path = str(
+            (Path(sphinx_conf_dir).parent / "tsconfig.json").resolve()
+        )
+        command.add("--tsconfig", tsconfig_path)
 
-    def _related_types(self, node, kind):
-        types = []
-        for type in node.get(kind, []):
-            if type['type'] == 'reference':
-                if 'id' in type:
-                    pathname = ir.Pathname(
-                        make_path_segments(self._index[type['id']], self._base_dir)
-                    )
-                    types.append(pathname)
-                else:
-                    types.append(ir.Pathname([type['name']]))
-            # else it's some other thing we should go implement
-        return types
+        command.add("--basePath", base_dir)
+        command.add("--excludePrivate", "false")
 
-    def _containing_deppath(self, node):
+        # hardcoded output path
+        command.add("--json", str(json_path), *abs_source_paths)
         try:
-            return super()._containing_deppath(node)
-        except ValueError:
-            sources = node.get("sources", [])
-            if sources:
-                source = sources[0]
-                return f"./{source.get('fileName')}"
-            raise
-
-    def _get_comment_parts(self, node):
-        for part in node.get("comment", {}).get("summary", []):
-            kind = part.get("kind")
-            if kind == "text":
-                yield part["text"]
-            elif kind == "code":
-                yield f"`{part['text']}`"
-            elif kind == "inline-tag":
-                target = self._index.get(part["target"])
-                template = TYPE_LINK_REPLACERS.get(target.get("kindString")) if target else None
-                if template:
-                    yield template.format(target.get("name", part['text']) if target else part['text'])
-                else:
-                    yield f"``{part['text']}``"
+            subprocess.run(command.make(), check=True, env=env)
+        except OSError as exc:
+            if exc.errno == ENOENT:
+                raise SphinxError(
+                    f'{command.program} was not found. Install it using "npm install".'
+                )
             else:
-                print("UNKNONW TEXT COMPONENT", kind)
+                raise
+        old_typedoc_output(abs_source_paths, base_dir, sphinx_conf_dir, typedoc_config_path, tsconfig_path, ts_sphinx_js_config)
 
-    def _top_level_properties(self, node):
-        result = super()._top_level_properties(node)
-        if isinstance(result, dict):
-            # replace single ` with double `` to get correct rendering of inline code
-            description = result.get("description", "")
-            if description:
-                description = description.replace('`', '``')
-                result["description"] = LINK_REGEX.sub(lambda m: self._get_js_role_for_type(m[1], r"{\@link ``\1``}"), description)
+        sanitize_json(json_path)
 
-        if isinstance(result, dict) and node.get("comment", {}).get("summary"):
-            result["description"] = " ".join(self._get_comment_parts(node))
-        return result
+    typedoc_json = json_path.read_text()
+    json_ir, extra_data = json_loads(typedoc_json)
 
-sphinx_js.TsAnalyzer = CustomAnalyzer
+    not_unique = set()
 
-# fix jsrenderer for fields
+    def extract_names(json_data):
+        for entry in json_data:
+            if not isinstance(entry, dict):
+                continue
+            if "path" not in entry and "kind" not in entry:
+                continue
+            path = entry["path"]
+            kind = entry["kind"]
+            if kind == "typeAlias":
+                continue  # Ignore type aliases
+            if NAME_TO_KIND.get(("".join(path)).replace("#", "."), None) == kind:
+                continue  # already pocessed this entry
+            for i in range(len(path), 0, -1):
+                key = ("".join(path[-i:])).replace("#", ".")
+                if key in NAME_TO_KIND:
+                    not_unique.add(key)
+                else:
+                    NAME_TO_KIND[key] = kind
+            if "members" in entry:
+                extract_names(entry["members"])
 
-from sphinx_js.renderers import JsRenderer
+    extract_names(json_ir)
 
-old_fields = JsRenderer._fields
+    for key in not_unique:
+        del NAME_TO_KIND[key]
 
-def new_fields(self, obj):
-    for heads, tail in old_fields(self, obj):
-        # also escape spaces in head as typescript types can have spaces...
-        yield [h.replace(' ', r'\ ') for h in heads], tail
+    return ir.json_to_ir(json_ir), extra_data
 
-JsRenderer._fields = new_fields
+
+typedoc.typedoc_output = _typedoc_output
+
+old_render_description = renderers.render_description
+
+
+def _render_description(description: ir.Description):
+    if isinstance(description, str):
+        return old_render_description(description)
+
+    description_items = []
+
+    for item in description:
+        if item.type == "text" and item.text.startswith("{@link ") and item.text.endswith("}"):
+            link_target: str = item.text[7:-1].strip()
+
+            new_item: ir.DescriptionText
+
+            if link_target in NAME_TO_KIND:
+                new_item = ir.DescriptionText(
+                    TYPE_LINK_REPLACERS[NAME_TO_KIND[link_target]].format(link_target)
+                )
+            else:
+                new_item = ir.DescriptionText(f"``{link_target}``")
+
+            description_items.append(new_item)
+            continue
+        if item.type == "code" and item.code.startswith("`") and item.code.endswith("`"):
+            link_target: str = item.code[1:-1].strip()
+            if "`" in link_target:
+                description_items.append(item)
+                continue
+
+            if link_target in NAME_TO_KIND:
+                new_item = ir.DescriptionText(
+                    TYPE_LINK_REPLACERS[NAME_TO_KIND[link_target]].format(link_target)
+                )
+                description_items.append(new_item)
+                continue
+
+        description_items.append(item)
+
+    return old_render_description(description_items)
+
+
+renderers.render_description = _render_description
+
+
+def ts_type_xref_formatter(config, xref: ir.TypeXRef):
+    if isinstance(xref, ir.TypeXRefInternal):
+        name = xref.name
+        kind = xref.kind
+        if kind is None:
+            kind = NAME_TO_KIND.get(name, None)
+        if kind is None:
+            name = "".join(xref.path)
+            kind = NAME_TO_KIND.get(name, None)
+        if kind is None:
+            return f"``{rst.escape(xref.name)}``"
+        return f":js:{kind}:`{rst.escape(name)}`"
+    else:
+        # Otherwise, don't insert a xref
+        return f"``{rst.escape(xref.name)}``"
 
 # -- Load information from config --------------------------------------------
 
-from tomli import loads as toml_load
+from tomli import loads as toml_load  # noqa: E402
 
 current_path = Path(".").absolute()
 
@@ -367,8 +342,7 @@ with pyproject_path.open() as pyproject:
 
 package_json: Any
 
-with package_path.open() as package:
-    package_json = load(package)
+package_json = json_loads(package_path.read_text())
 
 
 doc_package_config = pyproject_toml["tool"]["poetry"]
@@ -560,10 +534,11 @@ autosectionlabel_prefix_document = True
 def setup(app):
     app.add_config_value('on_rtd', ON_RTD, 'env')
 
+
 # -- Options for jsdoc -------------------------------------------------------
 js_language = 'typescript'
-root_for_relative_js_paths = '.'
-js_source_path = '../.'
+root_for_relative_js_paths = str(Path('..').resolve().absolute())
+js_source_path = str(Path('..').resolve().absolute())
 
 # -- Copy changelog ----------------------------------------------------------
 copyfile(changelog, Path('./changelog.md'))
