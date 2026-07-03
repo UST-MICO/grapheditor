@@ -264,10 +264,17 @@ export class NodeRenderer {
             );
         });
 
+        const textWrapQueue: Array<() => void> = [];
+
         nodeSelection
             .call(graph.updateNodeClasses.bind(graph))
             .call(graph.updateNodeHighligts.bind(graph))
-            .call(this.updateNodeText)
+            .call((selection) => this.updateNodeText(selection, false, textWrapQueue));
+
+        // wrap all queued text elements
+        textWrapQueue.forEach(task => task());
+
+        nodeSelection
             .call(graph.extrasRenderer.updateDynamicProperties)
             .call(this.updateNodeDropAreas)
             .each(function (d) {
@@ -340,8 +347,10 @@ export class NodeRenderer {
      * Update text of existing nodes.
      *
      * @param nodeSelection d3 selection of nodes to update with bound data
+     * @param force set this to true to force textwrapping (see {@link wrapText})
+     * @param taskQueue provide a taskQueue to delay textWrapping (see {@link wrapText})
      */
-    public updateNodeText = (nodeSelection: Selection<SVGGElement, Node, any, unknown>, force: boolean = false) => {
+    public updateNodeText = (nodeSelection: Selection<SVGGElement, Node, any, unknown>, force: boolean = false, taskQueue: Array<() => void>|null = null) => {
         nodeSelection.each(function (d) {
             const singleNodeSelection = select(this);
             const textSelection = singleNodeSelection.selectAll<SVGTextElement, unknown>('text').datum(function () {
@@ -353,7 +362,7 @@ export class NodeRenderer {
                     newText = '';
                 }
                 // make sure it is a string
-                wrapText(this, newText.toString(), force);
+                wrapText(this, newText.toString(), force, taskQueue);
             });
         });
     };

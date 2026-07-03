@@ -294,6 +294,10 @@ export class EdgeRenderer {
     public updateEdgeText(edgeGroupSelection: Selection<SVGGElement, Edge, any, unknown>, d: Edge, force: boolean = false) {
         const graph = this.derefGraph();
         const self = this;
+
+        const textWrapQueue: Array<() => void> = [];
+        const afterTextWrapQueue: Array<() => void> = [];
+
         edgeGroupSelection.each(function (edge) {
             const textSelection = select(this).selectAll<SVGGElement, TextComponent>('g.text-component')
                 .data(edge.texts != null ? edge.texts : [])
@@ -324,51 +328,59 @@ export class EdgeRenderer {
                     }
                     // make sure it is a string
                     newText = newText.toString();
-                    wrapText(this as SVGTextElement, newText, force);
+                    wrapText(this as SVGTextElement, newText, force, textWrapQueue);
                 });
-            textSelection.each(function (textComponent) {
-                const g: Selection<SVGGElement, TextComponent, any, unknown> = select(this).datum<TextComponent>(textComponent);
-                const templateId = textComponent.template ?? 'default-textcomponent';
-                const dynTemplate = graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicTextComponentTemplate>(templateId);
-                try {
-                    dynTemplate?.updateAfterTextwrapping(g, graph, { parent: edge });
-                } catch (error) {
-                    console.error(`An error occured updating the text component in edge ${edgeId(edge)} after text wrapping`, textComponent, error);
-                }
-            });
-            const path = edgeGroupSelection.select<SVGPathElement>('path.edge');
-            textSelection.call(drag<SVGGElement, TextComponent>()
-                .subject(
-                    ((event: Event, text: TextComponent) => {
-                        if (!((text as unknown as TextComponent).draggable ?? true)) {
-                            return; // text component is not draggable
-                        }
-                        return text;
-                    }) as any // function is allowed to return undefined
-                )
-                .on('start', (event, text) => {
-                    self.onEdgeTextDrag('start', text as unknown as TextComponent, edge, EventSource.USER_INTERACTION);
-                })
-                .on('drag', ((event: DragEvent, text: TextComponent) => {
-                    const pathNode = path.node();
-                    if (pathNode == null) {
-                        console.error('Cannot update textcomponent, svg path element is missing.');
-                        return;
+
+            const afterTextWrap = () => {
+                textSelection.each(function (textComponent) {
+                    const g: Selection<SVGGElement, TextComponent, any, unknown> = select(this).datum<TextComponent>(textComponent);
+                    const templateId = textComponent.template ?? 'default-textcomponent';
+                    const dynTemplate = graph.dynamicTemplateRegistry.getDynamicTemplate<DynamicTextComponentTemplate>(templateId);
+                    try {
+                        dynTemplate?.updateAfterTextwrapping(g, graph, { parent: edge });
+                    } catch (error) {
+                        console.error(`An error occured updating the text component in edge ${edgeId(edge)} after text wrapping`, textComponent, error);
                     }
-                    const length = pathNode.getTotalLength();
-                    const positionOnLine = normalizePositionOnLine(text.positionOnLine);
-                    const absolutePositionOnLine = calculateAbsolutePositionOnLine(length, positionOnLine, text.absolutePositionOnLine);
-                    const referencePoint = pathNode.getPointAtLength(absolutePositionOnLine);
-                    text.offsetX = event.x - referencePoint.x;
-                    text.offsetY = event.y - referencePoint.y;
-                    self.onEdgeTextPositionChange(text, edge);
-                    self.updateEdgeTextPositions(edgeGroupSelection, edge);
-                }) as any) // FIXME: remove type hack when types are up to date
-                .on('end', ((event: unknown, text: TextComponent) => {
-                    self.onEdgeTextDrag('end', text, edge, EventSource.USER_INTERACTION);
-                }) as any) // FIXME: remove type hack when types are up to date
-            );
+                });
+                const path = edgeGroupSelection.select<SVGPathElement>('path.edge');
+                textSelection.call(drag<SVGGElement, TextComponent>()
+                    .subject(
+                        ((event: Event, text: TextComponent) => {
+                            if (!((text as unknown as TextComponent).draggable ?? true)) {
+                                return; // text component is not draggable
+                            }
+                            return text;
+                        }) as any // function is allowed to return undefined
+                    )
+                    .on('start', (event, text) => {
+                        self.onEdgeTextDrag('start', text as unknown as TextComponent, edge, EventSource.USER_INTERACTION);
+                    })
+                    .on('drag', ((event: DragEvent, text: TextComponent) => {
+                        const pathNode = path.node();
+                        if (pathNode == null) {
+                            console.error('Cannot update textcomponent, svg path element is missing.');
+                            return;
+                        }
+                        const length = pathNode.getTotalLength();
+                        const positionOnLine = normalizePositionOnLine(text.positionOnLine);
+                        const absolutePositionOnLine = calculateAbsolutePositionOnLine(length, positionOnLine, text.absolutePositionOnLine);
+                        const referencePoint = pathNode.getPointAtLength(absolutePositionOnLine);
+                        text.offsetX = event.x - referencePoint.x;
+                        text.offsetY = event.y - referencePoint.y;
+                        self.onEdgeTextPositionChange(text, edge);
+                        self.updateEdgeTextPositions(edgeGroupSelection, edge);
+                    }))
+                    .on('end', ((event: unknown, text: TextComponent) => {
+                        self.onEdgeTextDrag('end', text, edge, EventSource.USER_INTERACTION);
+                    }))
+                );
+            };
+            afterTextWrapQueue.push(afterTextWrap);
         });
+
+        // call delayed tasks in order
+        textWrapQueue.forEach(task => task());
+        afterTextWrapQueue.forEach(task => task());
     }
 
     /**

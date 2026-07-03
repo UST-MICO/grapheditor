@@ -353,6 +353,26 @@ export function getTextProperties(element: SVGTextElement): TextProperties|null 
             measurements: new Map(),
         };
     }
+
+    // calculate lineheight
+    try {
+        const lineHeightPx = getStylePxValue('line-height', styleMap, oldStyleDeclaration);
+        props.lineheight = lineHeightPx ?? undefined;
+    } catch {
+        const lineHeightText = getStyleStringValue('line-height', styleMap, oldStyleDeclaration);
+        if (lineHeightText === 'normal' && props.fontSize != null) {
+            props.lineheight = 1.2 * props.fontSize;
+        }
+        if (lineHeightText && lineHeightText.match('^\d+\.?\d*$') && props.fontSize != null) {
+            props.lineheight = parseFloat(lineHeightText) * props.fontSize;
+        }
+    }
+
+    if (props.lineheight == undefined && props.fontSize != undefined) {
+        // use a default value for lineheight
+        props.lineheight = 1.2 * props.fontSize;
+    }
+
     updateLang(element, props);
     return props;
 }
@@ -372,12 +392,31 @@ export function getTextProperties(element: SVGTextElement): TextProperties|null 
  * @param element element to wrap text into
  * @param newText text to wrap
  * @param force force rewrap
+ * @param taskQueue an optional array to put in textwrapping tasks to delay them for
+ *     batch processing at a later point in time. The calling function is responsible
+ *     for executing the tasks put into the task queue! If no queue is provided, tasks
+ *     will be executed immediately.
  */
-// eslint-disable-next-line complexity
-export function wrapText(element: SVGTextElement, newText: string, force: boolean = false): void {
+export function wrapText(element: SVGTextElement, newText: string, force: boolean = false, taskQueue: Array<() => void>|null = null): void {
     const text = select(element);
     const props = getTextProperties(element);
     if (props == null) {
+        return;
+    }
+
+    const task = () => wrapTextDelayed(text, newText, props, force);
+
+    if (taskQueue == null) {
+        // immediately run task
+        task();
+    } else {
+        // add task to queue
+        taskQueue.push(task);
+    }
+}
+
+function wrapTextDelayed(text: Selection<SVGTextElement, unknown, null, undefined>, newText: string, props: TextProperties, force: boolean = false): void {
+    if (text.empty()) {
         return;
     }
 
@@ -420,7 +459,7 @@ export function wrapText(element: SVGTextElement, newText: string, force: boolea
 
     if (props.height == null || isNaN(props.height)) {
         // no height => wrap a single line
-        const unwrappedText = wrapSingleLine(element, props.width as number, newText, props, true, force);
+        const unwrappedText = wrapSingleLine(text.node() as SVGTextElement, props.width as number, newText, props, true, force);
         props.lastWrappedText = newText.substring(0, newText.length - unwrappedText.length);
         props.lastWrappedOverflow = lTrim(unwrappedText) !== '';
         resetTextTransform(text, props, props.centerY != null);
@@ -433,7 +472,7 @@ export function wrapText(element: SVGTextElement, newText: string, force: boolea
     }
 
     // wrap multiline
-    const spanSelection = calculateMultiline(text, props.height, props.x, props.y, force);
+    const spanSelection = calculateMultiline(text, props, force);
     const lines = spanSelection.nodes();
     let currentNewText = newText;
     for (let index = 0; index < lines.length; index++) {
@@ -714,7 +753,7 @@ export function wrapTextLines(text: Selection<SVGTextElement, unknown, null, und
 
     let lineheight = parseFloat(text.attr('data-lineheight'));
     if (force || isNaN(lineheight)) {
-        lineheight = calculateLineHeight(text);
+        lineheight = calculateLineHeight(text, props);
     }
     lineheight = Math.abs(lineheight); // don't allow negative lineheight
     props.lineheight = lineheight;
@@ -975,6 +1014,7 @@ export function centerTextVertically(text: Selection<SVGTextElement, unknown, nu
  * Calculate and create a multiline span group.
  *
  * @param text parent text element
+ * @param props the current text properties
  * @param height max height
  * @param x x coordinate
  * @param y y coordinate
@@ -982,10 +1022,18 @@ export function centerTextVertically(text: Selection<SVGTextElement, unknown, nu
  * @param linespacing 'auto' or number (default: 'auto')
  */
 // eslint-disable-next-line max-len
-export function calculateMultiline(text: Selection<SVGTextElement, unknown, null, undefined>, height: number, x: number, y: number, force: boolean = false, linespacing: string = 'auto') {
+export function calculateMultiline(text: Selection<SVGTextElement, unknown, null, undefined>, props: TextProperties, force: boolean = false, linespacing: string = 'auto') {
+    const height = props.height;
+    const x = props.x;
+    const y = props.y;
+
+    if (height == null) {
+        throw Error("Text properties must contain a valid height to calculate a multiline text field!");
+    }
+
     let lineheight = parseFloat(text.attr('data-lineheight'));
     if (force || isNaN(lineheight)) {
-        lineheight = calculateLineHeight(text);  // FIXME update line height calculation
+        lineheight = calculateLineHeight(text, props);  // FIXME update line height calculation
     }
     lineheight = Math.abs(lineheight); // don't allow negative lineheight
     const lines: number[] = [];
@@ -1025,26 +1073,13 @@ export function calculateMultiline(text: Selection<SVGTextElement, unknown, null
  * Falls back to measuring the character 'M' to extract the actual line height.
  *
  * @param text the text element to calculate the line height for
+ * @param props the text properties containing the css measurments
  * @returns the line height in svg units
  */
-function calculateLineHeight(text: Selection<SVGTextElement, unknown, null, undefined>) { // FIXME use new text measurement approach for this
-    let lineheight: number|null = null;
-    const styleLineheight = text.style('line-height');
-    const styleFontSize = text.style('font-size');
-    let fontSize = NaN;
-    if (styleFontSize.endsWith('px')) {
-        fontSize = parseFloat(styleFontSize);
-    }
-    if (styleLineheight === 'normal') {
-        lineheight = 1.2 * fontSize;
-    }
-    if (styleLineheight.match('^\d+\.?\d*$')) {
-        lineheight = parseFloat(styleLineheight) * fontSize;
-    }
-    if (styleLineheight.endsWith('px')) {
-        lineheight = parseFloat(styleLineheight);
-    }
+function calculateLineHeight(text: Selection<SVGTextElement, unknown, null, undefined>, props: TextProperties) { // FIXME use new text measurement approach for this
+    let lineheight: number|null = props.lineheight ?? null;
     if (lineheight == null || isNaN(lineheight)) {
+        console.warn("Could not determine lineheight from CSS, fallback to slow dom measurement.");
         text.selectAll('tspan').remove(); // remove all child elements before calculation
         text.text('M'); // use M as measurement character.
         lineheight = text.node()?.getExtentOfChar(0)?.height ?? 15;

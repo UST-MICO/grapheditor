@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and this p
 ### Refactored
 
 - Refactored text wrapping code to use offscreen canvas to measure text
+- Introduce comprehensive TextProperties object to store measurments from CSS
+- Some textwrapping functions have changed signatures
+- Add optional taskQueue parameter to `wrapText` allowing delayed wrapping and\
+    batching of the text wrap operations. This is used in node and edge renderer\
+    to reduce style recalculations of the browser by delaying the textwrapping\
+    until all text elements are processed and their CSS properties are measured.
 
 ### Incompatible changes
 
