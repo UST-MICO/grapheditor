@@ -38,7 +38,6 @@
     "lint": "eslint --ext=.ts",
     "lint-all": "eslint --ext=.ts .",
     "doc": "typedoc --exclude **/node_modules/**/*.* --exclude **/lib/**/* --exclude **/lib-esm/**/* --externalPattern **/node_modules/**/* --excludeExternals --entryPoints ./src/* --entryPointStrategy expand ./src --emit docs --out typedoc --json docs/typedoc.json",
-    "doc-sphinx": "tsx --tsconfig '/home/fabian/.cache/pypoetry/virtualenvs/grapheditor-webcomponent-docs-FSBLijXX-py3.12/lib/python3.12/site-packages/sphinx_js/js/tsconfig.json' --import '/home/fabian/.cache/pypoetry/virtualenvs/grapheditor-webcomponent-docs-FSBLijXX-py3.12/lib/python3.12/site-packages/sphinx_js/js/registerImportHook.mjs' '/home/fabian/.cache/pypoetry/virtualenvs/grapheditor-webcomponent-docs-FSBLijXX-py3.12/lib/python3.12/site-packages/sphinx_js/js/main.ts' --entryPointStrategy expand --basePath '/home/fabian/git/private/grapheditor' --excludePrivate false --json ./docs '/home/fabian/git/private/grapheditor'",
     "clean": "rm -rf _bundles lib lib-esm",
     "package": "tsc",
     "package-es6": "tsc -m es6 --outDir lib-esm",
