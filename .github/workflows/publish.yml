@@ -1,0 +1,49 @@
+name: Publish Package
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Tag to publish"
+        required: true
+        type: string
+      dist-tag:
+        description: "npm dist-tag for the published version"
+        required: true
+        default: latest
+        type: string
+
+env:
+  NODE_VERSION: 22
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: https://npm.pkg.github.com
+      - name: Install dependencies
+        run: npm ci
+      - name: Build package
+        run: npm run package-all
+      - name: Scope package to the repository owner
+        run: |
+          owner="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          unscoped_name="$(npm pkg get name | tr -d '"' | sed 's|^@[^/]*/||')"
+          npm pkg set name="@${owner}/${unscoped_name}"
+      - name: Publish to GitHub package registry
+        run: npm publish --tag "${{ inputs.dist-tag || 'latest' }}"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
