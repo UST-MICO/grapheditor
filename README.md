@@ -1,5 +1,11 @@
 # Grapheditor Webcomponent
 
+> [!IMPORTANT]
+> This repository is effectively archived and no longer actively used.
+>
+> For the published NPM package and newest version of the code
+> visit the <https://github.com/buehlefs/grapheditor> repository.
+
 This repository contains the grapheditor component developed for the mico project.
 
 The grapheditor is a standalone webcomponent to realize rich graph editors.
